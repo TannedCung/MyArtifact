@@ -1,5 +1,6 @@
 export * from './core/types.js';
 export * from './core/db.js';
+export * from './core/tensorboard.js';
 export * from './core/storage.js';
 export * from './core/sandbox-template.js';
 export * from './core/seed.js';

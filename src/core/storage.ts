@@ -4,6 +4,12 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { initDatabase } from './db.js';
+import {
+  encodeTfEventHeader,
+  encodeTfEventScalar,
+  getDefaultEventFileName,
+  parseTfEventsBuffer,
+} from './tensorboard.js';
 import type {
   ArtifactDetail,
   ArtifactMetadata,
@@ -11,7 +17,12 @@ import type {
   ArtifactVersion,
   CreateArtifactInput,
   ListArtifactsFilter,
+  LogScalarsInput,
+  ModelCheckpoint,
+  SaveModelCheckpointInput,
   StorageEntry,
+  TensorBoardRunManifest,
+  TensorBoardScalarPoint,
   UpdateArtifactInput,
 } from './types.js';
 
@@ -45,6 +56,8 @@ export function getExtensionForType(type: ArtifactType, language?: string): stri
       return '.mmd';
     case 'svg':
       return '.svg';
+    case 'tensorboard':
+      return '.tb.json';
     case 'code': {
       const langMap: Record<string, string> = {
         typescript: '.ts',
@@ -72,6 +85,10 @@ export function inferTypeFromPathOrContent(filePath?: string, content?: string):
   language: string;
 } {
   if (filePath) {
+    const baseName = path.basename(filePath).toLowerCase();
+    if (baseName.includes('.tfevents.') || baseName.endsWith('.tb.json')) {
+      return { type: 'tensorboard', language: 'tensorboard' };
+    }
     const ext = path.extname(filePath).toLowerCase();
     if (ext === '.tsx' || ext === '.jsx') return { type: 'react', language: 'tsx' };
     if (ext === '.html' || ext === '.htm') return { type: 'html', language: 'html' };
@@ -86,6 +103,9 @@ export function inferTypeFromPathOrContent(filePath?: string, content?: string):
   }
 
   const trimmed = (content || '').trim();
+  if (trimmed.startsWith('{') && trimmed.includes('"scalars"') && trimmed.includes('"runSlug"')) {
+    return { type: 'tensorboard', language: 'tensorboard' };
+  }
   if (trimmed.startsWith('<!DOCTYPE html') || trimmed.startsWith('<html')) {
     return { type: 'html', language: 'html' };
   }
@@ -113,15 +133,18 @@ export class ArtifactStore {
   public readonly dataDir: string;
   public readonly artifactsDir: string;
   public readonly dropzoneDir: string;
+  public readonly runsDir: string;
   private db: DatabaseSync;
 
   constructor(dataDir: string = getDefaultDataDir()) {
     this.dataDir = path.resolve(dataDir);
     this.artifactsDir = path.join(this.dataDir, 'artifacts');
     this.dropzoneDir = path.join(this.dataDir, 'dropzone');
+    this.runsDir = path.join(this.dataDir, 'runs');
 
     fs.mkdirSync(this.artifactsDir, { recursive: true });
     fs.mkdirSync(this.dropzoneDir, { recursive: true });
+    fs.mkdirSync(this.runsDir, { recursive: true });
 
     const dbPath = path.join(this.dataDir, 'index.sqlite');
     this.db = initDatabase(dbPath);
@@ -443,6 +466,10 @@ export class ArtifactStore {
     if (fs.existsSync(artifactFolder)) {
       fs.rmSync(artifactFolder, { recursive: true, force: true });
     }
+    const runFolder = path.join(this.runsDir, existing.slug);
+    if (fs.existsSync(runFolder)) {
+      fs.rmSync(runFolder, { recursive: true, force: true });
+    }
     return true;
   }
 
@@ -561,6 +588,434 @@ export class ArtifactStore {
 
     this.db.prepare('DELETE FROM artifact_kv_store WHERE artifact_id = ?').run(existing.id);
     this.syncStateFile(existing.id, existing.slug);
+  }
+
+  // ============================================================================
+  // TensorBoard Runs, Scalars (.tfevents) & Saved Model Checkpoints
+  // ============================================================================
+
+  private ensureRunArtifact(input: {
+    slug: string;
+    title?: string;
+    experiment?: string;
+    modelName?: string;
+    framework?: string;
+    status?: 'running' | 'completed' | 'failed';
+    hparams?: Record<string, string | number | boolean>;
+    agent?: string;
+    project?: string;
+  }): { artifact: ArtifactDetail; manifest: TensorBoardRunManifest } {
+    const cleanSlug = slugify(input.slug);
+    const existing = this.getArtifact(cleanSlug);
+    const runLogDir = path.join(this.runsDir, cleanSlug);
+    fs.mkdirSync(path.join(runLogDir, 'checkpoints'), { recursive: true });
+
+    let baseManifest: TensorBoardRunManifest = {
+      runSlug: cleanSlug,
+      title:
+        input.title ||
+        cleanSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      experiment: input.experiment || 'default-experiment',
+      modelName: input.modelName || cleanSlug,
+      framework: input.framework || 'pytorch',
+      status: input.status || 'running',
+      hparams: input.hparams || {},
+      scalars: {},
+      checkpoints: [],
+      logDir: runLogDir,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (existing) {
+      try {
+        const parsed = JSON.parse(existing.content) as Partial<TensorBoardRunManifest>;
+        baseManifest = {
+          ...baseManifest,
+          ...parsed,
+          title: input.title || parsed.title || existing.title,
+          experiment: input.experiment || parsed.experiment || baseManifest.experiment,
+          modelName: input.modelName || parsed.modelName || baseManifest.modelName,
+          framework: input.framework || parsed.framework || baseManifest.framework,
+          status: input.status || parsed.status || baseManifest.status,
+          hparams: { ...(parsed.hparams || {}), ...(input.hparams || {}) },
+          logDir: runLogDir,
+          updatedAt: new Date().toISOString(),
+        };
+      } catch {
+        // Fallback to default manifest
+      }
+      return { artifact: existing, manifest: baseManifest };
+    }
+
+    const created = this.createArtifact({
+      slug: cleanSlug,
+      title: baseManifest.title,
+      description: `TensorBoard training run (${baseManifest.framework}) · ${baseManifest.modelName}`,
+      type: 'tensorboard',
+      language: 'tensorboard',
+      agent: input.agent || 'user',
+      project: input.project || baseManifest.experiment,
+      tags: ['tensorboard', 'training', baseManifest.framework],
+      summary: 'Initialized TensorBoard training run (v1)',
+      content: JSON.stringify(baseManifest, null, 2),
+    });
+
+    return { artifact: created, manifest: baseManifest };
+  }
+
+  private getOrInitEventFilePath(runSlug: string): string {
+    const runDir = path.join(this.runsDir, runSlug);
+    fs.mkdirSync(runDir, { recursive: true });
+    const files = fs
+      .readdirSync(runDir)
+      .filter((f) => f.includes('.tfevents.'))
+      .sort();
+    if (files.length > 0) {
+      return path.join(runDir, files[files.length - 1]);
+    }
+    const newPath = path.join(runDir, getDefaultEventFileName());
+    fs.writeFileSync(newPath, encodeTfEventHeader());
+    return newPath;
+  }
+
+  private buildSyncedRunManifest(
+    artifactId: string,
+    base: TensorBoardRunManifest
+  ): TensorBoardRunManifest {
+    const scalarRows = this.db
+      .prepare(
+        'SELECT tag, step, epoch, value, wall_time FROM tb_scalars WHERE artifact_id = ? ORDER BY tag ASC, step ASC'
+      )
+      .all(artifactId) as Array<{
+      tag: string;
+      step: number;
+      epoch: number | null;
+      value: number;
+      wall_time: number;
+    }>;
+
+    const scalars: Record<string, TensorBoardScalarPoint[]> = {};
+    for (const r of scalarRows) {
+      if (!scalars[r.tag]) scalars[r.tag] = [];
+      scalars[r.tag].push({
+        tag: r.tag,
+        step: Number(r.step),
+        ...(r.epoch !== null && r.epoch !== undefined ? { epoch: Number(r.epoch) } : {}),
+        value: Number(r.value),
+        wallTime: Number(r.wall_time),
+      });
+    }
+
+    const checkpoints = this.getModelCheckpoints(artifactId);
+
+    return {
+      ...base,
+      scalars,
+      checkpoints,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  public logTensorBoardScalars(input: LogScalarsInput): ArtifactDetail {
+    const { artifact, manifest } = this.ensureRunArtifact(input);
+    const nowSec = input.wallTime ?? Date.now() / 1000;
+    const points: TensorBoardScalarPoint[] = [...(input.scalars || [])];
+
+    if (input.metrics) {
+      const step = input.step ?? 0;
+      for (const [tag, value] of Object.entries(input.metrics)) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          points.push({
+            tag,
+            step,
+            epoch: input.epoch,
+            value,
+            wallTime: nowSec,
+          });
+        }
+      }
+    }
+
+    const insertStmt = this.db.prepare(
+      `INSERT INTO tb_scalars (artifact_id, tag, step, epoch, value, wall_time)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(artifact_id, tag, step) DO UPDATE SET
+         epoch = COALESCE(excluded.epoch, tb_scalars.epoch),
+         value = excluded.value,
+         wall_time = excluded.wall_time`
+    );
+
+    const eventFilePath = this.getOrInitEventFilePath(manifest.runSlug);
+    const binaryChunks: Buffer[] = [];
+
+    for (const pt of points) {
+      insertStmt.run(
+        artifact.id,
+        pt.tag,
+        pt.step,
+        pt.epoch ?? null,
+        pt.value,
+        pt.wallTime || nowSec
+      );
+      binaryChunks.push(
+        encodeTfEventScalar(pt.tag, pt.step, pt.value, pt.wallTime || nowSec)
+      );
+    }
+
+    if (binaryChunks.length > 0) {
+      fs.appendFileSync(eventFilePath, Buffer.concat(binaryChunks));
+    }
+
+    const fullManifest = this.buildSyncedRunManifest(artifact.id, {
+      ...manifest,
+      eventFilePath,
+    });
+    const serialized = JSON.stringify(fullManifest, null, 2);
+
+    // If an explicit summary was provided, create a new version checkpoint;
+    // otherwise update the current file and latest version snapshot in-place so streaming steps don't spam versions.
+    if (input.summary) {
+      return this.updateArtifact(artifact.id, {
+        title: fullManifest.title,
+        content: serialized,
+        agent: input.agent,
+        summary: input.summary,
+      });
+    }
+
+    fs.writeFileSync(artifact.filePath, serialized, 'utf8');
+    const latestVer = artifact.versions[artifact.versions.length - 1];
+    if (latestVer && fs.existsSync(latestVer.filePath)) {
+      fs.writeFileSync(latestVer.filePath, serialized, 'utf8');
+      const hash = this.computeHash(serialized);
+      const byteSize = Buffer.byteLength(serialized, 'utf8');
+      this.db
+        .prepare(
+          'UPDATE artifact_versions SET content_hash = ?, byte_size = ? WHERE artifact_id = ? AND version = ?'
+        )
+        .run(hash, byteSize, artifact.id, latestVer.version);
+    }
+
+    const nowIso = new Date().toISOString();
+    this.db
+      .prepare('UPDATE artifacts SET title = ?, updated_at = ? WHERE id = ?')
+      .run(fullManifest.title, nowIso, artifact.id);
+    this.updateFtsIndex(
+      artifact.id,
+      artifact.slug,
+      fullManifest.title,
+      artifact.description,
+      artifact.tags,
+      serialized
+    );
+
+    const updated = this.getArtifact(artifact.id)!;
+    this.writeMetaJson(updated.slug, updated);
+    return updated;
+  }
+
+  public saveModelCheckpoint(input: SaveModelCheckpointInput): {
+    artifact: ArtifactDetail;
+    checkpoint: ModelCheckpoint;
+  } {
+    const { artifact, manifest } = this.ensureRunArtifact({
+      slug: input.slug,
+      title: input.title,
+      agent: input.agent,
+    });
+
+    const step = input.step ?? 0;
+    const extFromSource = input.sourceFilePath
+      ? path.extname(input.sourceFilePath).replace(/^\./, '')
+      : '';
+    const format = (input.format || extFromSource || 'safetensors').toLowerCase();
+    const rawName =
+      input.name ||
+      (input.sourceFilePath
+        ? path.basename(input.sourceFilePath)
+        : `checkpoint-step-${step}.${format}`);
+    const safeFileName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    const checkpointsDir = path.join(this.runsDir, manifest.runSlug, 'checkpoints');
+    fs.mkdirSync(checkpointsDir, { recursive: true });
+    const destPath = path.join(checkpointsDir, safeFileName);
+
+    if (input.sourceFilePath && fs.existsSync(input.sourceFilePath)) {
+      if (path.resolve(input.sourceFilePath) !== path.resolve(destPath)) {
+        fs.copyFileSync(input.sourceFilePath, destPath);
+      }
+    } else if (input.content !== undefined) {
+      const buf = Buffer.isBuffer(input.content)
+        ? input.content
+        : Buffer.from(String(input.content), 'utf8');
+      fs.writeFileSync(destPath, buf);
+    } else if (!fs.existsSync(destPath)) {
+      // Write a JSON model card / checkpoint metadata header if weights are external
+      fs.writeFileSync(
+        destPath,
+        JSON.stringify(
+          {
+            runSlug: manifest.runSlug,
+            name: safeFileName,
+            step,
+            epoch: input.epoch,
+            metrics: input.metrics || {},
+            metadata: input.metadata || {},
+            savedAt: new Date().toISOString(),
+          },
+          null,
+          2
+        ),
+        'utf8'
+      );
+    }
+
+    const fileBuf = fs.readFileSync(destPath);
+    const sha256 = crypto.createHash('sha256').update(fileBuf).digest('hex');
+    const byteSize = fileBuf.byteLength;
+    const isBest = Boolean(input.isBest);
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    if (isBest) {
+      this.db
+        .prepare('UPDATE tb_checkpoints SET is_best = 0 WHERE artifact_id = ?')
+        .run(artifact.id);
+    }
+
+    this.db
+      .prepare(
+        `INSERT INTO tb_checkpoints (
+          id, artifact_id, run_slug, name, step, epoch, file_path, format, byte_size, sha256, metrics_json, metadata_json, is_best, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        artifact.id,
+        manifest.runSlug,
+        safeFileName,
+        step,
+        input.epoch ?? null,
+        destPath,
+        format,
+        byteSize,
+        sha256,
+        JSON.stringify(input.metrics || {}),
+        JSON.stringify(input.metadata || {}),
+        isBest ? 1 : 0,
+        now
+      );
+
+    const eventFilePath = this.getOrInitEventFilePath(manifest.runSlug);
+    const fullManifest = this.buildSyncedRunManifest(artifact.id, {
+      ...manifest,
+      eventFilePath,
+    });
+
+    const summary =
+      input.summary ||
+      `Saved ${isBest ? 'best ' : ''}model checkpoint ${safeFileName} (step ${step})`;
+
+    const updatedArtifact = this.updateArtifact(artifact.id, {
+      content: JSON.stringify(fullManifest, null, 2),
+      agent: input.agent || 'user',
+      summary,
+    });
+
+    const checkpoint: ModelCheckpoint = {
+      id,
+      runSlug: manifest.runSlug,
+      name: safeFileName,
+      step,
+      ...(input.epoch !== undefined ? { epoch: input.epoch } : {}),
+      filePath: destPath,
+      format,
+      byteSize,
+      sha256,
+      metrics: input.metrics || {},
+      metadata: input.metadata || {},
+      isBest,
+      createdAt: now,
+    };
+
+    return { artifact: updatedArtifact, checkpoint };
+  }
+
+  public importTfEventsFile(
+    filePath: string,
+    options: { slug?: string; title?: string; agent?: string; project?: string } = {}
+  ): ArtifactDetail {
+    const resolved = path.resolve(filePath);
+    const buf = fs.readFileSync(resolved);
+    const scalars = parseTfEventsBuffer(buf);
+    const parentFolder = path.basename(path.dirname(resolved));
+    const derivedSlug =
+      options.slug ||
+      (parentFolder && parentFolder !== 'dropzone' && parentFolder !== 'runs'
+        ? slugify(parentFolder)
+        : slugify(path.basename(resolved).replace(/\.tfevents.*$/, '') || 'tb-run'));
+
+    return this.logTensorBoardScalars({
+      slug: derivedSlug,
+      title: options.title,
+      agent: options.agent || 'watcher',
+      project: options.project || 'training',
+      scalars,
+      summary: `Imported ${scalars.length} scalar events from ${path.basename(resolved)}`,
+    });
+  }
+
+  public getModelCheckpoints(idOrSlug: string): ModelCheckpoint[] {
+    const existing = this.getArtifact(idOrSlug);
+    if (!existing) return [];
+
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM tb_checkpoints WHERE artifact_id = ? ORDER BY step DESC, created_at DESC'
+      )
+      .all(existing.id) as Record<string, unknown>[];
+
+    return rows.map((r) => this.mapRowToCheckpoint(r));
+  }
+
+  public getModelCheckpointById(checkpointId: string): ModelCheckpoint | null {
+    const row = this.db
+      .prepare('SELECT * FROM tb_checkpoints WHERE id = ?')
+      .get(checkpointId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return this.mapRowToCheckpoint(row);
+  }
+
+  private mapRowToCheckpoint(row: Record<string, unknown>): ModelCheckpoint {
+    let metrics: Record<string, number> = {};
+    let metadata: Record<string, unknown> = {};
+    try {
+      metrics = JSON.parse(String(row.metrics_json || '{}'));
+    } catch {
+      metrics = {};
+    }
+    try {
+      metadata = JSON.parse(String(row.metadata_json || '{}'));
+    } catch {
+      metadata = {};
+    }
+    return {
+      id: String(row.id),
+      runSlug: String(row.run_slug),
+      name: String(row.name),
+      step: Number(row.step || 0),
+      ...(row.epoch !== null && row.epoch !== undefined
+        ? { epoch: Number(row.epoch) }
+        : {}),
+      filePath: String(row.file_path),
+      format: String(row.format || 'pt'),
+      byteSize: Number(row.byte_size || 0),
+      sha256: String(row.sha256 || ''),
+      metrics,
+      metadata,
+      isBest: Number(row.is_best) === 1,
+      createdAt: String(row.created_at),
+    };
   }
 
   private mapRowToMetadata(row: Record<string, unknown>): ArtifactMetadata {

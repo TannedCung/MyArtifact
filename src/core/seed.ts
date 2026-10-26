@@ -2,7 +2,12 @@ import type { ArtifactStore } from './storage.js';
 
 export function seedStarterArtifacts(store: ArtifactStore): void {
   const existing = store.listArtifacts({ limit: 1 });
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    if (!store.getArtifact('qwen-coder-lora-run')) {
+      seedTensorBoardDemoRun(store);
+    }
+    return;
+  }
 
   // 1. Stateful React Dashboard (Claude Code) with window.storage + Recharts + Lucide
   const reactV1 = `import React, { useState, useEffect } from 'react';
@@ -265,5 +270,72 @@ export default function AgentWorkspaceDashboard() {
   </script>
 </body>
 </html>`,
+  });
+
+  // 4. TensorBoard Training Run & Saved Model Checkpoints
+  seedTensorBoardDemoRun(store);
+}
+
+function seedTensorBoardDemoRun(store: ArtifactStore): void {
+  const baseTime = Math.floor(Date.now() / 1000) - 3600;
+  const steps = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+  const trainLoss = [2.14, 1.72, 1.41, 1.18, 0.99, 0.85, 0.74, 0.66, 0.59, 0.54];
+  const valLoss = [2.05, 1.68, 1.39, 1.19, 1.02, 0.88, 0.79, 0.71, 0.65, 0.61];
+  const valAcc = [0.42, 0.54, 0.63, 0.71, 0.77, 0.82, 0.86, 0.89, 0.915, 0.932];
+  const lr = [2e-4, 1.95e-4, 1.85e-4, 1.7e-4, 1.5e-4, 1.25e-4, 1e-4, 7.5e-5, 5e-5, 2.5e-5];
+
+  for (let i = 0; i < steps.length; i++) {
+    store.logTensorBoardScalars({
+      slug: 'qwen-coder-lora-run',
+      title: 'Qwen2.5-Coder-7B LoRA Fine-Tuning',
+      experiment: 'code-agent-sft',
+      modelName: 'Qwen2.5-Coder-7B-Instruct-LoRA',
+      framework: 'pytorch',
+      status: i === steps.length - 1 ? 'completed' : 'running',
+      agent: 'antigravity',
+      project: 'myartifact-demo',
+      hparams: {
+        optimizer: 'AdamW (8-bit)',
+        learning_rate: 0.0002,
+        batch_size: 32,
+        lora_rank: 16,
+        lora_alpha: 32,
+        warmup_steps: 50,
+        precision: 'bf16',
+      },
+      step: steps[i],
+      epoch: Number(((i + 1) * 0.25).toFixed(2)),
+      wallTime: baseTime + i * 300,
+      metrics: {
+        'train/loss': trainLoss[i],
+        'val/loss': valLoss[i],
+        'val/accuracy': valAcc[i],
+        'train/lr': lr[i],
+      },
+    });
+  }
+
+  store.saveModelCheckpoint({
+    slug: 'qwen-coder-lora-run',
+    name: 'adapter-step-500.safetensors',
+    step: 500,
+    epoch: 1.25,
+    format: 'safetensors',
+    metrics: { 'val/loss': 1.02, 'val/accuracy': 0.77 },
+    isBest: false,
+    agent: 'claude-code',
+    summary: 'v2: Saved mid-training LoRA checkpoint at step 500',
+  });
+
+  store.saveModelCheckpoint({
+    slug: 'qwen-coder-lora-run',
+    name: 'best-lora-adapter-step-1000.safetensors',
+    step: 1000,
+    epoch: 2.5,
+    format: 'safetensors',
+    metrics: { 'val/loss': 0.61, 'val/accuracy': 0.932 },
+    isBest: true,
+    agent: 'antigravity',
+    summary: 'v3: Saved best LoRA model checkpoint at step 1000 (val/acc 93.2%)',
   });
 }

@@ -77,6 +77,35 @@ export function initDatabase(dbPath: string): DatabaseSyncType {
       tags,
       content
     );
+
+    CREATE TABLE IF NOT EXISTS tb_scalars (
+      artifact_id TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      step INTEGER NOT NULL,
+      epoch REAL,
+      value REAL NOT NULL,
+      wall_time REAL NOT NULL,
+      PRIMARY KEY (artifact_id, tag, step),
+      FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS tb_checkpoints (
+      id TEXT PRIMARY KEY,
+      artifact_id TEXT NOT NULL,
+      run_slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      step INTEGER NOT NULL DEFAULT 0,
+      epoch REAL,
+      file_path TEXT NOT NULL,
+      format TEXT NOT NULL DEFAULT 'pt',
+      byte_size INTEGER NOT NULL DEFAULT 0,
+      sha256 TEXT NOT NULL DEFAULT '',
+      metrics_json TEXT NOT NULL DEFAULT '{}',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      is_best INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+    );
   `);
 
   return db;
