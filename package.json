@@ -1,10 +1,42 @@
 {
   "name": "myartifact",
   "version": "1.0.0",
-  "description": "Local, private, cross-assistant visual artifact platform for Claude Code, Codex, and Antigravity",
+  "description": "Local-first, private, cross-assistant visual artifact studio & MCP server for Claude Code, OpenAI Codex, and Google Antigravity",
+  "license": "MIT",
+  "author": "TannedCung <tando1903@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TannedCung/MyArtifact.git"
+  },
+  "homepage": "https://github.com/TannedCung/MyArtifact#readme",
+  "bugs": {
+    "url": "https://github.com/TannedCung/MyArtifact/issues"
+  },
+  "keywords": [
+    "artifacts",
+    "claude-artifacts",
+    "claude-code",
+    "codex",
+    "antigravity",
+    "mcp",
+    "model-context-protocol",
+    "react-sandbox",
+    "mermaid",
+    "local-first",
+    "ai-coding-assistant"
+  ],
   "type": "module",
+  "main": "./dist/index.js",
   "bin": {
     "myartifact": "./dist/cli/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
   },
   "scripts": {
     "dev:web": "vite",
