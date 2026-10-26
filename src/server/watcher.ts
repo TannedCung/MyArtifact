@@ -106,6 +106,14 @@ export function startArtifactWatcher(
 
       // Case 2: File added or modified in dropzone or extra watched directory
       if (!filePath.startsWith(store.artifactsDir)) {
+        if (baseName.includes('.tfevents.')) {
+          const artifact = store.importTfEventsFile(filePath, {
+            agent: 'watcher',
+            project: 'training',
+          });
+          callbacks.onArtifactUpserted?.(artifact, filePath);
+          return;
+        }
         const content = fs.readFileSync(filePath, 'utf8');
         const inferred = inferTypeFromPathOrContent(filePath, content);
         const directives = extractDirectiveMetadata(content);

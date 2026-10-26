@@ -7,7 +7,12 @@ import { createTwoFilesPatch } from 'diff';
 import { ArtifactStore } from '../core/storage.js';
 import { buildSandboxHtml } from '../core/sandbox-template.js';
 import { startArtifactWatcher } from './watcher.js';
-import type { ArtifactType, CreateArtifactInput, UpdateArtifactInput } from '../core/types.js';
+import type {
+  ArtifactType,
+  CreateArtifactInput,
+  TensorBoardScalarPoint,
+  UpdateArtifactInput,
+} from '../core/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,8 +130,144 @@ export async function startArtifactServer(
           dataDir: store.dataDir,
           dropzoneDir: store.dropzoneDir,
           artifactsDir: store.artifactsDir,
+          runsDir: store.runsDir,
         });
         return;
+      }
+
+      // ======================================================================
+      // TensorBoard & Model Checkpoints API (/api/tensorboard/...)
+      // ======================================================================
+      if (pathname === '/api/tensorboard/runs' && req.method === 'GET') {
+        const runs = store.listArtifacts({ type: 'tensorboard' }).map((r) => ({
+          ...r,
+          checkpoints: store.getModelCheckpoints(r.id),
+        }));
+        sendJson(res, 200, { runs, runsDir: store.runsDir });
+        return;
+      }
+
+      if (pathname === '/api/tensorboard/import' && req.method === 'POST') {
+        const body = await parseJsonBody(req);
+        if (!body.filePath || typeof body.filePath !== 'string') {
+          sendJson(res, 400, { error: 'filePath is required' });
+          return;
+        }
+        const artifact = store.importTfEventsFile(body.filePath, {
+          slug: typeof body.slug === 'string' ? body.slug : undefined,
+          title: typeof body.title === 'string' ? body.title : undefined,
+          agent: typeof body.agent === 'string' ? body.agent : undefined,
+          project: typeof body.project === 'string' ? body.project : undefined,
+        });
+        broadcast({ type: 'artifact:updated', artifact });
+        sendJson(res, 200, { artifact });
+        return;
+      }
+
+      const tbParts = pathname.split('/').filter(Boolean);
+      if (tbParts[0] === 'api' && tbParts[1] === 'tensorboard' && tbParts[2] === 'runs' && tbParts[3]) {
+        const runSlug = decodeURIComponent(tbParts[3]);
+
+        // POST /api/tensorboard/runs/:slug/scalars
+        if (tbParts[4] === 'scalars' && req.method === 'POST') {
+          const body = await parseJsonBody(req);
+          const artifact = store.logTensorBoardScalars({
+            slug: runSlug,
+            title: typeof body.title === 'string' ? body.title : undefined,
+            experiment: typeof body.experiment === 'string' ? body.experiment : undefined,
+            modelName: typeof body.modelName === 'string' ? body.modelName : undefined,
+            framework: typeof body.framework === 'string' ? body.framework : undefined,
+            status:
+              body.status === 'running' || body.status === 'completed' || body.status === 'failed'
+                ? body.status
+                : undefined,
+            agent: typeof body.agent === 'string' ? body.agent : undefined,
+            project: typeof body.project === 'string' ? body.project : undefined,
+            hparams:
+              body.hparams && typeof body.hparams === 'object'
+                ? (body.hparams as Record<string, string | number | boolean>)
+                : undefined,
+            step: typeof body.step === 'number' ? body.step : undefined,
+            epoch: typeof body.epoch === 'number' ? body.epoch : undefined,
+            wallTime: typeof body.wallTime === 'number' ? body.wallTime : undefined,
+            metrics:
+              body.metrics && typeof body.metrics === 'object'
+                ? (body.metrics as Record<string, number>)
+                : undefined,
+            scalars: Array.isArray(body.scalars)
+              ? (body.scalars as TensorBoardScalarPoint[])
+              : undefined,
+            summary: typeof body.summary === 'string' ? body.summary : undefined,
+          });
+          broadcast({ type: 'artifact:updated', artifact });
+          sendJson(res, 200, { artifact });
+          return;
+        }
+
+        // GET /api/tensorboard/runs/:slug/checkpoints
+        if (tbParts[4] === 'checkpoints' && tbParts.length === 5 && req.method === 'GET') {
+          const checkpoints = store.getModelCheckpoints(runSlug);
+          sendJson(res, 200, { checkpoints });
+          return;
+        }
+
+        // POST /api/tensorboard/runs/:slug/checkpoints
+        if (tbParts[4] === 'checkpoints' && tbParts.length === 5 && req.method === 'POST') {
+          const body = await parseJsonBody(req);
+          const contentBuf =
+            typeof body.contentBase64 === 'string'
+              ? Buffer.from(body.contentBase64, 'base64')
+              : typeof body.content === 'string'
+              ? body.content
+              : undefined;
+
+          const { artifact, checkpoint } = store.saveModelCheckpoint({
+            slug: runSlug,
+            title: typeof body.title === 'string' ? body.title : undefined,
+            name: typeof body.name === 'string' ? body.name : undefined,
+            step: typeof body.step === 'number' ? body.step : undefined,
+            epoch: typeof body.epoch === 'number' ? body.epoch : undefined,
+            sourceFilePath:
+              typeof body.sourceFilePath === 'string' ? body.sourceFilePath : undefined,
+            content: contentBuf,
+            format: typeof body.format === 'string' ? body.format : undefined,
+            metrics:
+              body.metrics && typeof body.metrics === 'object'
+                ? (body.metrics as Record<string, number>)
+                : undefined,
+            metadata:
+              body.metadata && typeof body.metadata === 'object'
+                ? (body.metadata as Record<string, unknown>)
+                : undefined,
+            isBest: Boolean(body.isBest),
+            agent: typeof body.agent === 'string' ? body.agent : undefined,
+            summary: typeof body.summary === 'string' ? body.summary : undefined,
+          });
+
+          broadcast({ type: 'artifact:updated', artifact });
+          sendJson(res, 201, { artifact, checkpoint });
+          return;
+        }
+
+        // GET /api/tensorboard/runs/:slug/checkpoints/:id/download
+        if (
+          tbParts[4] === 'checkpoints' &&
+          tbParts[5] &&
+          tbParts[6] === 'download' &&
+          req.method === 'GET'
+        ) {
+          const ckpt = store.getModelCheckpointById(decodeURIComponent(tbParts[5]));
+          if (!ckpt || !fs.existsSync(ckpt.filePath)) {
+            sendJson(res, 404, { error: 'Model checkpoint file not found' });
+            return;
+          }
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${ckpt.name}"`,
+          });
+          fs.createReadStream(ckpt.filePath).pipe(res);
+          return;
+        }
       }
 
       // Broadcast hook (used by CLI or MCP server to notify live browser sessions)

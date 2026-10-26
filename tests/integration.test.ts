@@ -111,6 +111,39 @@ describe('Server REST API, MCP Tools, and Dropzone Watcher', () => {
     assert.ok(exportedHtml.includes('window.storage'));
     assert.ok(exportedHtml.includes('lucide-react'));
 
+    // Check TensorBoard scalar logging & model checkpoint saving endpoints
+    const tbScalarRes = await fetch(`${baseUrl}/api/tensorboard/runs/llama-ft/scalars`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'LLaMA Fine-Tune',
+        step: 50,
+        metrics: { 'train/loss': 0.92, 'val/loss': 0.88 },
+      }),
+    });
+    assert.equal(tbScalarRes.status, 200);
+
+    const tbCkptRes = await fetch(`${baseUrl}/api/tensorboard/runs/llama-ft/checkpoints`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'model-step-50.safetensors',
+        step: 50,
+        content: 'MODEL_WEIGHTS_PAYLOAD',
+        metrics: { 'val/loss': 0.88 },
+        isBest: true,
+      }),
+    });
+    assert.equal(tbCkptRes.status, 201);
+    const tbCkptData = await tbCkptRes.json();
+    assert.equal(tbCkptData.artifact.currentVersion, 2);
+
+    const dlRes = await fetch(
+      `${baseUrl}/api/tensorboard/runs/llama-ft/checkpoints/${tbCkptData.checkpoint.id}/download`
+    );
+    assert.equal(dlRes.status, 200);
+    assert.equal(await dlRes.text(), 'MODEL_WEIGHTS_PAYLOAD');
+
     await running.close();
     store.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });

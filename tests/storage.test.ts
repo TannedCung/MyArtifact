@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { ArtifactStore } from '../src/core/storage.js';
+import { parseTfEventsBuffer } from '../src/core/tensorboard.js';
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'myartifact-storage-test-'));
@@ -136,6 +137,60 @@ describe('ArtifactStore Hybrid Storage, Versioning & window.storage', () => {
     const delRes = store.deleteStorageValue(art.id, 'note:1');
     assert.equal(delRes.deleted, true);
     assert.equal(store.getStorageValue(art.id, 'note:1'), null);
+
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('logs TensorBoard scalars to .tfevents and versions saved model checkpoints', () => {
+    const tmpDir = createTempDir();
+    const store = new ArtifactStore(tmpDir);
+
+    const run1 = store.logTensorBoardScalars({
+      slug: 'resnet-cifar10',
+      title: 'ResNet-18 CIFAR10 Run',
+      modelName: 'ResNet-18',
+      framework: 'pytorch',
+      hparams: { lr: 0.001, batch_size: 128 },
+      step: 100,
+      epoch: 1,
+      metrics: { 'train/loss': 1.25, 'val/acc': 0.68 },
+    });
+    assert.equal(run1.type, 'tensorboard');
+    assert.equal(run1.currentVersion, 1);
+
+    // Save a trained model checkpoint -> creates v2
+    const dummyWeights = Buffer.from('FAKE_SAFETENSORS_WEIGHTS_V1');
+    const saved = store.saveModelCheckpoint({
+      slug: 'resnet-cifar10',
+      name: 'resnet18-best.safetensors',
+      step: 200,
+      epoch: 2,
+      content: dummyWeights,
+      format: 'safetensors',
+      metrics: { 'val/loss': 0.54, 'val/acc': 0.89 },
+      isBest: true,
+      agent: 'antigravity',
+    });
+
+    assert.equal(saved.artifact.currentVersion, 2);
+    assert.equal(saved.checkpoint.isBest, true);
+    assert.equal(saved.checkpoint.byteSize, dummyWeights.byteLength);
+    assert.ok(fs.existsSync(saved.checkpoint.filePath));
+
+    // Verify genuine binary .tfevents file was written and round-trips cleanly
+    const runDir = path.join(store.runsDir, 'resnet-cifar10');
+    const eventFiles = fs
+      .readdirSync(runDir)
+      .filter((f) => f.includes('.tfevents.'));
+    assert.equal(eventFiles.length, 1);
+
+    const rawBytes = fs.readFileSync(path.join(runDir, eventFiles[0]));
+    const decodedPoints = parseTfEventsBuffer(rawBytes);
+    assert.equal(decodedPoints.length, 2);
+    assert.equal(decodedPoints[0].tag, 'train/loss');
+    assert.equal(decodedPoints[0].step, 100);
+    assert.ok(Math.abs(decodedPoints[0].value - 1.25) < 1e-5);
 
     store.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });

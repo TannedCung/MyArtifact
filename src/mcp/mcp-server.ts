@@ -36,7 +36,7 @@ export const MCP_TOOLS = [
         },
         type: {
           type: 'string',
-          enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'code'],
+          enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'tensorboard', 'code'],
           description: 'Artifact format type',
         },
         language: { type: 'string', description: 'Optional code language (e.g., tsx, python)' },
@@ -116,7 +116,7 @@ export const MCP_TOOLS = [
         },
         type: {
           type: 'string',
-          enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'code'],
+          enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'tensorboard', 'code'],
         },
         project: { type: 'string', description: 'Filter by project name' },
         limit: { type: 'number', description: 'Maximum results to return' },
@@ -135,6 +135,60 @@ export const MCP_TOOLS = [
         value: { type: 'string', description: 'String or JSON-serialized value' },
       },
       required: ['id', 'key', 'value'],
+    },
+  },
+  {
+    name: 'tb_log_scalars',
+    description:
+      'Log training scalar metrics (e.g., train/loss, val/loss, val/accuracy, lr) and hyperparameters to a local TensorBoard run, writing both SQLite and genuine TensorBoard .tfevents records.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        run: { type: 'string', description: 'Run slug or identifier (e.g., "qwen-lora-run1")' },
+        title: { type: 'string', description: 'Optional human-readable title of the training run' },
+        step: { type: 'number', description: 'Training step number' },
+        epoch: { type: 'number', description: 'Optional training epoch' },
+        metrics: {
+          type: 'object',
+          description: 'Map of metric tag to numeric value (e.g., {"train/loss": 0.42, "val/loss": 0.39})',
+        },
+        hparams: {
+          type: 'object',
+          description: 'Optional hyperparameter key-values (lr, batch_size, optimizer, etc.)',
+        },
+        modelName: { type: 'string', description: 'Model name or architecture' },
+        framework: { type: 'string', description: 'ML framework (pytorch, tensorflow, jax)' },
+        status: { type: 'string', enum: ['running', 'completed', 'failed'] },
+        agent: { type: 'string', description: 'Assistant identifier' },
+      },
+      required: ['run', 'metrics'],
+    },
+  },
+  {
+    name: 'tb_save_checkpoint',
+    description:
+      'Save and version a trained model checkpoint (.pt, .safetensors, .onnx, .ckpt) under a TensorBoard training run, recording its step, validation metrics, SHA-256 hash, and creating a new artifact version.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        run: { type: 'string', description: 'Run slug or identifier' },
+        name: { type: 'string', description: 'Checkpoint filename (e.g., "best-model.safetensors")' },
+        step: { type: 'number', description: 'Training step at which checkpoint was saved' },
+        epoch: { type: 'number', description: 'Optional epoch number' },
+        sourceFilePath: {
+          type: 'string',
+          description: 'Optional local path to the model weights file to copy into ~/.myartifact/runs/<run>/checkpoints/',
+        },
+        format: { type: 'string', description: 'Model file format (safetensors, pt, onnx, ckpt)' },
+        metrics: {
+          type: 'object',
+          description: 'Validation metrics at checkpoint (e.g., {"val/loss": 0.31, "val/acc": 0.94})',
+        },
+        isBest: { type: 'boolean', description: 'Mark this checkpoint as the best model so far' },
+        agent: { type: 'string', description: 'Assistant identifier' },
+        summary: { type: 'string', description: 'Optional version commit message' },
+      },
+      required: ['run'],
     },
   },
 ] as const;
@@ -248,6 +302,73 @@ export async function executeMcpTool(
         entries: store.getAllStorageEntries(id),
       });
       return { result };
+    }
+
+    case 'tb_log_scalars': {
+      const slug = String(args.run || 'training-run');
+      const artifact = store.logTensorBoardScalars({
+        slug,
+        title: typeof args.title === 'string' ? args.title : undefined,
+        step: typeof args.step === 'number' ? args.step : 0,
+        epoch: typeof args.epoch === 'number' ? args.epoch : undefined,
+        metrics:
+          args.metrics && typeof args.metrics === 'object'
+            ? (args.metrics as Record<string, number>)
+            : {},
+        hparams:
+          args.hparams && typeof args.hparams === 'object'
+            ? (args.hparams as Record<string, string | number | boolean>)
+            : undefined,
+        modelName: typeof args.modelName === 'string' ? args.modelName : undefined,
+        framework: typeof args.framework === 'string' ? args.framework : undefined,
+        status:
+          args.status === 'running' || args.status === 'completed' || args.status === 'failed'
+            ? args.status
+            : undefined,
+        agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
+      });
+      await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      return {
+        artifact: {
+          id: artifact.id,
+          slug: artifact.slug,
+          title: artifact.title,
+          type: artifact.type,
+          currentVersion: artifact.currentVersion,
+          previewUrl: `http://127.0.0.1:${process.env.MYARTIFACT_PORT || 4173}/?artifact=${artifact.slug}`,
+        },
+      };
+    }
+
+    case 'tb_save_checkpoint': {
+      const slug = String(args.run || 'training-run');
+      const { artifact, checkpoint } = store.saveModelCheckpoint({
+        slug,
+        name: typeof args.name === 'string' ? args.name : undefined,
+        step: typeof args.step === 'number' ? args.step : 0,
+        epoch: typeof args.epoch === 'number' ? args.epoch : undefined,
+        sourceFilePath:
+          typeof args.sourceFilePath === 'string' ? args.sourceFilePath : undefined,
+        format: typeof args.format === 'string' ? args.format : undefined,
+        metrics:
+          args.metrics && typeof args.metrics === 'object'
+            ? (args.metrics as Record<string, number>)
+            : undefined,
+        isBest: Boolean(args.isBest),
+        agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
+        summary: typeof args.summary === 'string' ? args.summary : undefined,
+      });
+      await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      return {
+        artifact: {
+          id: artifact.id,
+          slug: artifact.slug,
+          title: artifact.title,
+          currentVersion: artifact.currentVersion,
+          previewUrl: `http://127.0.0.1:${process.env.MYARTIFACT_PORT || 4173}/?artifact=${artifact.slug}`,
+        },
+        checkpoint,
+      };
     }
 
     default:

@@ -45,7 +45,8 @@ program
     console.log(`\n✨ MyArtifact Local Workspace is running!`);
     console.log(`   ➜ Web UI:    http://${running.host}:${running.port}`);
     console.log(`   ➜ Data Dir:  ${store.dataDir}`);
-    console.log(`   ➜ Dropzone:  ${store.dropzoneDir}\n`);
+    console.log(`   ➜ Dropzone:  ${store.dropzoneDir}`);
+    console.log(`   ➜ TB Runs:   ${store.runsDir}\n`);
   });
 
 program
@@ -201,6 +202,108 @@ program
     for (const f of result.writtenFiles) {
       console.log(`   • ${f}`);
     }
+  });
+
+const tbCmd = program
+  .command('tb')
+  .description('TensorBoard training run & model checkpoint commands');
+
+tbCmd
+  .command('log <run>')
+  .description('Log scalar training metrics to a local TensorBoard run (.tfevents + SQLite)')
+  .option('-s, --step <step>', 'Training step number', '0')
+  .option('-e, --epoch <epoch>', 'Training epoch number')
+  .option('-m, --metric <items...>', 'Metric key=value pairs (e.g. train/loss=0.42 val/acc=0.91)')
+  .option('-t, --title <title>', 'Run title')
+  .option('--model <model>', 'Model architecture name')
+  .option('--framework <framework>', 'Framework (pytorch | tensorflow | jax)', 'pytorch')
+  .option('--status <status>', 'Run status (running | completed | failed)')
+  .option('-a, --agent <agent>', 'Assistant name', 'user')
+  .option('-d, --data-dir <dir>', 'Custom storage directory')
+  .action(async (run, opts) => {
+    const metrics: Record<string, number> = {};
+    for (const item of opts.metric || []) {
+      const [k, v] = String(item).split('=');
+      if (k && v !== undefined && !Number.isNaN(Number(v))) {
+        metrics[k.trim()] = Number(v);
+      }
+    }
+    const store = new ArtifactStore(opts.dataDir);
+    const artifact = store.logTensorBoardScalars({
+      slug: run,
+      title: opts.title,
+      modelName: opts.model,
+      framework: opts.framework,
+      status: opts.status,
+      agent: opts.agent,
+      step: Number(opts.step || 0),
+      epoch: opts.epoch !== undefined ? Number(opts.epoch) : undefined,
+      metrics,
+    });
+    await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+    store.close();
+    console.log(
+      `📈 Logged ${Object.keys(metrics).length} scalar(s) at step ${opts.step} to TensorBoard run "${artifact.slug}"`
+    );
+  });
+
+tbCmd
+  .command('save-model <run> [file]')
+  .description('Save and version a trained model checkpoint under a TensorBoard run')
+  .option('-n, --name <name>', 'Checkpoint filename')
+  .option('-s, --step <step>', 'Training step', '0')
+  .option('-e, --epoch <epoch>', 'Training epoch')
+  .option('-m, --metric <items...>', 'Validation metric key=value pairs (e.g. val/loss=0.31)')
+  .option('--best', 'Mark this checkpoint as the best model')
+  .option('-a, --agent <agent>', 'Assistant name', 'user')
+  .option('--summary <summary>', 'Version commit message')
+  .option('-d, --data-dir <dir>', 'Custom storage directory')
+  .action(async (run, file, opts) => {
+    const metrics: Record<string, number> = {};
+    for (const item of opts.metric || []) {
+      const [k, v] = String(item).split('=');
+      if (k && v !== undefined && !Number.isNaN(Number(v))) {
+        metrics[k.trim()] = Number(v);
+      }
+    }
+    const store = new ArtifactStore(opts.dataDir);
+    const { artifact, checkpoint } = store.saveModelCheckpoint({
+      slug: run,
+      name: opts.name,
+      step: Number(opts.step || 0),
+      epoch: opts.epoch !== undefined ? Number(opts.epoch) : undefined,
+      sourceFilePath: file ? path.resolve(file) : undefined,
+      metrics,
+      isBest: Boolean(opts.best),
+      agent: opts.agent,
+      summary: opts.summary,
+    });
+    await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+    store.close();
+    console.log(
+      `💾 Saved model checkpoint "${checkpoint.name}" (step ${checkpoint.step}, sha256: ${checkpoint.sha256.slice(0, 10)}…) -> ${artifact.slug} v${artifact.currentVersion}`
+    );
+  });
+
+tbCmd
+  .command('import <file>')
+  .description('Import an existing TensorBoard events.out.tfevents.* file')
+  .option('-r, --run <slug>', 'Target run slug')
+  .option('-t, --title <title>', 'Run title')
+  .option('-a, --agent <agent>', 'Assistant name', 'user')
+  .option('-d, --data-dir <dir>', 'Custom storage directory')
+  .action(async (file, opts) => {
+    const store = new ArtifactStore(opts.dataDir);
+    const artifact = store.importTfEventsFile(file, {
+      slug: opts.run,
+      title: opts.title,
+      agent: opts.agent,
+    });
+    await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+    store.close();
+    console.log(
+      `✅ Imported TensorBoard events into "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion}`
+    );
   });
 
 program.parseAsync(process.argv);
