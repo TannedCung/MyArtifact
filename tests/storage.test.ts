@@ -1,0 +1,143 @@
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { ArtifactStore } from '../src/core/storage.js';
+
+function createTempDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'myartifact-storage-test-'));
+}
+
+describe('ArtifactStore Hybrid Storage, Versioning & window.storage', () => {
+  test('creates artifact on disk and indexes in SQLite with v1 checkpoint', () => {
+    const tmpDir = createTempDir();
+    const store = new ArtifactStore(tmpDir);
+
+    const art = store.createArtifact({
+      title: 'Revenue Breakdown',
+      content: 'export default function App() { return <div>v1</div>; }',
+      type: 'react',
+      agent: 'claude-code',
+      project: 'finance',
+      tags: ['react', 'chart'],
+    });
+
+    assert.equal(art.slug, 'revenue-breakdown');
+    assert.equal(art.currentVersion, 1);
+    assert.equal(art.agent, 'claude-code');
+    assert.equal(art.versions.length, 1);
+    assert.ok(fs.existsSync(art.filePath));
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, 'artifacts', 'revenue-breakdown', 'meta.json'))
+    );
+    assert.ok(
+      fs.existsSync(
+        path.join(tmpDir, 'artifacts', 'revenue-breakdown', 'versions', 'v1.tsx')
+      )
+    );
+
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('updates artifact to v2, preserves v1, and supports rollback to v1 as v3', () => {
+    const tmpDir = createTempDir();
+    const store = new ArtifactStore(tmpDir);
+
+    const v1 = store.createArtifact({
+      slug: 'arch-diagram',
+      title: 'System Diagram',
+      type: 'mermaid',
+      content: 'flowchart LR\n  A --> B',
+      agent: 'antigravity',
+    });
+    assert.equal(v1.currentVersion, 1);
+
+    const v2 = store.updateArtifact('arch-diagram', {
+      content: 'flowchart LR\n  A --> B --> C',
+      agent: 'codex',
+      summary: 'Added node C',
+    });
+    assert.equal(v2.currentVersion, 2);
+    assert.equal(v2.agent, 'codex');
+    assert.equal(store.getVersionContent('arch-diagram', 1), 'flowchart LR\n  A --> B');
+    assert.equal(
+      store.getVersionContent('arch-diagram', 2),
+      'flowchart LR\n  A --> B --> C'
+    );
+
+    const v3 = store.rollbackArtifact('arch-diagram', 1, 'antigravity');
+    assert.equal(v3.currentVersion, 3);
+    assert.equal(v3.content, 'flowchart LR\n  A --> B');
+
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('supports full-text search (FTS5) and filtering by assistant', () => {
+    const tmpDir = createTempDir();
+    const store = new ArtifactStore(tmpDir);
+
+    store.createArtifact({
+      title: 'Kubernetes Cluster Topology',
+      content: 'flowchart TD\n  Ingress --> Service',
+      type: 'mermaid',
+      agent: 'claude-code',
+      tags: ['k8s', 'infra'],
+    });
+
+    store.createArtifact({
+      title: 'Token Cost Optimizer',
+      content: 'export default function Optimizer() { return <div>Recharts</div>; }',
+      type: 'react',
+      agent: 'antigravity',
+      tags: ['llm', 'pricing'],
+    });
+
+    const k8sResults = store.listArtifacts({ query: 'Kubernetes' });
+    assert.equal(k8sResults.length, 1);
+    assert.equal(k8sResults[0].agent, 'claude-code');
+
+    const agResults = store.listArtifacts({ agent: 'antigravity' });
+    assert.equal(agResults.length, 1);
+    assert.equal(agResults[0].title, 'Token Cost Optimizer');
+
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('persists window.storage key-value entries to SQLite and state.json', () => {
+    const tmpDir = createTempDir();
+    const store = new ArtifactStore(tmpDir);
+
+    const art = store.createArtifact({
+      slug: 'todo-widget',
+      title: 'Todo Widget',
+      type: 'react',
+      content: 'export default function Todo() {}',
+    });
+
+    store.setStorageValue(art.id, 'theme', 'dark');
+    store.setStorageValue(art.id, 'note:1', 'Ship local artifact studio');
+    store.setStorageValue(art.id, 'note:2', 'Verify MCP tools');
+
+    const themeVal = store.getStorageValue(art.id, 'theme');
+    assert.deepEqual(themeVal, { key: 'theme', value: 'dark' });
+
+    const noteKeys = store.listStorageKeys(art.id, 'note:');
+    assert.deepEqual(noteKeys.keys, ['note:1', 'note:2']);
+
+    const stateJsonPath = path.join(tmpDir, 'artifacts', 'todo-widget', 'state.json');
+    assert.ok(fs.existsSync(stateJsonPath));
+    const onDisk = JSON.parse(fs.readFileSync(stateJsonPath, 'utf8'));
+    assert.equal(onDisk['note:1'], 'Ship local artifact studio');
+
+    const delRes = store.deleteStorageValue(art.id, 'note:1');
+    assert.equal(delRes.deleted, true);
+    assert.equal(store.getStorageValue(art.id, 'note:1'), null);
+
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
