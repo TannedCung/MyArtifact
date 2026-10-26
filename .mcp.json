@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "myartifact": {
+      "command": "node",
+      "args": [
+        "/home/tannedcung/side_proj/MyArtifact/dist/cli/cli.js",
+        "mcp"
+      ]
+    }
+  }
+}
