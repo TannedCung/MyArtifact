@@ -109,7 +109,7 @@ export const SandboxRenderer: React.FC<SandboxRendererProps> = ({
       title={title}
       srcDoc={srcDoc}
       sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads"
-      className="w-full h-full border-0 bg-slate-950"
+      className="w-full min-h-[520px] h-full border-0 bg-[#020617] block"
     />
   );
 };
