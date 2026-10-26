@@ -23,13 +23,13 @@ If the `myartifact` MCP server is mounted, call its tools directly:
 If MCP tools are not mounted in the current session, use the CLI:
 ```bash
 # Create or update an artifact from a file (auto-infers type & increments version if slug exists)
-node "/home/tannedcung/side_proj/MyArtifact/dist/cli/cli.js" push ./dashboard.tsx --id revenue-dashboard --title "Revenue Dashboard" --agent antigravity --summary "Added Q4 breakdown"
+node "./dist/cli/cli.js" push ./dashboard.tsx --id revenue-dashboard --title "Revenue Dashboard" --agent antigravity --summary "Added Q4 breakdown"
 
 # List all local artifacts across assistants
-node "/home/tannedcung/side_proj/MyArtifact/dist/cli/cli.js" list
+node "./dist/cli/cli.js" list
 
 # Read an artifact's source or specific version
-node "/home/tannedcung/side_proj/MyArtifact/dist/cli/cli.js" get revenue-dashboard --version 1
+node "./dist/cli/cli.js" get revenue-dashboard --version 1
 ```
 
 ## 3. Claude-Compatible Sandbox Capabilities
