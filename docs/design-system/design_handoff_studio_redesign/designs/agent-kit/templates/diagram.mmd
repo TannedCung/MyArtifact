@@ -1,0 +1,25 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"IBM Plex Sans, system-ui, sans-serif","fontSize":"14px","background":"#F7F4ED","primaryColor":"#E4EADF","primaryTextColor":"#1E2420","primaryBorderColor":"#55684F","lineColor":"#4A524A","secondaryColor":"#F8F1E3","secondaryBorderColor":"#C8A96B","tertiaryColor":"#EFEBE1","clusterBkg":"#FCFBF7","clusterBorder":"#E2DDD0","edgeLabelBackground":"#F7F4ED","nodeTextColor":"#1E2420"}}}%%
+%% theme: moss — line 1 is the theme block; replace it to change theme (see themes.json)
+flowchart LR
+    subgraph Assistants["AI coding assistants"]
+        CC["Claude Code"]
+        CX["Codex"]
+        AG["Antigravity"]
+    end
+
+    subgraph Bridge["Local bridge"]
+        MCP["MCP stdio server"]
+        CLI["myartifact CLI"]
+        WATCH["Dropzone watcher"]
+    end
+
+    subgraph Store["~/.myartifact"]
+        SQL[("SQLite + FTS5")]
+        DISK["versions/v1..vN<br/>state.json"]
+    end
+
+    UI["Studio · 127.0.0.1:4173"]
+
+    CC & CX & AG --> MCP & CLI & WATCH
+    MCP & CLI & WATCH --> SQL & DISK
+    SQL & DISK -- "REST + WebSocket" --> UI

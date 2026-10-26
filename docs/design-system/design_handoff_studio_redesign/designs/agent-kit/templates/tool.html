@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!-- @title: Token Cost Estimator -->
+<!-- @tags: template:tool, theme:moss -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    /* theme:start */
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+    :root{--ma-bg:#F7F4ED;--ma-surface:#FCFBF7;--ma-sunken:#EFEBE1;--ma-border:#E2DDD0;--ma-ink:#1E2420;--ma-muted:#4A524A;--ma-accent:#55684F;--ma-accent-ink:#F7F4ED;--ma-accent-soft:#E4EADF;--ma-highlight:#C8A96B;--ma-highlight-soft:#F8F1E3;--ma-danger:#B4553F;--ma-font-sans:'IBM Plex Sans', system-ui, sans-serif;--ma-font-display:'IBM Plex Sans', system-ui, sans-serif;--ma-font-mono:'IBM Plex Mono', ui-monospace, monospace}
+    /* theme:end */
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:var(--ma-bg);color:var(--ma-ink);font-family:var(--ma-font-sans);font-size:14px;-webkit-font-smoothing:antialiased;padding:40px 20px}
+    .card{max-width:520px;margin:0 auto;background:var(--ma-surface);border:1px solid var(--ma-border);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:20px}
+    h1{margin:0;font-family:var(--ma-font-display);font-size:20px;font-weight:600;letter-spacing:-.01em}
+    .sub{margin:4px 0 0;color:var(--ma-muted);font-size:13px}
+    label{display:flex;flex-direction:column;gap:6px}
+    .row{display:flex;justify-content:space-between;font-size:13px;color:var(--ma-muted)}
+    .row b{font-family:var(--ma-font-mono);font-weight:500;color:var(--ma-ink)}
+    input[type=range]{width:100%;accent-color:var(--ma-accent)}
+    .out{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:16px;border-top:1px solid var(--ma-border)}
+    .stat{background:var(--ma-sunken);border-radius:10px;padding:14px}
+    .stat span{font-size:12px;color:var(--ma-muted)}
+    .stat div{margin-top:4px;font-family:var(--ma-font-mono);font-size:22px;font-weight:500}
+    .stat.hl{background:var(--ma-accent-soft)}
+    .foot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--ma-muted)}
+    button{font:inherit;font-size:12px;font-weight:500;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--ma-border);background:var(--ma-surface);color:var(--ma-ink);cursor:pointer}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div>
+      <h1>Token cost estimator</h1>
+      <p class="sub">Inputs are saved to window.storage and restored on reload.</p>
+    </div>
+    <label><span class="row">Input tokens per call <b id="inV"></b></span><input id="inp" type="range" min="1000" max="200000" step="1000" value="16000" /></label>
+    <label><span class="row">Output tokens per call <b id="outV"></b></span><input id="out" type="range" min="100" max="16000" step="100" value="1200" /></label>
+    <label><span class="row">Calls per day <b id="callsV"></b></span><input id="calls" type="range" min="1" max="5000" step="1" value="250" /></label>
+    <div class="out">
+      <div class="stat"><span>Per call</span><div id="per">–</div></div>
+      <div class="stat hl"><span>Per month</span><div id="month">–</div></div>
+    </div>
+    <div class="foot"><span>$3 / M input · $15 / M output</span><button id="reset" type="button">Reset</button></div>
+  </main>
+  <script>
+    const KEY = 'tool:inputs';
+    const DEFAULTS = { inp: 16000, out: 1200, calls: 250 };
+    const ids = ['inp', 'out', 'calls'];
+    const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+    const fmt = (n) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 });
+    function render() {
+      const v = Object.fromEntries(ids.map((id) => [id, Number(el[id].value)]));
+      document.getElementById('inV').textContent = v.inp.toLocaleString();
+      document.getElementById('outV').textContent = v.out.toLocaleString();
+      document.getElementById('callsV').textContent = v.calls.toLocaleString();
+      const per = (v.inp * 3 + v.out * 15) / 1e6;
+      document.getElementById('per').textContent = fmt(per);
+      document.getElementById('month').textContent = fmt(per * v.calls * 30);
+      return v;
+    }
+    ids.forEach((id) => el[id].addEventListener('input', () => window.storage?.set(KEY, JSON.stringify(render()))));
+    document.getElementById('reset').onclick = () => { ids.forEach((id) => (el[id].value = DEFAULTS[id])); window.storage?.set(KEY, JSON.stringify(render())); };
+    (window.storage ? window.storage.get(KEY) : Promise.resolve(null))
+      .then((r) => { if (r) { const s = JSON.parse(r.value); ids.forEach((id) => s[id] != null && (el[id].value = s[id])); } })
+      .catch(() => {})
+      .finally(render);
+  </script>
+</body>
+</html>

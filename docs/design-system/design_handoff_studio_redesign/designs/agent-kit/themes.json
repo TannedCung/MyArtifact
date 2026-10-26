@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "default": "moss",
+  "fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
+  "tokens": ["bg", "surface", "sunken", "border", "ink", "muted", "accent", "accentInk", "accentSoft", "highlight", "highlightSoft", "danger"],
+  "themes": {
+    "moss": {
+      "label": "Moss",
+      "mode": "light",
+      "use": "Default. Dashboards, tools, anything you will look at daily.",
+      "bg": "#F7F4ED", "surface": "#FCFBF7", "sunken": "#EFEBE1", "border": "#E2DDD0",
+      "ink": "#1E2420", "muted": "#4A524A",
+      "accent": "#55684F", "accentInk": "#F7F4ED", "accentSoft": "#E4EADF",
+      "highlight": "#C8A96B", "highlightSoft": "#F8F1E3", "danger": "#B4553F",
+      "chart": ["#55684F", "#C8A96B", "#7C93A8", "#B8876F", "#8FA28A"],
+      "fontSans": "'IBM Plex Sans', system-ui, sans-serif",
+      "fontDisplay": "'IBM Plex Sans', system-ui, sans-serif",
+      "fontMono": "'IBM Plex Mono', ui-monospace, monospace"
+    },
+    "moss-night": {
+      "label": "Moss Night",
+      "mode": "dark",
+      "use": "Dense monitoring views, code-heavy tools, low-light work.",
+      "bg": "#151A16", "surface": "#1D231E", "sunken": "#111512", "border": "#2D352E",
+      "ink": "#ECEAE3", "muted": "#A7AEA2",
+      "accent": "#8FA28A", "accentInk": "#151A16", "accentSoft": "#263027",
+      "highlight": "#C8A96B", "highlightSoft": "#2E2A1E", "danger": "#D98068",
+      "chart": ["#8FA28A", "#C8A96B", "#93A9BD", "#C99A82", "#C7D3C0"],
+      "fontSans": "'IBM Plex Sans', system-ui, sans-serif",
+      "fontDisplay": "'IBM Plex Sans', system-ui, sans-serif",
+      "fontMono": "'IBM Plex Mono', ui-monospace, monospace"
+    },
+    "ledger": {
+      "label": "Ledger",
+      "mode": "light",
+      "use": "Reports, memos, write-ups meant to be read top to bottom.",
+      "bg": "#FBF8F1", "surface": "#FFFFFF", "sunken": "#F3EDE0", "border": "#E6DCC8",
+      "ink": "#2A2110", "muted": "#5E5440",
+      "accent": "#735C2B", "accentInk": "#FFFFFF", "accentSoft": "#F4EAD5",
+      "highlight": "#55684F", "highlightSoft": "#E4EADF", "danger": "#A2452F",
+      "chart": ["#8E733D", "#55684F", "#C8A96B", "#7C93A8", "#B8876F"],
+      "fontSans": "'IBM Plex Sans', system-ui, sans-serif",
+      "fontDisplay": "'IBM Plex Serif', Georgia, serif",
+      "fontMono": "'IBM Plex Mono', ui-monospace, monospace"
+    },
+    "lichen": {
+      "label": "Lichen",
+      "mode": "light",
+      "use": "Diagrams and overviews shown to others; softer, higher-key.",
+      "bg": "#E9EFE5", "surface": "#FBFCF9", "sunken": "#DEE6D9", "border": "#C7D3C0",
+      "ink": "#1A231B", "muted": "#455045",
+      "accent": "#435340", "accentInk": "#F7F4ED", "accentSoft": "#D5DFCF",
+      "highlight": "#C8A96B", "highlightSoft": "#F1E7D2", "danger": "#A9503B",
+      "chart": ["#435340", "#C8A96B", "#8FA28A", "#7C93A8", "#B8876F"],
+      "fontSans": "'IBM Plex Sans', system-ui, sans-serif",
+      "fontDisplay": "'IBM Plex Sans', system-ui, sans-serif",
+      "fontMono": "'IBM Plex Mono', ui-monospace, monospace"
+    }
+  },
+  "templates": {
+    "dashboard": { "label": "Dashboard", "type": "react", "file": "templates/dashboard.tsx", "use": "KPIs, one trend chart, a persistent side panel." },
+    "report": { "label": "Report", "type": "markdown", "file": "templates/report.md", "use": "Findings write-up with summary, table, diagram and next steps." },
+    "diagram": { "label": "Diagram", "type": "mermaid", "file": "templates/diagram.mmd", "use": "Architecture or flow with grouped subsystems." },
+    "tool": { "label": "Mini-app", "type": "html", "file": "templates/tool.html", "use": "Single-purpose calculator or form that remembers its inputs." }
+  }
+}

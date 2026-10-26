@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.511.0/font/lucide.css">
+<style>
+:root{--c-F7F4ED:#F7F4ED;--c-1E2420:#1E2420;--c-55684F:#55684F;--c-2F3B2C:#2F3B2C;--c-D3CDBD:#D3CDBD;--c-C7D3C0:#C7D3C0;--c-E2DDD0:#E2DDD0;--c-3D4F39:#3D4F39;--c-6F8A69:#6F8A69;--c-E4EADF:#E4EADF;--c-435340:#435340;--c-FCFBF7:#FCFBF7;--c-8FA28A:#8FA28A;--c-656C62:#656C62;--c-4A524A:#4A524A;--c-EFEBE1:#EFEBE1;--c-9A9F94:#9A9F94;--c-8E733D:#8E733D;--c-735C2B:#735C2B;--c-8A3A28:#8A3A28;--c-F4E2DB:#F4E2DB;--c-F8F1E3:#F8F1E3;--c-EADBB8:#EADBB8;--c-4E3E1C:#4E3E1C;--c-C8A96B:#C8A96B;--c-B4553F:#B4553F;--c-EEF2EA:#EEF2EA;--c-7C93A8:#7C93A8;--c-E1E8EE:#E1E8EE;--c-3E5266:#3E5266;--c-B8876F:#B8876F;--c-F4E7DF:#F4E7DF;--c-7A4A35:#7A4A35;--c-F8ECE7:#F8ECE7;--c-6E2E20:#6E2E20;color-scheme:light}
+:root[data-theme="night"]{--c-F7F4ED:#151A16;--c-1E2420:#ECEAE3;--c-55684F:#8FA28A;--c-2F3B2C:#C7D3C0;--c-D3CDBD:#3A443B;--c-C7D3C0:#3E4C3B;--c-E2DDD0:#2D352E;--c-3D4F39:#A9C2A2;--c-6F8A69:#8FA28A;--c-E4EADF:#2A352B;--c-435340:#A9BAA4;--c-FCFBF7:#1D231E;--c-8FA28A:#8FA28A;--c-656C62:#9AA196;--c-4A524A:#B5BCB0;--c-EFEBE1:#262D27;--c-9A9F94:#7D8579;--c-8E733D:#C8A96B;--c-735C2B:#D9BE86;--c-8A3A28:#E79A86;--c-F4E2DB:#3A2520;--c-F8F1E3:#2E2A1E;--c-EADBB8:#4A4128;--c-4E3E1C:#E6D3A8;--c-C8A96B:#C8A96B;--c-B4553F:#D98068;--c-EEF2EA:#1F2A20;--c-7C93A8:#93A9BD;--c-E1E8EE:#1F2830;--c-3E5266:#A9BDD0;--c-B8876F:#C99A82;--c-F4E7DF:#33261F;--c-7A4A35:#DDB09A;--c-F8ECE7:#2E201C;--c-6E2E20:#E7B3A5;color-scheme:dark}
+html,body{transition:background-color .2s}
+html,body{margin:0;height:100%;background:var(--c-F7F4ED);color:var(--c-1E2420);font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+a{color:var(--c-55684F)}a:hover{color:var(--c-2F3B2C)}
+button,input,select,textarea{font-family:inherit;color:inherit}
+button{cursor:pointer}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--c-D3CDBD);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+::selection{background:var(--c-C7D3C0)}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+</style>
+</helmet>
+<div style="display:flex;height:100vh;width:100vw;overflow:hidden;background:var(--c-F7F4ED);font-size:13px">
+
+  <aside style="width:272px;flex-shrink:0;border-right:1px solid var(--c-E2DDD0);background:var(--c-F7F4ED);display:flex;flex-direction:column;min-height:0">
+    <div style="height:56px;padding:0 12px 0 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--c-E2DDD0);flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:28px;height:28px;border-radius:7px;background:var(--c-55684F);color:var(--c-F7F4ED);display:flex;align-items:center;justify-content:center"><i class="icon-layers" style="font-size:16px;line-height:1"></i></div>
+        <div style="display:flex;flex-direction:column;line-height:1.2;min-width:0;overflow:hidden">
+          <span style="font-weight:600;font-size:14px">MyArtifact</span>
+          <span style="font-size:11px;color:var(--c-3D4F39);display:flex;align-items:center;gap:5px;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:var(--c-6F8A69);box-shadow:0 0 0 2px var(--c-E4EADF)"></span>Live · :4173</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px"><button onClick="{{ toggleTheme }}" title="{{ themeTitle }}" aria-label="{{ themeTitle }}" style="width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--c-4A524A);display:flex;align-items:center;justify-content:center" style-hover="background:var(--c-EFEBE1)"><i class="{{ themeIcon }}" style="font-size:15px;line-height:1"></i></button><button onClick="{{ openCreate }}" title="New artifact (N)" aria-label="New artifact" style="height:28px;padding:0 10px;border-radius:6px;border:0;background:var(--c-55684F);color:var(--c-F7F4ED);font-size:12px;font-weight:500;display:flex;align-items:center;gap:5px" style-hover="background:var(--c-435340)"><i class="icon-plus" style="font-size:14px;line-height:1"></i>New</button></div>
+    </div>
+
+    <div style="padding:12px 12px 8px;display:flex;flex-direction:column;gap:8px;flex-shrink:0">
+      <button onClick="{{ openPalette }}" style="height:32px;padding:0 8px 0 10px;border-radius:6px;background:var(--c-FCFBF7);border:1px solid var(--c-D3CDBD);display:flex;align-items:center;gap:8px;text-align:left" style-hover="border-color:var(--c-8FA28A)">
+        <i class="icon-search" style="font-size:14px;color:var(--c-656C62);line-height:1"></i>
+        <span style="flex:1;color:var(--c-656C62);font-size:13px">Search or jump to…</span>
+        <kbd style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--c-4A524A);background:var(--c-EFEBE1);border:1px solid var(--c-E2DDD0);border-bottom-width:2px;border-radius:4px;padding:0 5px">⌘K</kbd>
+      </button>
+    </div>
+
+    <nav style="flex:1;overflow-y:auto;padding:4px 8px 12px;display:flex;flex-direction:column;gap:12px">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="1">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          
+          <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+            <button onClick="{{ it.select }}" style="display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:{{ rowPad }};border:0;border-radius:8px;background:{{ it.bg }};box-shadow:{{ it.rule }};text-align:left;width:100%" style-hover="background:var(--c-EFEBE1)">
+              <span style="width:28px;height:28px;border-radius:6px;background:{{ it.iconBg }};border:1px solid {{ it.iconBd }};display:flex;align-items:center;justify-content:center;color:{{ it.iconFg }};box-sizing:border-box"><i class="{{ it.icon }}" style="font-size:15px;line-height:1"></i></span>
+              <span style="min-width:0;display:flex;flex-direction:column;gap:1px">
+                <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.title }}</span>
+                <span style="font-size:12px;color:var(--c-4A524A);display:flex;align-items:center;gap:6px;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:{{ it.dot }};flex-shrink:0"></span>{{ it.agentLabel }} · {{ it.time }}</span>
+              </span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ it.vFg }};background:{{ it.vBg }};border-radius:4px;padding:1px 6px">v{{ it.cur }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-for>
+      <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:32px 16px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center">
+          <i class="icon-search-x" style="font-size:20px;color:var(--c-9A9F94);line-height:1"></i>
+          <div style="font-size:13px;font-weight:500">No artifacts match</div>
+          <button onClick="{{ clearFilters }}" style="border:0;background:none;color:var(--c-55684F);font-size:12px;font-weight:500;text-decoration:underline;text-underline-offset:3px">Clear filters</button>
+        </div>
+      </sc-if>
+    </nav>
+
+  </aside>
+
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--c-FCFBF7)">
+    <sc-if value="{{ hasArt }}" hint-placeholder-val="{{ true }}">
+      <header style="padding:10px 20px 0;border-bottom:1px solid var(--c-E2DDD0);background:var(--c-FCFBF7);display:flex;flex-direction:column;gap:10px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:4px">
+          <div style="min-width:0;display:flex;align-items:center;gap:10px">
+            <h1 style="margin:0;font-size:17px;line-height:26px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ art.title }}</h1>
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--c-4A524A);white-space:nowrap"><span style="width:7px;height:7px;border-radius:999px;background:{{ art.dot }}"></span>{{ art.agentLabel }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;position:relative;flex-shrink:0">
+            <button onClick="{{ toggleVer }}" aria-label="Version history" style="height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--c-D3CDBD);background:{{ verBtnBg }};font-size:13px;font-weight:500;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:6px" style-hover="background:var(--c-EFEBE1)"><i class="icon-history" style="font-size:14px;color:var(--c-8E733D);line-height:1"></i><span>v{{ viewV }} <span style="color:var(--c-656C62);font-weight:400">of {{ art.cur }}</span></span><i class="icon-chevron-down" style="font-size:12px;color:var(--c-656C62);line-height:1"></i></button>
+            <button onClick="{{ exportHtml }}" style="height:32px;padding:0 12px;border-radius:6px;border:0;background:var(--c-55684F);color:var(--c-F7F4ED);font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px" style-hover="background:var(--c-435340)"><i class="icon-download" style="font-size:14px;line-height:1"></i>Export</button>
+            <button onClick="{{ toggleMenu }}" title="More" aria-label="More actions" style="width:32px;height:32px;border-radius:6px;border:0;background:transparent;color:var(--c-4A524A);display:flex;align-items:center;justify-content:center" style-hover="background:var(--c-EFEBE1)"><i class="icon-ellipsis" style="font-size:16px;line-height:1"></i></button>
+            <sc-if value="{{ verOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:38px;right:0;width:320px;max-height:420px;overflow-y:auto;z-index:30;background:var(--c-FCFBF7);border:1px solid var(--c-E2DDD0);border-radius:10px;box-shadow:0 6px 16px rgba(30,36,32,.1);padding:6px">
+                <sc-for list="{{ timeline }}" as="v" hint-placeholder-count="2">
+                  <button onClick="{{ v.select }}" style="display:grid;grid-template-columns:16px minmax(0,1fr);gap:10px;padding:0 8px;border:0;border-radius:8px;background:{{ v.bg }};text-align:left;width:100%" style-hover="background:var(--c-F7F4ED)">
+                    <span style="display:flex;flex-direction:column;align-items:center;align-self:stretch;padding-top:13px"><span style="width:10px;height:10px;border-radius:999px;background:{{ v.nodeBg }};border:2px solid {{ v.nodeBd }};box-sizing:border-box"></span></span>
+                    <span style="padding:9px 0;display:flex;flex-direction:column;gap:1px;min-width:0">
+                      <span style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600"><span>v{{ v.v }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--c-735C2B)">{{ v.tag }}</span></span>
+                      <span style="font-size:13px;color:var(--c-4A524A)">{{ v.summary }}</span>
+                      <span style="font-size:12px;color:var(--c-656C62)">{{ v.agentLabel }} · {{ v.time }}</span>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:38px;right:0;width:220px;z-index:30;background:var(--c-FCFBF7);border:1px solid var(--c-E2DDD0);border-radius:10px;box-shadow:0 6px 16px rgba(30,36,32,.1);padding:4px;display:flex;flex-direction:column">
+                <button onClick="{{ copySource }}" style="height:32px;padding:0 8px;border:0;border-radius:6px;background:transparent;display:flex;align-items:center;gap:8px;font-size:13px;text-align:left" style-hover="background:var(--c-EFEBE1)"><i class="icon-copy" style="font-size:14px;color:var(--c-4A524A);line-height:1"></i>Copy source</button>
+                <button onClick="{{ copyGet }}" style="height:32px;padding:0 8px;border:0;border-radius:6px;background:transparent;display:flex;align-items:center;gap:8px;font-size:13px;text-align:left" style-hover="background:var(--c-EFEBE1)"><i class="icon-terminal" style="font-size:14px;color:var(--c-4A524A);line-height:1"></i>Copy CLI command</button>
+                <div style="height:1px;background:var(--c-E2DDD0);margin:4px 0"></div>
+                <button onClick="{{ askDelete }}" style="height:32px;padding:0 8px;border:0;border-radius:6px;background:transparent;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--c-8A3A28);text-align:left" style-hover="background:var(--c-F4E2DB)"><i class="icon-trash-2" style="font-size:14px;line-height:1"></i>Delete…</button>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+          <div role="tablist" style="display:flex;gap:20px">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+              <button role="tab" onClick="{{ t.go }}" title="{{ t.hint }}" style="height:36px;padding:0;border:0;background:none;border-bottom:2px solid {{ t.rule }};margin-bottom:-1px;color:{{ t.fg }};font-size:13px;font-weight:{{ t.weight }};display:flex;align-items:center;gap:6px">
+                {{ t.label }}
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:{{ t.badgeBg }};color:{{ t.badgeFg }};border-radius:4px;padding:0 5px">{{ t.badge }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="padding-bottom:6px;display:flex;align-items:center;gap:8px">
+            <sc-if value="{{ isPreview }}" hint-placeholder-val="{{ true }}">
+              <div style="display:inline-flex;padding:2px;background:var(--c-EFEBE1);border-radius:8px;gap:2px">
+                <sc-for list="{{ viewports }}" as="vp" hint-placeholder-count="3">
+                  <button onClick="{{ vp.go }}" title="{{ vp.label }}" aria-label="{{ vp.label }}" style="width:30px;height:24px;border:0;border-radius:6px;background:{{ vp.bg }};box-shadow:{{ vp.shadow }};color:{{ vp.fg }};display:flex;align-items:center;justify-content:center"><i class="{{ vp.icon }}" style="font-size:14px;line-height:1"></i></button>
+                </sc-for>
+              </div>
+
+            </sc-if>
+            <sc-if value="{{ isDiff }}" hint-placeholder-val="{{ false }}">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--c-4A524A);cursor:pointer"><input type="checkbox" checked="{{ hideCtx }}" onChange="{{ toggleCtx }}" style="accent-color:var(--c-55684F);margin:0">Collapse unchanged</label>
+            </sc-if>
+          </div>
+        </div>
+      </header>
+
+      <sc-if value="{{ isHistorical }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 20px;background:var(--c-F8F1E3);border-bottom:1px solid var(--c-EADBB8);font-size:13px;color:var(--c-4E3E1C);flex-shrink:0">
+          <i class="icon-history" style="font-size:15px;color:var(--c-8E733D);line-height:1"></i>
+          <span style="flex:1">Viewing <strong style="font-weight:600">v{{ viewV }}</strong> of {{ art.cur }} · read-only. Restoring creates v{{ nextV }}; nothing is overwritten.</span>
+          <button onClick="{{ restoreViewed }}" style="height:28px;padding:0 10px;border-radius:6px;border:0;background:var(--c-C8A96B);color:#2A2110;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px"><i class="icon-rotate-ccw" style="font-size:13px;line-height:1"></i><span>Restore v{{ viewV }}</span></button>
+          <button onClick="{{ backToLatest }}" style="height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--c-EADBB8);background:var(--c-FCFBF7);color:var(--c-735C2B);font-size:12px;font-weight:500">Back to latest</button>
+        </div>
+      </sc-if>
+
+      <div style="flex:1;min-height:0;display:flex">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0">
+
+          <sc-if value="{{ isPreview }}" hint-placeholder-val="{{ true }}">
+            <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:24px;background:{{ stageBg }};background-size:16px 16px">
+              <div style="max-width:{{ frameW }};margin:0 auto;border-radius:10px;overflow:hidden;border:1px solid var(--c-D3CDBD);box-shadow:0 6px 16px rgba(30,36,32,.08);background:#020617;transition:max-width .25s ease">
+                <div style="height:30px;padding:0 12px;background:var(--c-FCFBF7);border-bottom:1px solid var(--c-E2DDD0);display:flex;align-items:center;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--c-656C62)">
+                  <span style="display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i class="icon-shield-check" style="font-size:12px;color:var(--c-6F8A69);line-height:1;flex-shrink:0"></i><span style="overflow:hidden;text-overflow:ellipsis">sandbox · {{ art.slug }}@v{{ viewV }}</span></span><span style="flex-shrink:0;white-space:nowrap;margin-left:8px">{{ frameLabel }}</span>
+                </div>
+                <div style="min-height:520px">
+                  <sc-if value="{{ pv.telemetry }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding:24px;color:#f1f5f9;font-family:ui-sans-serif,system-ui,sans-serif;display:flex;flex-direction:column;gap:24px">
+                      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e293b;padding-bottom:16px;gap:12px;flex-wrap:wrap">
+                        <div style="display:flex;align-items:center;gap:12px">
+                          <div style="padding:10px;border-radius:12px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);color:#818cf8;display:flex"><i class="icon-sparkles" style="font-size:24px;line-height:1"></i></div>
+                          <div><div style="font-size:20px;font-weight:700;letter-spacing:-.01em">Cross-Agent Telemetry &amp; Notes</div><div style="font-size:12px;color:#94a3b8">Powered by MyArtifact local sandbox &amp; persistent window.storage</div></div>
+                        </div>
+                        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;background:rgba(16,185,129,.1);color:#34d399;border:1px solid rgba(16,185,129,.2)"><i class="icon-database" style="font-size:14px;line-height:1"></i>window.storage synced</span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px">
+                        <div style="grid-column:1/-1;min-width:0;background:rgba(15,23,42,.7);border:1px solid #1e293b;border-radius:16px;padding:20px">
+                          <div style="font-size:14px;font-weight:600;color:#cbd5e1;display:flex;align-items:center;gap:8px;margin-bottom:16px"><i class="icon-activity" style="font-size:16px;color:#818cf8;line-height:1"></i>Weekly Agent Token Velocity</div>
+                          <svg viewBox="0 0 600 200" preserveAspectRatio="none" style="width:100%;height:200px;display:block">
+                            <line x1="0" y1="50" x2="600" y2="50" stroke="#1e293b" stroke-dasharray="3 3"></line>
+                            <line x1="0" y1="100" x2="600" y2="100" stroke="#1e293b" stroke-dasharray="3 3"></line>
+                            <line x1="0" y1="150" x2="600" y2="150" stroke="#1e293b" stroke-dasharray="3 3"></line>
+                            <path d="{{ chart.area }}" fill="rgba(99,102,241,.22)"></path>
+                            <path d="{{ chart.line }}" fill="none" stroke="#818cf8" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+                          </svg>
+                          <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-top:6px">
+                            <sc-for list="{{ chart.days }}" as="d" hint-placeholder-count="5"><span>{{ d }}</span></sc-for>
+                          </div>
+                        </div>
+                        <div style="background:rgba(15,23,42,.7);border:1px solid #1e293b;border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px">
+                          <div style="font-size:14px;font-weight:600;color:#cbd5e1">Persistent Action Items</div>
+                          <div style="display:flex;gap:8px"><div style="flex:1;background:#020617;border:1px solid #1e293b;border-radius:8px;padding:6px 12px;font-size:14px;color:#64748b">Add persistent note...</div><div style="padding:8px;background:#4f46e5;border-radius:8px;color:#fff;display:flex"><i class="icon-plus" style="font-size:16px;line-height:1"></i></div></div>
+                          <sc-for list="{{ notes }}" as="n" hint-placeholder-count="2">
+                            <div style="display:flex;align-items:center;gap:8px;padding:10px;border-radius:8px;background:rgba(2,6,23,.6);border:1px solid rgba(30,41,59,.8);font-size:12px">
+                              <i class="icon-circle-check" style="font-size:16px;color:{{ n.iconFg }};line-height:1"></i><span style="flex:1;color:{{ n.fg }};text-decoration:{{ n.deco }}">{{ n.text }}</span><i class="icon-trash-2" style="font-size:14px;color:#64748b;line-height:1"></i>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ pv.mermaid }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:40px 24px;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;font-family:ui-sans-serif,system-ui,sans-serif;font-size:12px;color:#e2e8f0">
+                      <div style="border:1px solid #475569;background:rgba(30,41,59,.5);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:150px"><div style="text-align:center;color:#cbd5e1;font-weight:600">AI Coding Assistants</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center">Claude Code</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center">OpenAI Codex</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center">Google Antigravity</div></div>
+                      <i class="icon-arrow-right" style="font-size:18px;color:#94a3b8;line-height:1"></i>
+                      <div style="border:1px solid #475569;background:rgba(30,41,59,.5);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:150px"><div style="text-align:center;color:#cbd5e1;font-weight:600">Unified Local Bridge</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center">MCP stdio Server</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center">myartifact CLI</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center">Dropzone File Watcher</div></div>
+                      <i class="icon-arrow-right" style="font-size:18px;color:#94a3b8;line-height:1"></i>
+                      <div style="border:1px solid #475569;background:rgba(30,41,59,.5);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:150px"><div style="text-align:center;color:#cbd5e1;font-weight:600">Private Local Store</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center;border-radius:999px">SQLite + FTS5 Index</div><div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center">Versioned Files + state.json</div></div>
+                      <i class="icon-arrow-right" style="font-size:18px;color:#94a3b8;line-height:1"></i>
+                      <div style="border:1px solid #818cf8;background:#1f2020;padding:8px;text-align:center;max-width:150px">Live Sandboxed Browser UI (127.0.0.1:4173)</div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ pv.calc }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:32px;font-family:ui-sans-serif,system-ui,sans-serif;color:#f1f5f9">
+                      <div style="max-width:576px;margin:0 auto;background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:20px">
+                        <div style="font-size:18px;font-weight:700;color:#22d3ee">LLM Streaming Latency Estimator</div>
+                        <div style="display:flex;flex-direction:column;gap:16px;font-size:14px">
+                          <label style="display:flex;flex-direction:column;gap:4px;color:#94a3b8">Input Context Tokens: <span style="color:#fff;font-family:ui-monospace,Menlo,monospace">{{ calc.inpL }}</span><input type="range" min="1000" max="200000" step="1000" value="{{ calc.inp }}" onChange="{{ calc.setInp }}" style="width:100%;accent-color:#22d3ee"></label>
+                          <label style="display:flex;flex-direction:column;gap:4px;color:#94a3b8">Output Generation Tokens: <span style="color:#fff;font-family:ui-monospace,Menlo,monospace">{{ calc.outL }}</span><input type="range" min="100" max="16000" step="100" value="{{ calc.out }}" onChange="{{ calc.setOut }}" style="width:100%;accent-color:#22d3ee"></label>
+                          <label style="display:flex;flex-direction:column;gap:4px;color:#94a3b8">Decode Speed (tok/sec): <span style="color:#fff;font-family:ui-monospace,Menlo,monospace">{{ calc.spd }}</span><input type="range" min="20" max="250" step="5" value="{{ calc.spd }}" onChange="{{ calc.setSpd }}" style="width:100%;accent-color:#22d3ee"></label>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-top:12px;border-top:1px solid #1e293b">
+                          <div style="background:#020617;padding:16px;border-radius:12px;border:1px solid #1e293b"><div style="font-size:12px;color:#94a3b8">Est. Time to First Token (TTFT)</div><div style="font-size:24px;font-weight:700;font-family:ui-monospace,Menlo,monospace;margin-top:4px">{{ calc.ttft }}</div></div>
+                          <div style="background:#020617;padding:16px;border-radius:12px;border:1px solid #1e293b"><div style="font-size:12px;color:#94a3b8">Total Turn Duration</div><div style="font-size:24px;font-weight:700;color:#22d3ee;font-family:ui-monospace,Menlo,monospace;margin-top:4px">{{ calc.total }}</div></div>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ pv.generic }}" hint-placeholder-val="{{ false }}">
+                    <div style="min-height:520px;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,#0f172a 0 10px,#111c33 10px 20px);font-family:'IBM Plex Mono',monospace;font-size:12px;color:#94a3b8">sandboxed render · {{ art.type }}</div>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isCode }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--c-FCFBF7)">
+              <div style="height:34px;padding:0 20px;border-bottom:1px solid var(--c-E2DDD0);display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--c-4A524A);flex-shrink:0;background:var(--c-F7F4ED)">
+                <i class="icon-file-code" style="font-size:14px;color:var(--c-55684F);line-height:1"></i><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ art.path }}</span><span style="color:var(--c-656C62);flex-shrink:0;white-space:nowrap">{{ code.lineCount }} lines · {{ art.lang }}</span>
+              </div>
+              <div style="flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start">
+                <pre aria-hidden="true" style="margin:0;padding:16px 12px 16px 20px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:20px;color:var(--c-9A9F94);text-align:right;user-select:none;position:sticky;left:0;background:var(--c-FCFBF7);min-height:100%;box-sizing:border-box">{{ code.gutter }}</pre>
+                <textarea value="{{ code.draft }}" onChange="{{ code.onEdit }}" readOnly="{{ isHistorical }}" spellCheck="false" rows="{{ code.lineCount }}" aria-label="Source editor" style="flex:1;min-width:0;border:0;outline:none;resize:none;padding:16px 20px 16px 8px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:20px;background:transparent;color:var(--c-1E2420);white-space:pre;overflow:hidden"></textarea>
+              </div>
+              <div style="padding:10px 20px;border-top:1px solid var(--c-E2DDD0);background:var(--c-F7F4ED);display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap">
+                <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:{{ code.statusFg }};min-width:160px"><span style="width:7px;height:7px;border-radius:999px;background:{{ code.statusDot }}"></span>{{ code.status }}</span>
+                <input value="{{ summary }}" onChange="{{ onSummary }}" placeholder="Describe this version (optional)" disabled="{{ code.clean }}" style="flex:1;min-width:200px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--c-D3CDBD);background:var(--c-FCFBF7);font-size:13px;outline:none" style-focus="border-color:var(--c-8FA28A);box-shadow:0 0 0 3px rgba(143,162,138,.28)">
+                <button onClick="{{ discard }}" disabled="{{ code.clean }}" style="height:32px;padding:0 12px;border-radius:6px;border:0;background:transparent;color:var(--c-4A524A);font-size:13px;font-weight:500;opacity:{{ code.btnOpacity }}">Discard</button>
+                <button onClick="{{ save }}" disabled="{{ code.clean }}" style="height:32px;padding:0 14px;border-radius:6px;border:0;background:var(--c-55684F);color:var(--c-F7F4ED);font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;opacity:{{ code.btnOpacity }}"><span>Save as v{{ nextV }}</span><kbd style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:rgba(247,244,237,.16);border-radius:3px;padding:0 4px">⌘S</kbd></button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isDiff }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--c-FCFBF7)">
+              <div style="padding:10px 20px;border-bottom:1px solid var(--c-E2DDD0);background:var(--c-F7F4ED);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;flex-shrink:0">
+                <select key="from-{{ fromVS }}-{{ art.cur }}" onChange="{{ setFrom }}" aria-label="Base version" style="height:30px;padding:0 8px;border-radius:6px;border:1px solid var(--c-D3CDBD);background:var(--c-FCFBF7);font-size:13px">
+                  <sc-for list="{{ fromOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.v }}" selected="{{ o.sel }}">{{ o.label }}</option></sc-for>
+                </select>
+                <i class="icon-arrow-right" style="font-size:14px;color:var(--c-656C62);line-height:1"></i>
+                <select key="to-{{ toVS }}-{{ art.cur }}" onChange="{{ setTo }}" aria-label="Compare version" style="height:30px;padding:0 8px;border-radius:6px;border:1px solid var(--c-D3CDBD);background:var(--c-FCFBF7);font-size:13px">
+                  <sc-for list="{{ toOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.v }}" selected="{{ o.sel }}">{{ o.label }}</option></sc-for>
+                </select>
+
+                <span style="flex:1"></span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--c-3D4F39);background:var(--c-E4EADF);border-radius:4px;padding:2px 7px">+{{ diff.add }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--c-8A3A28);background:var(--c-F4E2DB);border-radius:4px;padding:2px 7px">−{{ diff.del }}</span>
+                <sc-if value="{{ diff.canRestore }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ restoreFrom }}" style="height:30px;padding:0 10px;border-radius:6px;border:0;background:var(--c-F8F1E3);color:var(--c-735C2B);font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px"><i class="icon-rotate-ccw" style="font-size:13px;line-height:1"></i><span>Restore v{{ fromV }}</span></button>
+                </sc-if>
+              </div>
+              <div style="flex:1;overflow:auto;padding:16px 20px">
+                <sc-if value="{{ diff.same }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:48px 16px;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center;color:var(--c-4A524A)"><i class="icon-git-compare" style="font-size:22px;color:var(--c-9A9F94);line-height:1"></i><div style="font-weight:500;color:var(--c-1E2420)">Pick two different versions</div><div style="font-size:12px">Both sides are v{{ fromV }}.</div></div>
+                </sc-if>
+                <sc-if value="{{ diff.show }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:1px solid var(--c-E2DDD0);border-radius:10px;overflow:hidden;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:20px">
+                    <div style="padding:6px 12px;background:var(--c-F7F4ED);border-bottom:1px solid var(--c-E2DDD0);color:var(--c-4A524A);font-size:12px">{{ art.fileName }}</div>
+                    <sc-for list="{{ diff.rows }}" as="r" hint-placeholder-count="10">
+                      <div style="display:grid;grid-template-columns:44px 44px 20px minmax(0,1fr);background:{{ r.bg }};color:{{ r.fg }}">
+                        <span style="text-align:right;padding-right:8px;color:var(--c-9A9F94);user-select:none">{{ r.o }}</span>
+                        <span style="text-align:right;padding-right:8px;color:var(--c-9A9F94);user-select:none;border-right:1px solid var(--c-E2DDD0)">{{ r.n }}</span>
+                        <span style="text-align:center;color:{{ r.signFg }};user-select:none">{{ r.sign }}</span>
+                        <span style="white-space:pre-wrap;word-break:break-all;padding-right:12px">{{ r.text }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isState }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;overflow:auto;padding:24px">
+              <div style="max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:16px">
+                <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                  <div style="display:flex;flex-direction:column;gap:4px">
+                    <h2 style="margin:0;font-size:14px;font-weight:600">window.storage</h2>
+                    <p style="margin:0;font-size:13px;color:var(--c-4A524A);max-width:560px;text-wrap:pretty">Keys this artifact saved with <code style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--c-EFEBE1);border-radius:4px;padding:1px 5px">window.storage.set()</code>. Stored in SQLite and mirrored to <code style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--c-EFEBE1);border-radius:4px;padding:1px 5px">state.json</code>.</p>
+                  </div>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--c-656C62)">{{ st.total }} of 20 MB</span>
+                </div>
+                <div style="border:1px solid var(--c-E2DDD0);border-radius:10px;overflow:hidden;background:var(--c-FCFBF7)">
+                  <div style="display:grid;grid-template-columns:200px minmax(0,1fr) 80px 40px;gap:12px;padding:8px 14px;background:var(--c-F7F4ED);border-bottom:1px solid var(--c-E2DDD0);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--c-656C62)"><span>Key</span><span>Value</span><span style="text-align:right">Size</span><span></span></div>
+                  <sc-for list="{{ st.rows }}" as="s" hint-placeholder-count="1">
+                    <div style="display:grid;grid-template-columns:200px minmax(0,1fr) 80px 40px;gap:12px;padding:12px 14px;border-bottom:1px solid var(--c-E2DDD0);align-items:start">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:500;color:var(--c-435340);word-break:break-all">{{ s.key }}</span>
+                      <pre style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-all;color:var(--c-1E2420);background:var(--c-F7F4ED);border-radius:6px;padding:8px 10px;max-height:180px;overflow:auto">{{ s.pretty }}</pre>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--c-656C62);text-align:right">{{ s.size }}</span>
+                      <button onClick="{{ s.remove }}" title="Delete key" aria-label="Delete key" style="width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--c-656C62);display:flex;align-items:center;justify-content:center" style-hover="background:var(--c-F4E2DB);color:var(--c-8A3A28)"><i class="icon-trash-2" style="font-size:14px;line-height:1"></i></button>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ st.empty }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:32px 16px;text-align:center;font-size:13px;color:var(--c-4A524A);border-bottom:1px solid var(--c-E2DDD0)">No keys yet. The artifact writes here when it calls <code style="font-family:'IBM Plex Mono',monospace;font-size:12px">window.storage.set</code>, or add one below.</div>
+                  </sc-if>
+                  <div style="display:grid;grid-template-columns:200px minmax(0,1fr) auto;gap:12px;padding:12px 14px;background:var(--c-F7F4ED);align-items:center">
+                    <input value="{{ newKey }}" onChange="{{ onNewKey }}" placeholder="key" aria-label="New key" style="height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--c-D3CDBD);background:var(--c-FCFBF7);font-family:'IBM Plex Mono',monospace;font-size:12.5px;outline:none;min-width:0" style-focus="border-color:var(--c-8FA28A);box-shadow:0 0 0 3px rgba(143,162,138,.28)">
+                    <input value="{{ newVal }}" onChange="{{ onNewVal }}" placeholder="value · string or JSON" aria-label="New value" style="height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--c-D3CDBD);background:var(--c-FCFBF7);font-family:'IBM Plex Mono',monospace;font-size:12.5px;outline:none;min-width:0" style-focus="border-color:var(--c-8FA28A);box-shadow:0 0 0 3px rgba(143,162,138,.28)">
+                    <button onClick="{{ addKey }}" style="height:32px;padding:0 14px;border-radius:6px;border:0;background:var(--c-55684F);color:var(--c-F7F4ED);font-size:13px;font-weight:500;opacity:{{ st.addOpacity }}">Set key</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ noArt }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px">
+        <div style="max-width:380px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center">
+          <div style="width:44px;height:44px;border-radius:10px;background:var(--c-E4EADF);color:var(--c-55684F);display:flex;align-items:center;justify-content:center"><i class="icon-layers" style="font-size:22px;line-height:1"></i></div>
+          <div style="font-size:16px;font-weight:600">No artifact open</div>
+          <div style="font-size:13px;color:var(--c-4A524A);line-height:1.55">Ask any connected assistant to create one, drop a file into <code style="font-family:'IBM Plex Mono',monospace;font-size:12px">~/.myartifact/dropzone</code>, or start from scratch.</div>
+          <button onClick="{{ openCreate }}" style="height:32px;padding:0 14px;border-radius:6px;border:0;background:var(--c-55684F);color:var(--c-F7F4ED);font-size:13px;font-weight:500">New artifact</button>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeAll }}" style="position:fixed;inset:0;z-index:60;background:rgba(30,36,32,.32);display:flex;justify-content:center;align-items:flex-start;padding-top:14vh">
+      <div onClick="{{ stop }}" role="dialog" aria-label="Command palette" style="width:min(560px,92vw);background:var(--c-FCFBF7);border:1px solid var(--c-E2DDD0);border-radius:14px;box-shadow:0 20px 48px rgba(30,36,32,.18);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:0 16px;height:48px;border-bottom:1px solid var(--c-E2DDD0)">
+          <i class="icon-search" style="font-size:16px;color:var(--c-656C62);line-height:1"></i>
+          <input ref="{{ palRef }}" value="{{ q }}" onChange="{{ onQ }}" onKeyDown="{{ palKey }}" placeholder="Search artifacts and actions" style="flex:1;border:0;outline:none;background:transparent;font-size:15px">
+          <kbd style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--c-4A524A);background:var(--c-EFEBE1);border:1px solid var(--c-E2DDD0);border-radius:4px;padding:0 5px">esc</kbd>
+        </div>
+        <div style="max-height:360px;overflow-y:auto;padding:6px">
+          <sc-for list="{{ palItems }}" as="p" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column">
+              <sc-if value="{{ p.header }}" hint-placeholder-val="{{ false }}"><div style="padding:8px 10px 4px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--c-656C62)">{{ p.header }}</div></sc-if>
+              <button onClick="{{ p.run }}" onMouseEnter="{{ p.hover }}" style="height:38px;padding:0 10px;border:0;border-radius:8px;background:{{ p.bg }};display:flex;align-items:center;gap:10px;font-size:13px;text-align:left;width:100%">
+                <i class="{{ p.icon }}" style="font-size:15px;color:var(--c-4A524A);line-height:1"></i><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.label }}</span><span style="font-size:12px;color:var(--c-656C62)">{{ p.meta }}</span>
+              </button>
+            </div>
+          </sc-for>
+          <sc-if value="{{ palEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:24px;text-align:center;color:var(--c-4A524A)">Nothing matches “{{ q }}”.</div></sc-if>
+        </div>
+        <div style="display:flex;gap:16px;padding:8px 16px;border-top:1px solid var(--c-E2DDD0);background:var(--c-F7F4ED);font-size:12px;color:var(--c-656C62)"><span>↑↓ navigate</span><span>↵ open</span><span>1–4 switch view</span><span>] inspector</span></div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ createOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeAll }}" style="position:fixed;inset:0;z-index:60;background:rgba(30,36,32,.32);display:flex;align-items:center;justify-content:center;padding:16px">
+      <div onClick="{{ stop }}" role="dialog" aria-label="New artifact" style="width:min(640px,100%);background:var(--c-FCFBF7);border:1px solid var(--c-E2DDD0);border-radius:14px;box-shadow:0 20px 48px rgba(30,36,32,.18);display:flex;flex-direction:column;max-height:90vh">
+        <div style="padding:18px 20px 0;display:flex;align-items:flex-start;justify-content:space-between">
+          <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;font-weight:600">New artifact</span><span style="font-size:13px;color:var(--c-4A524A)">Saved to ~/.myartifact as v1.</span></div>
+          <button onClick="{{ closeAll }}" aria-label="Close" style="width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--c-4A524A);display:flex;align-items:center;justify-content:center" style-hover="background:var(--c-EFEBE1)"><i class="icon-x" style="font-size:16px;line-height:1"></i></button>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden">
+          <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500;color:var(--c-4A524A)">Title</span>
+            <input value="{{ nf.title }}" onChange="{{ nf.onTitle }}" placeholder="Q4 Revenue Dashboard" style="height:34px;padding:0 10px;border-radius:6px;border:1px solid {{ nf.titleBd }};background:var(--c-FCFBF7);font-size:13px;outline:none" style-focus="border-color:var(--c-8FA28A);box-shadow:0 0 0 3px rgba(143,162,138,.28)">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--c-656C62)">slug: {{ nf.slug }}</span>
+          </label>
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500;color:var(--c-4A524A);display:flex;justify-content:space-between">Start from<a href="Artifact Templates.dc.html" style="font-weight:400;font-size:12px">Browse templates →</a></span>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px">
+              <sc-for list="{{ nf.templates }}" as="tp" hint-placeholder-count="5">
+                <button onClick="{{ tp.pick }}" style="padding:8px 10px;border-radius:8px;border:1px solid {{ tp.bd }};background:{{ tp.bg }};display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left">
+                  <i class="{{ tp.icon }}" style="font-size:15px;color:var(--c-55684F);line-height:1"></i><span style="font-size:13px;font-weight:{{ tp.weight }}">{{ tp.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--c-656C62)">{{ tp.type }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+          <sc-if value="{{ nf.showThemes }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500;color:var(--c-4A524A)">Theme</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <sc-for list="{{ nf.themes }}" as="th" hint-placeholder-count="4">
+                  <button onClick="{{ th.pick }}" style="height:32px;padding:0 10px 0 6px;border-radius:999px;border:1px solid {{ th.bd }};background:{{ th.bgSel }};display:flex;align-items:center;gap:8px;font-size:13px;font-weight:{{ th.weight }}">
+                    <span style="display:flex;border-radius:999px;overflow:hidden;border:1px solid rgba(30,36,32,.12)"><span style="width:10px;height:20px;background:{{ th.bg }}"></span><span style="width:10px;height:20px;background:{{ th.accent }}"></span><span style="width:10px;height:20px;background:{{ th.highlight }}"></span></span>{{ th.label }}
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:500;color:var(--c-4A524A);display:flex;justify-content:space-between">Source<span style="font-weight:400;color:var(--c-3D4F39)">{{ nf.detected }}</span></span>
+            <textarea value="{{ nf.content }}" onChange="{{ nf.onContent }}" rows="9" placeholder="Paste a React component, HTML page, Mermaid diagram, Markdown or SVG" style="box-sizing:border-box;width:100%;min-width:0;padding:10px;border-radius:8px;border:1px solid {{ nf.contentBd }};background:var(--c-F7F4ED);font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:19px;resize:vertical;outline:none" style-focus="border-color:var(--c-8FA28A);box-shadow:0 0 0 3px rgba(143,162,138,.28)"></textarea>
+          </label>
+          <sc-if value="{{ nf.error }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:var(--c-8A3A28);display:flex;gap:6px;align-items:center"><i class="icon-circle-alert" style="font-size:14px;line-height:1"></i>{{ nf.error }}</div></sc-if>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--c-E2DDD0);display:flex;justify-content:flex-end;gap:8px;background:var(--c-F7F4ED);border-radius:0 0 14px 14px">
+          <button onClick="{{ closeAll }}" style="height:32px;padding:0 12px;border-radius:6px;border:0;background:transparent;color:var(--c-4A524A);font-size:13px;font-weight:500" style-hover="background:var(--c-EFEBE1)">Cancel</button>
+          <button onClick="{{ create }}" style="height:32px;padding:0 14px;border-radius:6px;border:0;background:var(--c-55684F);color:var(--c-F7F4ED);font-size:13px;font-weight:500" style-hover="background:var(--c-435340)">Create v1</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ delOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeAll }}" style="position:fixed;inset:0;z-index:60;background:rgba(30,36,32,.32);display:flex;align-items:center;justify-content:center;padding:16px">
+      <div onClick="{{ stop }}" role="alertdialog" style="width:min(440px,100%);background:var(--c-FCFBF7);border:1px solid var(--c-E2DDD0);border-radius:14px;box-shadow:0 20px 48px rgba(30,36,32,.18);padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--c-F4E2DB);color:var(--c-B4553F);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="icon-trash-2" style="font-size:16px;line-height:1"></i></div>
+          <div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:600">Delete “{{ art.title }}”?</span><span style="font-size:13px;color:var(--c-4A524A);line-height:1.55">This permanently removes {{ art.cur }} versions and {{ st.count }} storage keys from disk. It can’t be undone.</span></div>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--c-4A524A)">Type <code style="font-family:'IBM Plex Mono',monospace;color:var(--c-1E2420)">{{ art.slug }}</code> to confirm
+          <input value="{{ delText }}" onChange="{{ onDelText }}" style="height:34px;padding:0 10px;border-radius:6px;border:1px solid var(--c-D3CDBD);background:var(--c-FCFBF7);font-family:'IBM Plex Mono',monospace;font-size:12.5px;outline:none" style-focus="border-color:var(--c-B4553F);box-shadow:0 0 0 3px rgba(180,85,63,.18)">
+        </label>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button onClick="{{ closeAll }}" style="height:32px;padding:0 12px;border-radius:6px;border:0;background:transparent;color:var(--c-4A524A);font-size:13px;font-weight:500" style-hover="background:var(--c-EFEBE1)">Cancel</button>
+          <button onClick="{{ confirmDelete }}" disabled="{{ delDisabled }}" style="height:32px;padding:0 14px;border-radius:6px;border:0;background:var(--c-B4553F);color:var(--c-FCFBF7);font-size:13px;font-weight:500;opacity:{{ delOpacity }}">Delete artifact</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:var(--c-1E2420);color:var(--c-F7F4ED);font-size:13px;box-shadow:0 6px 16px rgba(30,36,32,.24);animation:toastIn .18s ease-out">
+      <i class="icon-check" style="font-size:15px;color:var(--c-C7D3C0);line-height:1"></i>{{ toast }}
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;inspectorDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;'comfortable'|'compact'&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;backdrop&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dots&quot;,&quot;grid&quot;,&quot;plain&quot;],&quot;default&quot;:&quot;dots&quot;,&quot;tsType&quot;:&quot;'dots'|'grid'|'plain'&quot;,&quot;section&quot;:&quot;Preview&quot;}}">
+const AG = {
+  'claude-code': { label: 'Claude Code', dot: 'var(--c-C8A96B)', bg: 'var(--c-F8F1E3)', fg: 'var(--c-735C2B)' },
+  codex: { label: 'Codex', dot: 'var(--c-8FA28A)', bg: 'var(--c-EEF2EA)', fg: 'var(--c-3D4F39)' },
+  antigravity: { label: 'Antigravity', dot: 'var(--c-7C93A8)', bg: 'var(--c-E1E8EE)', fg: 'var(--c-3E5266)' },
+  watcher: { label: 'Watched file', dot: 'var(--c-B8876F)', bg: 'var(--c-F4E7DF)', fg: 'var(--c-7A4A35)' },
+  user: { label: 'You', dot: 'var(--c-9A9F94)', bg: 'var(--c-EFEBE1)', fg: 'var(--c-4A524A)' },
+};
+const TY = {
+  react: { label: 'React', icon: 'icon-atom', ext: 'tsx' }, html: { label: 'HTML', icon: 'icon-code-xml', ext: 'html' },
+  mermaid: { label: 'Mermaid', icon: 'icon-workflow', ext: 'mmd' }, markdown: { label: 'Markdown', icon: 'icon-file-text', ext: 'md' },
+  svg: { label: 'SVG', icon: 'icon-pen-tool', ext: 'svg' }, code: { label: 'Code', icon: 'icon-file-code', ext: 'txt' },
+};
+const REACT_V1 = `import React, { useState, useEffect } from 'react';
+import { Activity, Plus, Trash2, CheckCircle2, Sparkles, Database } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const INITIAL_METRICS = [
+  { day: 'Mon', tokens: 14200, artifacts: 3 },
+  { day: 'Tue', tokens: 21500, artifacts: 5 },
+  { day: 'Wed', tokens: 18900, artifacts: 4 },
+  { day: 'Thu', tokens: 32400, artifacts: 8 },
+  { day: 'Fri', tokens: 28100, artifacts: 7 },
+];
+
+export default function AgentWorkspaceDashboard() {
+  const [notes, setNotes] = useState([]);
+  const [input, setInput] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    async function loadState() {
+      try {
+        const saved = await window.storage.get('workspace_notes');
+        if (saved && saved.value) {
+          setNotes(JSON.parse(saved.value));
+        }
+      } finally {
+        setLoaded(true);
+      }
+    }
+    loadState();
+  }, []);
+
+  async function saveNotes(next) {
+    setNotes(next);
+    await window.storage.set('workspace_notes', JSON.stringify(next));
+  }`;
+const REACT_V2 = REACT_V1.replace("{ day: 'Fri', tokens: 28100, artifacts: 7 },", "{ day: 'Fri', tokens: 28100, artifacts: 7 },\n  { day: 'Sat', tokens: 35900, artifacts: 11 },\n  { day: 'Sun', tokens: 41200, artifacts: 14 },");
+const MMD = `flowchart LR
+    subgraph Assistants["AI Coding Assistants"]
+        CC["Claude Code"]
+        CX["OpenAI Codex"]
+        AG["Google Antigravity"]
+    end
+
+    subgraph Bridge["Unified Local Bridge"]
+        MCP["MCP stdio Server"]
+        CLI["myartifact CLI"]
+        WATCH["Dropzone File Watcher"]
+    end
+
+    subgraph Storage["Private Local Store (~/.myartifact)"]
+        SQL[("SQLite + FTS5 Index")]
+        DISK["Versioned Files (v1..vN) + state.json"]
+    end
+
+    CC & CX & AG --> MCP & CLI & WATCH
+    MCP & CLI & WATCH --> SQL & DISK
+    SQL & DISK --> UI["Live Sandboxed Browser UI (127.0.0.1:4173)"]`;
+const SC = '\u0073cript';
+const HTML = `<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <${SC} src="https://cdn.tailwindcss.com"></${SC}>
+</head>
+<body class="bg-slate-950 text-slate-100 p-8 font-sans">
+  <div class="max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
+    <h1 class="text-lg font-bold text-cyan-400">LLM Streaming Latency Estimator</h1>
+    <!-- sliders: inTokens, outTokens, speed -->
+  </div>
+</body>
+</html>`;
+const SEED = [
+  { id: 'agent-telemetry-dashboard', title: 'Cross-Agent Telemetry & Notes Dashboard', type: 'react', lang: 'tsx', project: 'myartifact-demo', tags: ['react', 'dashboard', 'recharts', 'storage'], preview: 'telemetry',
+    versions: [{ agent: 'claude-code', summary: 'Initial telemetry chart and persistent checklist', time: '3h ago', content: REACT_V1 }, { agent: 'antigravity', summary: 'Added weekend token velocity metrics (Sat & Sun)', time: '2h ago', content: REACT_V2 }],
+    storage: [{ key: 'workspace_notes', value: JSON.stringify([{ id: 1, text: 'Compare Claude Code & Antigravity latency', done: true }, { id: 2, text: 'Test persistent window.storage across refreshes', done: false }]) }] },
+  { id: 'multi-agent-architecture', title: 'Multi-Agent Local Artifact Pipeline', type: 'mermaid', lang: 'mermaid', project: 'myartifact-demo', tags: ['architecture', 'mermaid', 'mcp'], preview: 'mermaid',
+    versions: [{ agent: 'antigravity', summary: 'Initial architecture diagram', time: 'yesterday', content: MMD }], storage: [] },
+  { id: 'llm-cost-latency-simulator', title: 'LLM Context & Throughput Calculator', type: 'html', lang: 'html', project: 'myartifact-demo', tags: ['calculator', 'html', 'llm'], preview: 'calc',
+    versions: [{ agent: 'codex', summary: 'Initial interactive calculator', time: 'yesterday', content: HTML }], storage: [] },
+];
+
+function lcsDiff(a, b) {
+  const A = a.split('\n'), B = b.split('\n'), n = A.length, m = B.length;
+  const dp = Array.from({ length: n + 1 }, () => new Int16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { out.push({ t: ' ', o: i + 1, n: j + 1, text: A[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: '-', o: i + 1, n: '', text: A[i] }); i++; }
+    else { out.push({ t: '+', o: '', n: j + 1, text: B[j] }); j++; }
+  }
+  while (i < n) { out.push({ t: '-', o: i + 1, n: '', text: A[i] }); i++; }
+  while (j < m) { out.push({ t: '+', o: '', n: j + 1, text: B[j] }); j++; }
+  return out;
+}
+const fmtBytes = (n) => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`;
+const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
+const detect = (c) => { const s = c.trim(); if (!s) return null; if (/^<svg/i.test(s)) return 'svg'; if (/^</.test(s)) return 'html'; if (/^(flowchart|graph|sequenceDiagram|erDiagram|stateDiagram|classDiagram)/.test(s)) return 'mermaid'; if (/^(import|export)\s/.test(s) || /React/.test(s)) return 'react'; if (/^#/.test(s)) return 'markdown'; return 'code'; };
+
+class Component extends DCLogic {
+  state = {
+    arts: SEED, selId: SEED[0].id, tab: 'preview', view: null, viewport: 'desktop', inspector: this.props.inspectorDefault ?? true,
+    palette: false, q: '', palIdx: 0, create: false, del: false, delText: '', menu: false, filter: null, agentF: 'all', typeF: 'all',
+    toast: null, verOpen: false, night: false, draft: null, summary: '', fromV: 1, toV: 2, hideCtx: true, newKey: '', newVal: '',
+    nf: { title: '', type: 'auto', content: '', tried: false, template: 'blank', theme: 'moss' }, calc: { inp: 16000, out: 1200, spd: 85 }, reloadKey: 0,
+  };
+  palRef = React.createRef();
+
+  componentDidMount() {
+    this.onKey = (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const typing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
+      if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); this.openPalette(); return; }
+      if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); this.save(); return; }
+      if (e.key === 'Escape') { this.closeAll(); return; }
+      if (typing || mod || this.state.palette || this.state.create || this.state.del) return;
+      const tabs = { 1: 'preview', 2: 'code', 3: 'diff', 4: 'storage' };
+      if (tabs[e.key]) this.setTab(tabs[e.key]);
+      else if (e.key === ']') this.setState((s) => ({ inspector: !s.inspector }));
+      else if (e.key === 'n') { e.preventDefault(); this.setState({ create: true }); }
+      else if (e.key === 'j' || e.key === 'k') this.step(e.key === 'j' ? -1 : 1);
+    };
+    window.addEventListener('keydown', this.onKey);
+    let saved = null; try { saved = localStorage.getItem('ma-studio-theme'); } catch (e) {}
+    const night = saved ? saved === 'night' : !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    this.applyTheme(night);
+    import(new URL('agent-kit/kit.js', location.href).href).then(async (m) => { this.kitMod = m; const k = await m.loadKit(); this.setState({ kit: k }); }).catch(() => {});
+  }
+  applyTheme(night) {
+    document.documentElement.dataset.theme = night ? 'night' : 'day';
+    try { localStorage.setItem('ma-studio-theme', night ? 'night' : 'day'); } catch (e) {}
+    this.setState({ night });
+  }
+  toggleTheme = () => this.applyTheme(!this.state.night);
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); clearTimeout(this.tt); }
+  componentDidUpdate(_, prev) { if (this.state.palette && !prev.palette) setTimeout(() => this.palRef.current && this.palRef.current.focus(), 0); }
+
+  art() { return this.state.arts.find((a) => a.id === this.state.selId); }
+  notify(msg) { clearTimeout(this.tt); this.setState({ toast: msg }); this.tt = setTimeout(() => this.setState({ toast: null }), 2400); }
+  copy(text, msg) { try { navigator.clipboard.writeText(text); } catch (e) {} this.notify(msg); this.setState({ menu: false }); }
+  setTab(tab) { this.setState({ tab, menu: false, filter: null }); }
+  select(id) { const a = this.state.arts.find((x) => x.id === id); const c = a.versions.length; this.setState({ selId: id, view: null, draft: null, summary: '', fromV: Math.max(1, c - 1), toV: c, palette: false, q: '', menu: false }); }
+  step(d) { const a = this.art(); if (!a) return; const c = a.versions.length; const v = Math.min(c, Math.max(1, (this.state.view ?? c) + d)); this.setState({ view: v === c ? null : v, draft: null }); }
+  openPalette = () => this.setState({ palette: true, q: '', palIdx: 0, menu: false, filter: null });
+  closeAll = () => this.setState({ verOpen: false, palette: false, create: false, del: false, delText: '', menu: false, filter: null });
+  updateArt(fn) { this.setState((s) => ({ arts: s.arts.map((a) => (a.id === s.selId ? fn(a) : a)) })); }
+  addVersion(content, summary, agent = 'user') {
+    const a = this.art(); const v = a.versions.length + 1;
+    this.updateArt((x) => ({ ...x, versions: [...x.versions, { agent, summary, time: 'just now', content }] }));
+    this.setState({ view: null, draft: null, summary: '', fromV: v - 1, toV: v });
+    return v;
+  }
+  save = () => {
+    const a = this.art(); if (!a || this.state.view !== null) return;
+    const latest = a.versions[a.versions.length - 1].content;
+    if (this.state.draft === null || this.state.draft === latest) return;
+    const v = this.addVersion(this.state.draft, this.state.summary.trim() || `Edited in studio`);
+    this.notify(`Saved v${v}`);
+  };
+  restore(from) { const a = this.art(); const v = this.addVersion(a.versions[from - 1].content, `Restored from v${from}`); this.notify(`Restored v${from} as v${v}`); }
+
+  renderVals() {
+    const s = this.state;
+    const dense = (this.props.density ?? 'comfortable') === 'compact';
+    const all = s.arts;
+    const filtered = all.filter((a) => {
+      const agent = a.versions[a.versions.length - 1].agent;
+      return (s.agentF === 'all' || agent === s.agentF) && (s.typeF === 'all' || a.type === s.typeF);
+    });
+    const projects = [...new Set(filtered.map((a) => a.project))];
+    const a = this.art();
+    const groups = projects.map((p) => {
+      const items = filtered.filter((x) => x.project === p).map((x) => {
+        const last = x.versions[x.versions.length - 1]; const on = x.id === s.selId;
+        return { title: x.title, icon: TY[x.type].icon, cur: x.versions.length, agentLabel: AG[last.agent].label, dot: AG[last.agent].dot, time: last.time,
+          bg: on ? 'var(--c-E4EADF)' : 'transparent', rule: on ? 'inset 2px 0 0 var(--c-55684F)' : 'none',
+          iconBg: on ? 'var(--c-FCFBF7)' : 'var(--c-EFEBE1)', iconBd: on ? 'var(--c-C7D3C0)' : 'transparent', iconFg: on ? 'var(--c-55684F)' : 'var(--c-4A524A)',
+          vBg: x.versions.length > 1 ? 'var(--c-F8F1E3)' : 'transparent', vFg: x.versions.length > 1 ? 'var(--c-735C2B)' : 'var(--c-656C62)', select: () => this.select(x.id) };
+      });
+      return { name: p, count: items.length, items };
+    });
+
+    const agentOpts = ['all', 'claude-code', 'codex', 'antigravity', 'watcher', 'user'];
+    const typeOpts = ['all', 'react', 'html', 'mermaid', 'markdown', 'svg', 'code'];
+    const filterOpts = s.filter === 'agent'
+      ? agentOpts.map((k) => ({ label: k === 'all' ? 'All agents' : AG[k].label, dot: k === 'all' ? 'transparent' : AG[k].dot, count: all.filter((x) => k === 'all' || x.versions[x.versions.length - 1].agent === k).length, bg: s.agentF === k ? 'var(--c-E4EADF)' : 'transparent', pick: () => this.setState({ agentF: k, filter: null }) }))
+      : typeOpts.map((k) => ({ label: k === 'all' ? 'All types' : TY[k].label, dot: 'transparent', count: all.filter((x) => k === 'all' || x.type === k).length, bg: s.typeF === k ? 'var(--c-E4EADF)' : 'transparent', pick: () => this.setState({ typeF: k, filter: null }) }));
+
+    const base = {
+      groups, noResults: filtered.length === 0, rowPad: dense ? '5px 10px' : '8px 10px',
+      agentFLabel: s.agentF === 'all' ? 'All' : AG[s.agentF].label, typeFLabel: s.typeF === 'all' ? 'All' : TY[s.typeF].label,
+      agentFBg: s.agentF === 'all' ? 'var(--c-FCFBF7)' : 'var(--c-E4EADF)', agentFBorder: s.agentF === 'all' ? 'var(--c-E2DDD0)' : 'var(--c-C7D3C0)',
+      typeFBg: s.typeF === 'all' ? 'var(--c-FCFBF7)' : 'var(--c-E4EADF)', typeFBorder: s.typeF === 'all' ? 'var(--c-E2DDD0)' : 'var(--c-C7D3C0)',
+      toggleAgentF: () => this.setState({ filter: s.filter === 'agent' ? null : 'agent', menu: false }),
+      toggleTypeF: () => this.setState({ filter: s.filter === 'type' ? null : 'type', menu: false }),
+      filterOpen: !!s.filter, filterLeft: s.filter === 'type' ? 'calc(50% + 3px)' : '0', filterOpts,
+      clearFilters: () => this.setState({ agentF: 'all', typeF: 'all' }),
+      openCreate: () => this.setState({ create: true, nf: { title: '', type: 'auto', content: '', tried: false, template: 'blank', theme: 'moss' } }),
+      openPalette: this.openPalette, closeAll: this.closeAll, stop: (e) => e.stopPropagation(),
+      copyCli: () => this.copy('myartifact push <file> --agent claude-code', 'Copied CLI command'),
+      toast: s.toast, hasArt: !!a, noArt: !a, paletteOpen: s.palette, createOpen: s.create, delOpen: s.del && !!a,
+      inspector: s.inspector && !!a,
+      toggleTheme: this.toggleTheme, themeIcon: s.night ? 'icon-sun' : 'icon-moon', themeTitle: s.night ? 'Switch to day theme' : 'Switch to night theme',
+    };
+
+    // palette
+    const q = s.q.trim().toLowerCase();
+    const actions = [
+      { label: 'New artifact', icon: 'icon-plus', meta: 'N', run: () => this.setState({ palette: false, create: true }) },
+      { label: s.night ? 'Switch to day theme' : 'Switch to night theme', icon: s.night ? 'icon-sun' : 'icon-moon', meta: '', run: () => { this.setState({ palette: false }); this.toggleTheme(); } },
+      { label: 'Browse templates & themes', icon: 'icon-palette', meta: '', run: () => { location.href = 'Artifact Templates.dc.html'; } },
+      { label: 'Toggle inspector', icon: 'icon-panel-right', meta: ']', run: () => this.setState({ palette: false, inspector: !s.inspector }) },
+      { label: 'Open Code view', icon: 'icon-code-xml', meta: '2', run: () => this.setState({ palette: false, tab: 'code' }) },
+      { label: 'Compare versions', icon: 'icon-git-compare', meta: '3', run: () => this.setState({ palette: false, tab: 'diff' }) },
+      { label: 'Export current as HTML', icon: 'icon-download', meta: '', run: () => { this.setState({ palette: false }); a && this.notify(`Exported ${a.id}-v${a.versions.length}.html`); } },
+    ].filter((x) => !q || x.label.toLowerCase().includes(q));
+    const artHits = all.filter((x) => !q || (x.title + ' ' + x.id + ' ' + x.tags.join(' ')).toLowerCase().includes(q))
+      .map((x) => ({ label: x.title, icon: TY[x.type].icon, meta: `v${x.versions.length} · ${AG[x.versions[x.versions.length - 1].agent].label}`, run: () => this.select(x.id) }));
+    const palList = [...artHits.map((x, i) => ({ ...x, header: i === 0 ? 'Artifacts' : '' })), ...actions.map((x, i) => ({ ...x, header: i === 0 ? 'Actions' : '' }))];
+    const idx = Math.min(s.palIdx, Math.max(0, palList.length - 1));
+    base.palItems = palList.map((p, i) => ({ ...p, bg: i === idx ? 'var(--c-E4EADF)' : 'transparent', hover: () => this.setState({ palIdx: i }) }));
+    base.palEmpty = palList.length === 0; base.q = s.q; base.palRef = this.palRef;
+    base.onQ = (e) => this.setState({ q: e.target.value, palIdx: 0 });
+    base.palKey = (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); this.setState({ palIdx: Math.min(palList.length - 1, idx + 1) }); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); this.setState({ palIdx: Math.max(0, idx - 1) }); }
+      else if (e.key === 'Enter' && palList[idx]) palList[idx].run();
+    };
+
+    // create form
+    const nf = s.nf; const det = detect(nf.content); const ntype = nf.type === 'auto' ? det : nf.type;
+    const setNf = (patch) => this.setState((st) => ({ nf: { ...st.nf, ...patch } }));
+    const nfErr = nf.tried && (!nf.title.trim() ? 'Add a title.' : !nf.content.trim() ? 'Paste some source to create v1.' : '');
+    base.nf = {
+      title: nf.title, content: nf.content, slug: slugify(nf.title || 'untitled'),
+      onTitle: (e) => setNf({ title: e.target.value }), onContent: (e) => setNf({ content: e.target.value }),
+      titleBd: nf.tried && !nf.title.trim() ? 'var(--c-B4553F)' : 'var(--c-D3CDBD)', contentBd: nf.tried && !nf.content.trim() ? 'var(--c-B4553F)' : 'var(--c-D3CDBD)',
+      detected: nf.type === 'auto' ? (det ? `Detected ${TY[det].label}` : 'Type is detected from the source') : '',
+      error: nfErr || '',
+      types: [{ k: 'auto', label: 'Auto-detect', icon: 'icon-wand-sparkles' }, ...Object.keys(TY).map((k) => ({ k, ...TY[k] }))].map((t) => ({
+        label: t.label, icon: t.icon, bg: nf.type === t.k ? 'var(--c-E4EADF)' : 'var(--c-FCFBF7)', bd: nf.type === t.k ? 'var(--c-8FA28A)' : 'var(--c-E2DDD0)', weight: nf.type === t.k ? 500 : 400, pick: () => setNf({ type: t.k }) })),
+    };
+    const kit = s.kit && s.kit.kit;
+    const TPL_ICONS = { blank: 'icon-file-plus', dashboard: 'icon-layout-dashboard', report: 'icon-file-text', diagram: 'icon-workflow', tool: 'icon-calculator' };
+    const themed = (tpl, th) => this.kitMod.applyTheme(kit.templates[tpl].type, s.kit.files[tpl], th, kit.themes[th], kit.fonts);
+    const tplList = [['blank', { label: 'Blank', type: 'any' }], ...(kit ? Object.entries(kit.templates) : [])];
+    base.nf.templates = tplList.map(([id, t]) => ({ label: t.label, type: t.type, icon: TPL_ICONS[id], bd: nf.template === id ? 'var(--c-8FA28A)' : 'var(--c-E2DDD0)', bg: nf.template === id ? 'var(--c-E4EADF)' : 'var(--c-FCFBF7)', weight: nf.template === id ? 500 : 400,
+      pick: () => id === 'blank' ? setNf({ template: 'blank', content: '', type: 'auto' }) : setNf({ template: id, type: t.type, content: themed(id, nf.theme), title: nf.title || t.label }) }));
+    base.nf.showThemes = !!kit && nf.template !== 'blank';
+    base.nf.themes = kit ? Object.entries(kit.themes).map(([id, t]) => ({ label: t.label, bg: t.bg, accent: t.accent, highlight: t.highlight, bd: nf.theme === id ? 'var(--c-8FA28A)' : 'var(--c-E2DDD0)', bgSel: nf.theme === id ? 'var(--c-E4EADF)' : 'var(--c-FCFBF7)', weight: nf.theme === id ? 500 : 400,
+      pick: () => setNf({ theme: id, content: nf.template !== 'blank' ? themed(nf.template, id) : nf.content }) })) : [];
+    base.create = () => {
+      if (!nf.title.trim() || !nf.content.trim()) { setNf({ tried: true }); return; }
+      let id = slugify(nf.title); while (all.some((x) => x.id === id)) id += '-2';
+      const na = { id, title: nf.title.trim(), type: ntype || 'code', lang: TY[ntype || 'code'].ext, project: 'local', tags: nf.template !== 'blank' ? [`template:${nf.template}`, `theme:${nf.theme}`] : [], preview: 'generic', versions: [{ agent: 'user', summary: 'Created in studio', time: 'just now', content: nf.content }], storage: [] };
+      this.setState((st) => ({ arts: [na, ...st.arts], create: false, selId: id, view: null, draft: null, tab: 'preview', fromV: 1, toV: 1 }));
+      this.notify(`Created ${na.title}`);
+    };
+
+    if (!a) return base;
+
+    const c = a.versions.length; const viewV = s.view ?? c; const hist = viewV !== c;
+    const ver = a.versions[viewV - 1]; const content = ver.content; const last = a.versions[c - 1];
+    const draft = s.draft ?? content; const dirty = !hist && draft !== content;
+    const ext = TY[a.type].ext;
+
+    // preview data
+    const metrics = [...content.matchAll(/day: '(\w+)', tokens: (\d+)/g)].map((m) => ({ d: m[1], t: +m[2] }));
+    const mx = Math.max(45000, ...metrics.map((m) => m.t));
+    const pts = metrics.map((m, i) => [metrics.length > 1 ? (i / (metrics.length - 1)) * 600 : 300, 200 - (m.t / mx) * 190]);
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    let notes = []; try { notes = JSON.parse((a.storage.find((x) => x.key === 'workspace_notes') || {}).value || '[]'); } catch (e) {}
+    const k = s.calc; const ttft = 0.3 + k.inp / 50000;
+
+    const diffA = a.versions[Math.min(s.fromV, c) - 1].content, diffB = a.versions[Math.min(s.toV, c) - 1].content;
+    let rows = lcsDiff(diffA, diffB);
+    const add = rows.filter((r) => r.t === '+').length, del = rows.filter((r) => r.t === '-').length;
+    if (s.hideCtx) {
+      const keep = rows.map((r, i) => rows.slice(Math.max(0, i - 3), i + 4).some((x) => x.t !== ' '));
+      const out = []; let skip = 0;
+      rows.forEach((r, i) => { if (keep[i]) { if (skip) out.push({ t: '…', o: '', n: '', text: `⋯ ${skip} unchanged lines` }); skip = 0; out.push(r); } else skip++; });
+      if (skip) out.push({ t: '…', o: '', n: '', text: `⋯ ${skip} unchanged lines` });
+      rows = out;
+    }
+    const styledRows = rows.map((r) => ({ ...r, sign: r.t === '…' ? '' : r.t,
+      bg: r.t === '+' ? 'var(--c-EEF2EA)' : r.t === '-' ? 'var(--c-F8ECE7)' : r.t === '…' ? 'var(--c-F7F4ED)' : 'transparent',
+      fg: r.t === '+' ? 'var(--c-2F3B2C)' : r.t === '-' ? 'var(--c-6E2E20)' : r.t === '…' ? 'var(--c-656C62)' : 'var(--c-4A524A)',
+      signFg: r.t === '+' ? 'var(--c-55684F)' : 'var(--c-B4553F)' }));
+
+    const tl = a.versions.map((v, i) => {
+      const n = i + 1; let plus = '', minus = '';
+      if (i > 0) { const d = lcsDiff(a.versions[i - 1].content, v.content); plus = `+${d.filter((r) => r.t === '+').length}`; minus = `−${d.filter((r) => r.t === '-').length}`; }
+      const on = n === viewV;
+      return { v: n, summary: v.summary, time: v.time, agentLabel: AG[v.agent].label, dot: AG[v.agent].dot, plus, minus,
+        tag: n === c ? 'Latest' : on ? 'Viewing' : '', bg: on ? 'var(--c-F8F1E3)' : 'transparent',
+        nodeBg: n === c ? 'var(--c-C8A96B)' : on ? 'var(--c-C8A96B)' : 'var(--c-FCFBF7)', nodeBd: n === c || on ? 'var(--c-C8A96B)' : 'var(--c-D3CDBD)', nodeRing: on ? '0 0 0 3px var(--c-EADBB8)' : 'none',
+        lineBg: i === 0 ? 'transparent' : 'var(--c-E2DDD0)', select: () => this.setState({ view: n === c ? null : n, draft: null, verOpen: false }) };
+    }).reverse();
+
+    const stRows = a.storage.map((e) => { let pretty = e.value; try { pretty = JSON.stringify(JSON.parse(e.value), null, 2); } catch (x) {}
+      return { key: e.key, pretty, size: fmtBytes(new Blob([e.value]).size), remove: () => { this.updateArt((x) => ({ ...x, storage: x.storage.filter((y) => y.key !== e.key) })); this.notify(`Deleted key ${e.key}`); } }; });
+    const totalBytes = a.storage.reduce((n, e) => n + new Blob([e.value]).size, 0);
+
+    const lines = draft.split('\n').length;
+    const tabDefs = [['preview', 'Preview', 'icon-eye', ''], ['code', 'Code', 'icon-code-xml', dirty ? '●' : ''], ['diff', 'Changes', 'icon-git-compare', c > 1 ? `${c}` : ''], ['storage', 'State', 'icon-database', a.storage.length ? `${a.storage.length}` : '']];
+    const vps = [['desktop', 'Desktop', 'icon-monitor', '100%', 'Fill width'], ['tablet', 'Tablet · 820px', 'icon-tablet', '820px', '820 px'], ['mobile', 'Mobile · 390px', 'icon-smartphone', '390px', '390 px']];
+    const vp = vps.find((x) => x[0] === s.viewport);
+    const backdrop = this.props.backdrop ?? 'dots';
+
+    return {
+      ...base,
+      art: { ...a, slug: a.id, cur: c, agentLabel: AG[last.agent].label, dot: AG[last.agent].dot, chipBg: AG[last.agent].bg, chipFg: AG[last.agent].fg,
+        icon: TY[a.type].icon, typeLabel: `${TY[a.type].label} · .${ext}`, creator: AG[a.versions[0].agent].label, size: fmtBytes(new Blob([last.content]).size),
+        path: `~/.myartifact/artifacts/${a.id}/current.${ext}`, fileName: `current.${ext}` },
+      tabs: tabDefs.map(([id, label, icon, badge], i) => ({ label, icon, badge, hint: `${label} (${i + 1})`,
+        rule: s.tab === id ? 'var(--c-55684F)' : 'transparent', fg: s.tab === id ? 'var(--c-1E2420)' : 'var(--c-4A524A)', weight: s.tab === id ? 500 : 400,
+        badgeBg: badge ? (id === 'code' ? 'transparent' : 'var(--c-EFEBE1)') : 'transparent', badgeFg: id === 'code' ? 'var(--c-C8A96B)' : 'var(--c-4A524A)', go: () => this.setTab(id) })),
+      isPreview: s.tab === 'preview', isCode: s.tab === 'code', isDiff: s.tab === 'diff', isState: s.tab === 'storage',
+      isHistorical: hist, viewV, nextV: c + 1,
+      restoreViewed: () => this.restore(viewV), backToLatest: () => this.setState({ view: null, draft: null }),
+      menuOpen: s.menu, toggleMenu: () => this.setState({ menu: !s.menu, verOpen: false }),
+      verOpen: s.verOpen, toggleVer: () => this.setState({ verOpen: !s.verOpen, menu: false }), verBtnBg: hist ? 'var(--c-F8F1E3)' : 'var(--c-FCFBF7)',
+      toggleInspector: () => this.setState({ inspector: !s.inspector }),
+      inspBtnBg: s.inspector ? 'var(--c-E4EADF)' : 'var(--c-FCFBF7)', inspBtnBd: s.inspector ? 'var(--c-C7D3C0)' : 'var(--c-D3CDBD)',
+      copySource: () => this.copy(content, `Copied v${viewV} source`),
+      exportHtml: () => this.notify(`Exported ${a.id}-v${viewV}.html`),
+      copySlug: () => this.copy(a.id, 'Copied slug'), copyGet: () => this.copy(`myartifact get ${a.id}`, 'Copied CLI command'),
+      copyPath: () => this.copy(`~/.myartifact/artifacts/${a.id}/current.${ext}`, 'Copied path'),
+      askDelete: () => this.setState({ del: true, menu: false, delText: '' }),
+      delText: s.delText, onDelText: (e) => this.setState({ delText: e.target.value }),
+      delDisabled: s.delText !== a.id, delOpacity: s.delText === a.id ? 1 : 0.4,
+      confirmDelete: () => { if (s.delText !== a.id) return; const rest = all.filter((x) => x.id !== a.id); this.setState({ arts: rest, selId: rest[0] ? rest[0].id : null, del: false, delText: '', view: null, draft: null }); this.notify(`Deleted ${a.title}`); },
+      viewports: vps.map(([id, label, icon]) => ({ label, icon, bg: s.viewport === id ? 'var(--c-FCFBF7)' : 'transparent', shadow: s.viewport === id ? '0 1px 2px rgba(30,36,32,.1)' : 'none', fg: s.viewport === id ? 'var(--c-1E2420)' : 'var(--c-4A524A)', go: () => this.setState({ viewport: id }) })),
+      frameW: vp[3], frameLabel: vp[4], reload: () => this.notify('Sandbox reloaded'),
+      stageBg: backdrop === 'plain' ? 'var(--c-EFEBE1)' : backdrop === 'grid' ? 'var(--c-EFEBE1) linear-gradient(var(--c-E2DDD0) 1px, transparent 1px) 0 0/16px 16px, linear-gradient(90deg, var(--c-E2DDD0) 1px, var(--c-EFEBE1) 1px) 0 0/16px 16px' : 'var(--c-EFEBE1) radial-gradient(var(--c-D3CDBD) 1px, transparent 1px) 0 0/16px 16px',
+      pv: { telemetry: a.preview === 'telemetry', mermaid: a.preview === 'mermaid', calc: a.preview === 'calc', generic: a.preview === 'generic' },
+      chart: { line, area: pts.length ? `${line} L600,200 L0,200 Z` : '', days: metrics.map((m) => m.d) },
+      notes: notes.map((n) => ({ text: n.text, iconFg: n.done ? '#34d399' : '#475569', fg: n.done ? '#64748b' : '#e2e8f0', deco: n.done ? 'line-through' : 'none' })),
+      calc: { ...k, inpL: k.inp.toLocaleString(), outL: k.out.toLocaleString(), ttft: ttft.toFixed(2) + 's', total: (ttft + k.out / k.spd).toFixed(1) + 's',
+        setInp: (e) => this.setState({ calc: { ...k, inp: +e.target.value } }), setOut: (e) => this.setState({ calc: { ...k, out: +e.target.value } }), setSpd: (e) => this.setState({ calc: { ...k, spd: +e.target.value } }) },
+      code: { draft, lineCount: lines, gutter: Array.from({ length: lines }, (_, i) => i + 1).join('\n'), onEdit: (e) => this.setState({ draft: e.target.value }), clean: !dirty,
+        status: hist ? `Read-only · v${viewV}` : dirty ? `Unsaved changes` : 'No changes since v' + c, statusDot: dirty ? 'var(--c-C8A96B)' : hist ? 'var(--c-C8A96B)' : 'var(--c-8FA28A)', statusFg: dirty ? 'var(--c-735C2B)' : 'var(--c-4A524A)', btnOpacity: dirty ? 1 : 0.4 },
+      summary: s.summary, onSummary: (e) => this.setState({ summary: e.target.value }), save: this.save, discard: () => this.setState({ draft: null, summary: '' }),
+      fromOpts: a.versions.map((v, i) => ({ v: String(i + 1), sel: i + 1 === Math.min(s.fromV, c), label: `v${i + 1} · ${AG[v.agent].label}` })),
+      toOpts: a.versions.map((v, i) => ({ v: String(i + 1), sel: i + 1 === Math.min(s.toV, c), label: `v${i + 1} · ${AG[v.agent].label}` })),
+      fromVS: String(Math.min(s.fromV, c)), toVS: String(Math.min(s.toV, c)),
+      fromV: Math.min(s.fromV, c), toV: Math.min(s.toV, c),
+      setFrom: (e) => this.setState({ fromV: +e.target.value }), setTo: (e) => this.setState({ toV: +e.target.value }),
+      swapVers: () => this.setState({ fromV: s.toV, toV: s.fromV }),
+      hideCtx: s.hideCtx, toggleCtx: () => this.setState({ hideCtx: !s.hideCtx }),
+      diff: { add, del, rows: styledRows, same: s.fromV === s.toV, show: s.fromV !== s.toV, canRestore: s.fromV !== c && s.fromV !== s.toV },
+      restoreFrom: () => this.restore(s.fromV),
+      timeline: tl,
+      st: { rows: stRows, empty: stRows.length === 0, count: a.storage.length, total: fmtBytes(totalBytes), addOpacity: s.newKey.trim() ? 1 : 0.4 },
+      newKey: s.newKey, newVal: s.newVal, onNewKey: (e) => this.setState({ newKey: e.target.value }), onNewVal: (e) => this.setState({ newVal: e.target.value }),
+      addKey: () => { const key = s.newKey.trim(); if (!key) return; this.updateArt((x) => ({ ...x, storage: [...x.storage.filter((y) => y.key !== key), { key, value: s.newVal }] })); this.setState({ newKey: '', newVal: '' }); this.notify(`Set ${key}`); },
+    };
+  }
+}
+</script>
+</body>
+</html>

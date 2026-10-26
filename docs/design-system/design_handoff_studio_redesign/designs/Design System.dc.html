@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.511.0/font/lucide.css">
+<style>
+html,body{margin:0;background:#F7F4ED;color:#1E2420;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#55684F;text-decoration-color:#C7D3C0;text-underline-offset:3px}a:hover{color:#2F3B2C}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="max-width:1180px;margin:0 auto;padding:56px 40px 96px;display:flex;flex-direction:column;gap:72px">
+
+  <header style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #E2DDD0;padding-bottom:40px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:8px;background:#55684F;color:#F7F4ED;display:flex;align-items:center;justify-content:center"><i class="icon-layers" style="font-size:18px;line-height:1"></i></div>
+      <span style="font-weight:600;font-size:15px">MyArtifact</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#656C62;border:1px solid #D3CDBD;border-radius:999px;padding:2px 8px">Design system · 1.0</span>
+    </div>
+    <h1 style="font-size:40px;line-height:1.15;font-weight:600;letter-spacing:-.02em;margin:0;max-width:760px;text-wrap:pretty">Moss</h1>
+    <p style="font-size:16px;line-height:1.6;color:#4A524A;margin:0;max-width:640px;text-wrap:pretty">A calm, paper-toned system for a local artifact studio. The chrome stays quiet and warm so the artifacts themselves, often dark and dense, carry the visual weight. Sage marks action and state; gold marks history and versions.</p>
+    <div style="display:flex;gap:16px;font-size:13px;flex-wrap:wrap">
+      <a href="#foundations">Foundations</a><a href="#components">Components</a><a href="#patterns">UX patterns</a><a href="MyArtifact Studio.dc.html">Open the studio →</a>
+    </div>
+  </header>
+
+  <section id="foundations" style="display:flex;flex-direction:column;gap:40px">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#656C62">01 — Foundations</div>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <h2 style="font-size:20px;font-weight:600;margin:0">Brand palette</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        <div style="border-radius:12px;overflow:hidden;border:1px solid #E2DDD0;background:#FCFBF7"><div style="height:96px;background:#8FA28A"></div><div style="padding:12px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:14px">Sage</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#8FA28A · brand, focus, selection</span></div></div>
+        <div style="border-radius:12px;overflow:hidden;border:1px solid #E2DDD0;background:#FCFBF7"><div style="height:96px;background:#C7D3C0"></div><div style="padding:12px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:14px">Lichen</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#C7D3C0 · active fills, additions</span></div></div>
+        <div style="border-radius:12px;overflow:hidden;border:1px solid #E2DDD0;background:#FCFBF7"><div style="height:96px;background:#F7F4ED;border-bottom:1px solid #E2DDD0"></div><div style="padding:12px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:14px">Paper</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#F7F4ED · app canvas</span></div></div>
+        <div style="border-radius:12px;overflow:hidden;border:1px solid #E2DDD0;background:#FCFBF7"><div style="height:96px;background:#C8A96B"></div><div style="padding:12px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:14px">Brass</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#C8A96B · versions, history</span></div></div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:32px">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <h3 style="font-size:15px;font-weight:600;margin:0">Neutrals</h3>
+        <div style="display:flex;flex-direction:column;border:1px solid #E2DDD0;border-radius:12px;overflow:hidden;font-size:13px">
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7;border-bottom:1px solid #E2DDD0"><span style="width:28px;height:28px;border-radius:6px;background:#FCFBF7;border:1px solid #D3CDBD"></span><span>surface/raised</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#FCFBF7</code></div>
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7;border-bottom:1px solid #E2DDD0"><span style="width:28px;height:28px;border-radius:6px;background:#F7F4ED;border:1px solid #D3CDBD"></span><span>surface/canvas</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#F7F4ED</code></div>
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7;border-bottom:1px solid #E2DDD0"><span style="width:28px;height:28px;border-radius:6px;background:#EFEBE1"></span><span>surface/sunken</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#EFEBE1</code></div>
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7;border-bottom:1px solid #E2DDD0"><span style="width:28px;height:28px;border-radius:6px;background:#E2DDD0"></span><span>border/default</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#E2DDD0</code></div>
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7;border-bottom:1px solid #E2DDD0"><span style="width:28px;height:28px;border-radius:6px;background:#D3CDBD"></span><span>border/strong</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#D3CDBD</code></div>
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7;border-bottom:1px solid #E2DDD0"><span style="width:28px;height:28px;border-radius:6px;background:#656C62"></span><span>text/muted · 4.7:1</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#656C62</code></div>
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7;border-bottom:1px solid #E2DDD0"><span style="width:28px;height:28px;border-radius:6px;background:#4A524A"></span><span>text/secondary</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#4A524A</code></div>
+          <div style="display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:8px 12px;background:#FCFBF7"><span style="width:28px;height:28px;border-radius:6px;background:#1E2420"></span><span>text/primary · ink</span><code style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#656C62">#1E2420</code></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <h3 style="font-size:15px;font-weight:600;margin:0">Functional ramps</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px">
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);border-radius:10px;overflow:hidden">
+            <div style="background:#EEF2EA;padding:28px 6px 6px;color:#2F3B2C">50</div><div style="background:#C7D3C0;padding:28px 6px 6px;color:#2F3B2C">200</div><div style="background:#8FA28A;padding:28px 6px 6px;color:#1E2420">500</div><div style="background:#55684F;padding:28px 6px 6px;color:#F7F4ED">700</div><div style="background:#435340;padding:28px 6px 6px;color:#F7F4ED">800</div><div style="background:#2F3B2C;padding:28px 6px 6px;color:#F7F4ED">900</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);border-radius:10px;overflow:hidden">
+            <div style="background:#F8F1E3;padding:28px 6px 6px;color:#4E3E1C">50</div><div style="background:#EADBB8;padding:28px 6px 6px;color:#4E3E1C">200</div><div style="background:#C8A96B;padding:28px 6px 6px;color:#2A2110">500</div><div style="background:#8E733D;padding:28px 6px 6px;color:#FCFBF7">700</div><div style="background:#735C2B;padding:28px 6px 6px;color:#FCFBF7">800</div><div style="background:#4E3E1C;padding:28px 6px 6px;color:#FCFBF7">900</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-family:'IBM Plex Sans',sans-serif;font-size:12px">
+            <div style="background:#F4E2DB;color:#8A3A28;border-radius:8px;padding:10px">Danger<br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">#B4553F</span></div>
+            <div style="background:#E1E8EE;color:#3E5266;border-radius:8px;padding:10px">Info<br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">#7C93A8</span></div>
+            <div style="background:#EEF2EA;color:#3D4F39;border-radius:8px;padding:10px">Success<br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">#6F8A69</span></div>
+          </div>
+        </div>
+        <p style="font-size:13px;line-height:1.55;color:#4A524A;margin:0">Raw brand tones are fills, never text. Text on light surfaces uses the 700–900 steps so every label clears 4.5:1. Primary buttons use Sage 700 with Paper text (6.1:1).</p>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <h3 style="font-size:15px;font-weight:600;margin:0">Agent identity</h3>
+      <p style="font-size:13px;color:#4A524A;margin:0;max-width:640px">Each authoring source gets one hue, used only as a 8px dot and a tinted chip. Colour is never the only cue: the label always appears.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 10px 3px 8px;border-radius:999px;background:#F8F1E3;color:#735C2B"><span style="width:8px;height:8px;border-radius:999px;background:#C8A96B"></span>Claude Code</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 10px 3px 8px;border-radius:999px;background:#EEF2EA;color:#3D4F39"><span style="width:8px;height:8px;border-radius:999px;background:#8FA28A"></span>Codex</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 10px 3px 8px;border-radius:999px;background:#E1E8EE;color:#3E5266"><span style="width:8px;height:8px;border-radius:999px;background:#7C93A8"></span>Antigravity</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 10px 3px 8px;border-radius:999px;background:#F4E7DF;color:#7A4A35"><span style="width:8px;height:8px;border-radius:999px;background:#B8876F"></span>Watched file</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 10px 3px 8px;border-radius:999px;background:#EFEBE1;color:#4A524A"><span style="width:8px;height:8px;border-radius:999px;background:#9A9F94"></span>You</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:32px">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <h3 style="font-size:15px;font-weight:600;margin:0">Type · IBM Plex Sans / Mono</h3>
+        <div style="display:flex;flex-direction:column;border-top:1px solid #E2DDD0">
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid #E2DDD0"><code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">display 28/34</code><span style="font-size:28px;line-height:34px;font-weight:600;letter-spacing:-.015em">Artifact studio</span></div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid #E2DDD0"><code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">title 18/26</code><span style="font-size:18px;line-height:26px;font-weight:600">Telemetry & Notes Dashboard</span></div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid #E2DDD0"><code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">heading 14/20</code><span style="font-size:14px;line-height:20px;font-weight:600">Version history</span></div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid #E2DDD0"><code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">body 14/20</code><span style="font-size:14px;line-height:20px">Every update creates an immutable checkpoint.</span></div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid #E2DDD0"><code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">small 13/18</code><span style="font-size:13px;line-height:18px;color:#4A524A">Added weekend token velocity metrics</span></div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid #E2DDD0"><code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">label 11/14</code><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#656C62">Project · myartifact-demo</span></div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid #E2DDD0"><code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">code 13/20</code><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:20px">await window.storage.set(key, value)</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <h3 style="font-size:15px;font-weight:600;margin:0">Spacing · 4px grid</h3>
+          <div style="display:flex;align-items:flex-end;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:4px;height:4px;background:#8FA28A"></div>4</div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:8px;height:8px;background:#8FA28A"></div>8</div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:12px;height:12px;background:#8FA28A"></div>12</div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:16px;height:16px;background:#8FA28A"></div>16</div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:24px;height:24px;background:#8FA28A"></div>24</div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:32px;height:32px;background:#8FA28A"></div>32</div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:48px;height:48px;background:#8FA28A"></div>48</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <h3 style="font-size:15px;font-weight:600;margin:0">Radius & elevation</h3>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62">
+            <div style="display:flex;flex-direction:column;gap:6px"><div style="height:56px;background:#FCFBF7;border:1px solid #E2DDD0;border-radius:6px"></div>r6 · controls</div>
+            <div style="display:flex;flex-direction:column;gap:6px"><div style="height:56px;background:#FCFBF7;border:1px solid #E2DDD0;border-radius:10px;box-shadow:0 1px 2px rgba(30,36,32,.06)"></div>r10 · e1 cards</div>
+            <div style="display:flex;flex-direction:column;gap:6px"><div style="height:56px;background:#FCFBF7;border:1px solid #E2DDD0;border-radius:10px;box-shadow:0 6px 16px rgba(30,36,32,.08)"></div>e2 · popovers</div>
+            <div style="display:flex;flex-direction:column;gap:6px"><div style="height:56px;background:#FCFBF7;border:1px solid #E2DDD0;border-radius:14px;box-shadow:0 20px 48px rgba(30,36,32,.18)"></div>r14 · e3 dialogs</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="components" style="display:flex;flex-direction:column;gap:40px">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#656C62">02 — Components</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px">
+
+      <div style="background:#FCFBF7;border:1px solid #E2DDD0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px">
+        <div style="font-size:14px;font-weight:600">Buttons</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button style="height:32px;padding:0 14px;border-radius:6px;border:0;background:#55684F;color:#F7F4ED;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px" style-hover="background:#435340"><i class="icon-save" style="font-size:14px;line-height:1"></i>Save as v3</button>
+          <button style="height:32px;padding:0 14px;border-radius:6px;border:1px solid #D3CDBD;background:#FCFBF7;color:#1E2420;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px" style-hover="background:#EFEBE1"><i class="icon-download" style="font-size:14px;line-height:1"></i>Export</button>
+          <button style="height:32px;padding:0 12px;border-radius:6px;border:0;background:transparent;color:#4A524A;font-size:13px;font-weight:500" style-hover="background:#EFEBE1">Cancel</button>
+          <button style="height:32px;padding:0 14px;border-radius:6px;border:0;background:#F8F1E3;color:#735C2B;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px"><i class="icon-rotate-ccw" style="font-size:14px;line-height:1"></i>Restore v1</button>
+          <button style="height:32px;padding:0 14px;border-radius:6px;border:0;background:#B4553F;color:#FCFBF7;font-size:13px;font-weight:500">Delete</button>
+          <button title="Copy" style="width:32px;height:32px;border-radius:6px;border:1px solid #D3CDBD;background:#FCFBF7;color:#4A524A;display:inline-flex;align-items:center;justify-content:center"><i class="icon-copy" style="font-size:15px;line-height:1"></i></button>
+        </div>
+        <div style="font-size:12px;color:#656C62;line-height:1.5">One primary per view. Brass is reserved for history actions. Destructive actions always confirm. Icon-only buttons carry a tooltip and aria-label.</div>
+      </div>
+
+      <div style="background:#FCFBF7;border:1px solid #E2DDD0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px">
+        <div style="font-size:14px;font-weight:600">Inputs</div>
+        <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:6px;background:#FCFBF7;border:1px solid #D3CDBD">
+          <i class="icon-search" style="font-size:14px;color:#656C62;line-height:1"></i>
+          <span style="flex:1;font-size:13px;color:#656C62">Search artifacts, code, tags</span>
+          <kbd style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#4A524A;background:#EFEBE1;border:1px solid #E2DDD0;border-bottom-width:2px;border-radius:4px;padding:1px 5px">⌘K</kbd>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:12px;font-weight:500;color:#4A524A">Version summary</label>
+          <div style="height:34px;padding:0 10px;border-radius:6px;background:#FCFBF7;border:1px solid #8FA28A;box-shadow:0 0 0 3px rgba(143,162,138,.28);display:flex;align-items:center;font-size:13px">Tightened chart axis labels</div>
+          <span style="font-size:12px;color:#656C62">Focus ring: Sage 500 border + 3px halo.</span>
+        </div>
+      </div>
+
+      <div style="background:#FCFBF7;border:1px solid #E2DDD0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px">
+        <div style="font-size:14px;font-weight:600">Tabs & segmented controls</div>
+        <div style="display:flex;gap:20px;border-bottom:1px solid #E2DDD0;font-size:13px">
+          <span style="padding:8px 0;border-bottom:2px solid #55684F;color:#1E2420;font-weight:500;margin-bottom:-1px">Preview</span>
+          <span style="padding:8px 0;color:#656C62">Code</span>
+          <span style="padding:8px 0;color:#656C62;display:flex;gap:6px;align-items:center">Changes <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:#EFEBE1;border-radius:4px;padding:0 5px">+2</span></span>
+          <span style="padding:8px 0;color:#656C62;display:flex;gap:6px;align-items:center">State <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:#EFEBE1;border-radius:4px;padding:0 5px">1</span></span>
+        </div>
+        <div style="display:inline-flex;align-self:flex-start;padding:2px;background:#EFEBE1;border-radius:8px;gap:2px">
+          <span style="padding:4px 10px;border-radius:6px;background:#FCFBF7;box-shadow:0 1px 2px rgba(30,36,32,.08);font-size:12px;font-weight:500;display:flex;gap:6px;align-items:center"><i class="icon-monitor" style="font-size:13px;line-height:1"></i>Desktop</span>
+          <span style="padding:4px 10px;border-radius:6px;font-size:12px;color:#4A524A;display:flex;gap:6px;align-items:center"><i class="icon-tablet" style="font-size:13px;line-height:1"></i>Tablet</span>
+          <span style="padding:4px 10px;border-radius:6px;font-size:12px;color:#4A524A;display:flex;gap:6px;align-items:center"><i class="icon-smartphone" style="font-size:13px;line-height:1"></i>Mobile</span>
+        </div>
+      </div>
+
+      <div style="background:#FCFBF7;border:1px solid #E2DDD0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:14px;font-weight:600">Library row</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;background:#E4EADF;box-shadow:inset 2px 0 0 #55684F">
+            <div style="width:28px;height:28px;border-radius:6px;background:#FCFBF7;border:1px solid #C7D3C0;display:flex;align-items:center;justify-content:center;color:#55684F"><i class="icon-atom" style="font-size:15px;line-height:1"></i></div>
+            <div style="min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Cross-Agent Telemetry & Notes</div><div style="font-size:12px;color:#4A524A;display:flex;gap:6px;align-items:center"><span style="width:6px;height:6px;border-radius:999px;background:#7C93A8"></span>Antigravity · 2h ago</div></div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#735C2B;background:#F8F1E3;border-radius:4px;padding:1px 6px">v2</span>
+          </div>
+          <div style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px">
+            <div style="width:28px;height:28px;border-radius:6px;background:#EFEBE1;display:flex;align-items:center;justify-content:center;color:#4A524A"><i class="icon-workflow" style="font-size:15px;line-height:1"></i></div>
+            <div style="min-width:0"><div style="font-size:13px;font-weight:500">Multi-Agent Artifact Pipeline</div><div style="font-size:12px;color:#4A524A;display:flex;gap:6px;align-items:center"><span style="width:6px;height:6px;border-radius:999px;background:#7C93A8"></span>Antigravity · yesterday</div></div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#656C62;padding:1px 6px">v1</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#656C62;line-height:1.5">Type glyph replaces the uppercase type tag; selection uses fill + 2px inset rule.</div>
+      </div>
+
+      <div style="background:#FCFBF7;border:1px solid #E2DDD0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:14px;font-weight:600">Version timeline</div>
+        <div style="display:flex;flex-direction:column">
+          <div style="display:grid;grid-template-columns:16px 1fr;gap:12px">
+            <div style="display:flex;flex-direction:column;align-items:center"><span style="width:12px;height:12px;border-radius:999px;background:#C8A96B;box-shadow:0 0 0 3px #F8F1E3;margin-top:3px"></span><span style="flex:1;width:1px;background:#E2DDD0"></span></div>
+            <div style="padding-bottom:16px"><div style="font-size:13px;font-weight:600;display:flex;gap:8px;align-items:center">v2 <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#735C2B">Latest</span></div><div style="font-size:13px;color:#4A524A">Added weekend token velocity metrics</div><div style="font-size:12px;color:#656C62">Antigravity · 2h ago · +2 −0</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:16px 1fr;gap:12px">
+            <div style="display:flex;flex-direction:column;align-items:center"><span style="width:10px;height:10px;border-radius:999px;background:#FCFBF7;border:2px solid #D3CDBD;margin-top:3px;box-sizing:border-box"></span></div>
+            <div><div style="font-size:13px;font-weight:600">v1</div><div style="font-size:13px;color:#4A524A">Initial telemetry chart and checklist</div><div style="font-size:12px;color:#656C62">Claude Code · 3h ago</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#FCFBF7;border:1px solid #E2DDD0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:14px;font-weight:600">Feedback</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:#F8F1E3;border:1px solid #EADBB8;font-size:13px;color:#4E3E1C"><i class="icon-history" style="font-size:15px;line-height:1;color:#8E733D"></i><span style="flex:1">Viewing v1 · read-only</span><span style="font-weight:500;color:#735C2B">Back to latest</span></div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:#1E2420;color:#F7F4ED;font-size:13px;box-shadow:0 6px 16px rgba(30,36,32,.2);align-self:flex-start"><i class="icon-check" style="font-size:15px;line-height:1;color:#C7D3C0"></i>Copied source to clipboard<span style="color:#C7D3C0;font-weight:500;margin-left:8px">Undo</span></div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#3D4F39"><span style="width:8px;height:8px;border-radius:999px;background:#6F8A69;box-shadow:0 0 0 3px #E4EADF"></span>Live · synced 4s ago</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="patterns" style="display:flex;flex-direction:column;gap:24px">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#656C62">03 — UX patterns applied in the studio</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1px;background:#E2DDD0;border:1px solid #E2DDD0;border-radius:12px;overflow:hidden">
+      <div style="background:#FCFBF7;padding:20px;display:flex;flex-direction:column;gap:6px"><div style="font-size:14px;font-weight:600">Three-pane workspace</div><div style="font-size:13px;line-height:1.55;color:#4A524A">Library, canvas and an inspector for history and metadata. The inspector collapses with ] so the canvas can go wide.</div></div>
+      <div style="background:#FCFBF7;padding:20px;display:flex;flex-direction:column;gap:6px"><div style="font-size:14px;font-weight:600">History you can see</div><div style="font-size:13px;line-height:1.55;color:#4A524A">The version dropdown becomes a timeline with author, summary and line deltas. Picking an old version shows a read-only banner with Restore and Back to latest.</div></div>
+      <div style="background:#FCFBF7;padding:20px;display:flex;flex-direction:column;gap:6px"><div style="font-size:14px;font-weight:600">Keyboard first</div><div style="font-size:13px;line-height:1.55;color:#4A524A">⌘K command palette, 1–4 to switch views, ⌘S to save a version, J/K to step versions. Shortcuts are shown next to the actions they trigger.</div></div>
+      <div style="background:#FCFBF7;padding:20px;display:flex;flex-direction:column;gap:6px"><div style="font-size:14px;font-weight:600">Safe destructive actions</div><div style="font-size:13px;line-height:1.55;color:#4A524A">Delete moves into an overflow menu and asks for the slug. Restoring creates a new checkpoint, so it is reversible and says so.</div></div>
+      <div style="background:#FCFBF7;padding:20px;display:flex;flex-direction:column;gap:6px"><div style="font-size:14px;font-weight:600">Explicit save state</div><div style="font-size:13px;line-height:1.55;color:#4A524A">The code editor marks unsaved edits on the tab and in the commit bar, and the primary button names the version it will create.</div></div>
+      <div style="background:#FCFBF7;padding:20px;display:flex;flex-direction:column;gap:6px"><div style="font-size:14px;font-weight:600">Scannable library</div><div style="font-size:13px;line-height:1.55;color:#4A524A">Artifacts group by project, sort by recency and show relative time. Filters live behind one compact control instead of two chip rows.</div></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>
