@@ -61,6 +61,7 @@ program
   .option('-a, --agent <agent>', 'Assistant name (claude-code | codex | antigravity | user)', 'user')
   .option('-p, --project <project>', 'Project name', 'default')
   .option('--tags <tags>', 'Comma-separated tags')
+  .option('--icon <icon>', 'Custom 32x32 SVG logo markup, file path, or preset id')
   .option('-s, --summary <summary>', 'Version commit message / summary')
   .option('-d, --data-dir <dir>', 'Custom storage directory')
   .action(async (file, opts) => {
@@ -87,6 +88,11 @@ program
           .filter(Boolean)
       : [opts.type || inferred.type];
 
+    let iconArg: string | undefined = opts.icon;
+    if (iconArg && !iconArg.trim().startsWith('<svg') && fs.existsSync(path.resolve(iconArg))) {
+      iconArg = fs.readFileSync(path.resolve(iconArg), 'utf8');
+    }
+
     const store = new ArtifactStore(opts.dataDir);
     const artifact = store.upsertBySlug(slug, {
       title,
@@ -96,16 +102,19 @@ program
       agent: opts.agent,
       project: opts.project,
       tags,
+      icon: iconArg,
       summary: opts.summary,
     });
 
     await notifyRunningDaemon({ type: 'artifact:updated', artifact });
     store.close();
 
+    const port = process.env.MYARTIFACT_PORT || '4173';
     console.log(
       `✅ Synced artifact "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion} [${artifact.type}]`
     );
-    console.log(`   File: ${artifact.filePath}`);
+    console.log(`   ➜ Artifact Page: http://127.0.0.1:${port}/artifacts/${artifact.slug}`);
+    console.log(`   ➜ Local File:    ${artifact.filePath}`);
   });
 
 program
@@ -240,11 +249,13 @@ tbCmd
       epoch: opts.epoch !== undefined ? Number(opts.epoch) : undefined,
       metrics,
     });
+    const port = process.env.MYARTIFACT_PORT || '4173';
     await notifyRunningDaemon({ type: 'artifact:updated', artifact });
     store.close();
     console.log(
       `📈 Logged ${Object.keys(metrics).length} scalar(s) at step ${opts.step} to TensorBoard run "${artifact.slug}"`
     );
+    console.log(`   ➜ Artifact Page: http://127.0.0.1:${port}/artifacts/${artifact.slug}`);
   });
 
 tbCmd
@@ -278,11 +289,13 @@ tbCmd
       agent: opts.agent,
       summary: opts.summary,
     });
+    const port = process.env.MYARTIFACT_PORT || '4173';
     await notifyRunningDaemon({ type: 'artifact:updated', artifact });
     store.close();
     console.log(
       `💾 Saved model checkpoint "${checkpoint.name}" (step ${checkpoint.step}, sha256: ${checkpoint.sha256.slice(0, 10)}…) -> ${artifact.slug} v${artifact.currentVersion}`
     );
+    console.log(`   ➜ Artifact Page: http://127.0.0.1:${port}/artifacts/${artifact.slug}`);
   });
 
 tbCmd
@@ -299,11 +312,13 @@ tbCmd
       title: opts.title,
       agent: opts.agent,
     });
+    const port = process.env.MYARTIFACT_PORT || '4173';
     await notifyRunningDaemon({ type: 'artifact:updated', artifact });
     store.close();
     console.log(
       `✅ Imported TensorBoard events into "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion}`
     );
+    console.log(`   ➜ Artifact Page: http://127.0.0.1:${port}/artifacts/${artifact.slug}`);
   });
 
 program.parseAsync(process.argv);

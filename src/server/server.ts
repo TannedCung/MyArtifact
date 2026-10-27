@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createTwoFilesPatch } from 'diff';
 import { ArtifactStore } from '../core/storage.js';
+import { MYARTIFACT_LOGO_SVG, resolveArtifactIconSvg } from '../core/icons.js';
 import { buildSandboxHtml } from '../core/sandbox-template.js';
 import { startArtifactWatcher } from './watcher.js';
 import type {
@@ -122,6 +123,22 @@ export async function startArtifactServer(
 
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       const pathname = url.pathname;
+      const baseOrigin = `http://${req.headers.host || `${host}:${requestedPort}`}`;
+      const buildArtifactLinks = (slug: string) => ({
+        url: `${baseOrigin}/artifacts/${encodeURIComponent(slug)}`,
+        previewUrl: `${baseOrigin}/artifacts/${encodeURIComponent(slug)}`,
+        studioUrl: `${baseOrigin}/?view=studio&artifact=${encodeURIComponent(slug)}`,
+      });
+
+      // Brand Favicon SVG
+      if (pathname === '/favicon.svg' && req.method === 'GET') {
+        res.writeHead(200, {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=3600',
+        });
+        res.end(MYARTIFACT_LOGO_SVG);
+        return;
+      }
 
       // Health & Info
       if (pathname === '/api/health' && req.method === 'GET') {
@@ -160,7 +177,7 @@ export async function startArtifactServer(
           project: typeof body.project === 'string' ? body.project : undefined,
         });
         broadcast({ type: 'artifact:updated', artifact });
-        sendJson(res, 200, { artifact });
+        sendJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) });
         return;
       }
 
@@ -200,7 +217,7 @@ export async function startArtifactServer(
             summary: typeof body.summary === 'string' ? body.summary : undefined,
           });
           broadcast({ type: 'artifact:updated', artifact });
-          sendJson(res, 200, { artifact });
+          sendJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) });
           return;
         }
 
@@ -245,7 +262,7 @@ export async function startArtifactServer(
           });
 
           broadcast({ type: 'artifact:updated', artifact });
-          sendJson(res, 201, { artifact, checkpoint });
+          sendJson(res, 201, { artifact, checkpoint, ...buildArtifactLinks(artifact.slug) });
           return;
         }
 
@@ -309,6 +326,7 @@ export async function startArtifactServer(
           agent: typeof body.agent === 'string' ? body.agent : 'user',
           project: typeof body.project === 'string' ? body.project : 'default',
           tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+          icon: typeof body.icon === 'string' ? body.icon : undefined,
           summary: typeof body.summary === 'string' ? body.summary : undefined,
         };
 
@@ -318,7 +336,7 @@ export async function startArtifactServer(
             : store.createArtifact(input);
 
         broadcast({ type: 'artifact:created', artifact });
-        sendJson(res, 201, { artifact });
+        sendJson(res, 201, { artifact, ...buildArtifactLinks(artifact.slug) });
         return;
       }
 
@@ -335,7 +353,11 @@ export async function startArtifactServer(
             return;
           }
           const storageEntries = store.getAllStorageEntries(artifact.id);
-          sendJson(res, 200, { artifact, storage: storageEntries });
+          sendJson(res, 200, {
+            artifact,
+            storage: storageEntries,
+            ...buildArtifactLinks(artifact.slug),
+          });
           return;
         }
 
@@ -355,11 +377,28 @@ export async function startArtifactServer(
             agent: typeof body.agent === 'string' ? body.agent : undefined,
             project: typeof body.project === 'string' ? body.project : undefined,
             tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+            icon: typeof body.icon === 'string' ? body.icon : undefined,
             summary: typeof body.summary === 'string' ? body.summary : undefined,
           };
           const artifact = store.updateArtifact(idOrSlug, updateInput);
           broadcast({ type: 'artifact:updated', artifact });
-          sendJson(res, 200, { artifact });
+          sendJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) });
+          return;
+        }
+
+        // GET /api/artifacts/:id/icon.svg
+        if (parts[3] === 'icon.svg' && req.method === 'GET') {
+          const artifact = store.getArtifact(idOrSlug);
+          if (!artifact) {
+            sendJson(res, 404, { error: 'Artifact not found' });
+            return;
+          }
+          const svg = resolveArtifactIconSvg(artifact);
+          res.writeHead(200, {
+            'Content-Type': 'image/svg+xml; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          });
+          res.end(svg);
           return;
         }
 

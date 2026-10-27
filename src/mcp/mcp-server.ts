@@ -52,6 +52,11 @@ export const MCP_TOOLS = [
           items: { type: 'string' },
           description: 'Searchable tags',
         },
+        icon: {
+          type: 'string',
+          description:
+            'Custom 32x32 SVG logo markup (<svg viewBox="0 0 32 32">...</svg>) or preset id (e.g. "latex-paper", "multi-approach", "grpo-rl", "roadmap-tracker", "coder-eval", "engine-blog", "dashboard", "report", "diagram", "tool", "training") used as the browser tab favicon and header logo when opening this artifact page',
+        },
         upsert: {
           type: 'boolean',
           description: 'If true and slug exists, creates a new version instead of a duplicate slug',
@@ -70,6 +75,10 @@ export const MCP_TOOLS = [
         id: { type: 'string', description: 'Artifact ID or slug' },
         content: { type: 'string', description: 'Updated full content of the artifact' },
         title: { type: 'string', description: 'Optional updated title' },
+        icon: {
+          type: 'string',
+          description: 'Optional updated 32x32 SVG logo markup or preset id',
+        },
         summary: {
           type: 'string',
           description: 'Version commit message describing what changed in this iteration',
@@ -214,13 +223,19 @@ export async function executeMcpTool(
         agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
         project: typeof args.project === 'string' ? args.project : 'default',
         tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
+        icon: typeof args.icon === 'string' ? args.icon : undefined,
       };
 
       const artifact =
         upsert && slug ? store.upsertBySlug(slug, input) : store.createArtifact(input);
 
+      const port = process.env.MYARTIFACT_PORT || 4173;
+      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
+      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
+      const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
       await notifyRunningDaemon({ type: 'artifact:created', artifact });
       return {
+        report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}). Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
@@ -229,7 +244,10 @@ export async function executeMcpTool(
           agent: artifact.agent,
           currentVersion: artifact.currentVersion,
           filePath: artifact.filePath,
-          previewUrl: `http://127.0.0.1:${process.env.MYARTIFACT_PORT || 4173}/?artifact=${artifact.slug}`,
+          iconUrl,
+          url: artifactPageUrl,
+          previewUrl: artifactPageUrl,
+          studioUrl,
         },
       };
     }
@@ -240,19 +258,28 @@ export async function executeMcpTool(
       const artifact = store.updateArtifact(id, {
         content,
         title: typeof args.title === 'string' ? args.title : undefined,
+        icon: typeof args.icon === 'string' ? args.icon : undefined,
         summary: typeof args.summary === 'string' ? args.summary : undefined,
         agent: typeof args.agent === 'string' ? args.agent : undefined,
       });
 
+      const port = process.env.MYARTIFACT_PORT || 4173;
+      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
+      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
+      const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
       await notifyRunningDaemon({ type: 'artifact:updated', artifact });
       return {
+        report: `Updated "${artifact.title}" to v${artifact.currentVersion}. Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
           currentVersion: artifact.currentVersion,
           filePath: artifact.filePath,
-          previewUrl: `http://127.0.0.1:${process.env.MYARTIFACT_PORT || 4173}/?artifact=${artifact.slug}`,
+          iconUrl,
+          url: artifactPageUrl,
+          previewUrl: artifactPageUrl,
+          studioUrl,
         },
       };
     }
@@ -327,15 +354,21 @@ export async function executeMcpTool(
             : undefined,
         agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
       });
+      const port = process.env.MYARTIFACT_PORT || 4173;
+      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
+      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
       await notifyRunningDaemon({ type: 'artifact:updated', artifact });
       return {
+        report: `Logged scalars to "${artifact.title}" (v${artifact.currentVersion}). Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
           type: artifact.type,
           currentVersion: artifact.currentVersion,
-          previewUrl: `http://127.0.0.1:${process.env.MYARTIFACT_PORT || 4173}/?artifact=${artifact.slug}`,
+          url: artifactPageUrl,
+          previewUrl: artifactPageUrl,
+          studioUrl,
         },
       };
     }
@@ -358,14 +391,20 @@ export async function executeMcpTool(
         agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
         summary: typeof args.summary === 'string' ? args.summary : undefined,
       });
+      const port = process.env.MYARTIFACT_PORT || 4173;
+      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
+      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
       await notifyRunningDaemon({ type: 'artifact:updated', artifact });
       return {
+        report: `Saved checkpoint "${checkpoint.name}" under "${artifact.title}" (v${artifact.currentVersion}). Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
           currentVersion: artifact.currentVersion,
-          previewUrl: `http://127.0.0.1:${process.env.MYARTIFACT_PORT || 4173}/?artifact=${artifact.slug}`,
+          url: artifactPageUrl,
+          previewUrl: artifactPageUrl,
+          studioUrl,
         },
         checkpoint,
       };
