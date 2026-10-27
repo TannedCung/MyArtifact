@@ -17,14 +17,15 @@ Use **MyArtifact** whenever you generate substantial visual documents, interacti
 2. **Pick a template** from the table in section 3 and read its file from `agent-kit/templates/`.
 3. **Pick a theme** from section 4 and paste its block between the theme markers.
 4. **Replace the sample content** with real content. Keep the structure, tokens and spacing.
-5. **Create** with a stable kebab-case `slug`, a `title`, your `agent` id, and tags `template:<id>` and `theme:<id>`.
-6. **Iterate** with `artifact_update`. Each call needs a one-line `summary` in the imperative mood, under 72 characters: "Add regional breakdown chart", not "Updated stuff".
+5. **Design a custom 32×32 SVG `icon`** for the artifact (or pick a preset icon id) so its standalone page (`/artifacts/<slug>`) displays its own unique browser tab favicon and header emblem.
+6. **Create** with a stable kebab-case `slug`, a `title`, your `agent` id, your custom `icon`, and tags `template:<id>` and `theme:<id>`. Report the returned `/artifacts/<slug>` standalone URL to the user.
+7. **Iterate** with `artifact_update`. Each call needs a one-line `summary` in the imperative mood, under 72 characters: "Add regional breakdown chart", not "Updated stuff".
 
 ## 2. Integration
 
 ### MCP tools (preferred)
-- `artifact_create`: `title`*, `content`*, `slug`, `type`, `agent`, `project`, `tags`, `upsert`
-- `artifact_update`: `id`*, `content`*, `title`, `summary`, `agent`
+- `artifact_create`: `title`*, `content`*, `slug`, `type`, `agent`, `project`, `tags`, `icon`, `upsert`
+- `artifact_update`: `id`*, `content`*, `title`, `icon`, `summary`, `agent`
 - `artifact_get`: `id`*, `version`, `includeStorage`
 - `artifact_list`: `query`, `agent`, `type`, `project`, `limit`
 - `artifact_storage_set`: `id`*, `key`*, `value`*
@@ -39,6 +40,7 @@ Use **MyArtifact** whenever you generate substantial visual documents, interacti
     "agent": "claude-code",
     "project": "my-project",
     "tags": ["template:dashboard", "theme:moss"],
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" fill=\"none\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#E4EADF\"/><rect x=\"6\" y=\"18\" width=\"5\" height=\"8\" rx=\"1.5\" fill=\"#8FA28A\"/><rect x=\"13.5\" y=\"13\" width=\"5\" height=\"13\" rx=\"1.5\" fill=\"#55684F\"/><rect x=\"21\" y=\"7\" width=\"5\" height=\"19\" rx=\"1.5\" fill=\"#C8A96B\"/></svg>",
     "content": "<contents of agent-kit/templates/dashboard.tsx, edited>",
     "upsert": true
   }
@@ -48,7 +50,7 @@ Use **MyArtifact** whenever you generate substantial visual documents, interacti
 ### CLI (always available)
 ```bash
 myartifact push ./weekly-metrics.tsx --id weekly-metrics --title "Weekly Metrics Dashboard" \
-  --agent claude-code --tags "template:dashboard,theme:moss" --summary "Initial dashboard"
+  --agent claude-code --tags "template:dashboard,theme:moss" --icon dashboard --summary "Initial dashboard"
 myartifact list --query "metrics"
 myartifact get weekly-metrics --version 1
 ```
@@ -115,11 +117,20 @@ const { keys } = await window.storage.list('dashboard:');
 - `svg` (`.svg`): rendered on a grid canvas.
 - `markdown` (`.md`): GitHub Flavored Markdown with fenced `mermaid` blocks and KaTeX math. A leading `<style>` block is allowed, and the report template uses it for theming.
 
-## 8. Checklist before you push
+## 8. Per-Artifact Custom Icon / Logo (`icon`) & Standalone Page
+
+Every artifact has its own standalone page at `/artifacts/<slug>` with its own **browser tab favicon** and **header emblem** (separate from the MyArtifact studio logo).
+- Always craft a custom `32x32` SVG logo (`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">...</svg>`) using the artifact's theme colours and pass it via the `icon` field in `artifact_create` / `artifact_update` (or `--icon` in CLI, or between `/* icon:start */ ... /* icon:end */` in source).
+- Built-in preset IDs are also supported: `latex-paper`, `multi-approach`, `grpo-rl`, `roadmap-tracker`, `coder-eval`, `engine-blog`, `llama-lora`, `agent-eval`, `arch-flow`, `release-shield`, `dashboard`, `report`, `diagram`, `tool`, `training`.
+- When reporting back to the user, always provide the standalone artifact URL (`http://127.0.0.1:4173/artifacts/<slug>`) rather than the multi-artifact studio dashboard.
+
+## 9. Checklist before you push
 
 - [ ] Started from a template; the theme block is intact and tagged `theme:<id>`
+- [ ] Custom 32×32 SVG `icon` (or preset id) provided so the artifact has its own favicon & header logo
 - [ ] No hex values outside the theme block
 - [ ] Real content; every number has a label and a unit
 - [ ] Works at 390px wide
 - [ ] Storage keys namespaced, first run handled
 - [ ] `summary` describes the change in under 72 characters
+- [ ] Reported the direct `/artifacts/<slug>` standalone page URL back to the user
