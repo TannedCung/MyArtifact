@@ -40,6 +40,9 @@ import {
   Minimize2,
   Database,
   ArrowLeft,
+  FolderOpen,
+  BookOpen,
+  ChevronRight,
 } from 'lucide-react';
 import { SandboxRenderer } from './components/SandboxRenderer.js';
 import { DiffViewer } from './components/DiffViewer.js';
@@ -301,6 +304,32 @@ export default function App() {
   const [newContent, setNewContent] = useState<string>('');
   const [submitted, setSubmitted] = useState<boolean>(false);
 
+  // LLM Wiki (Karpathy pattern: category folders + index.md + log.md)
+  const [sidebarMode, setSidebarMode] = useState<'wiki' | 'recent'>('wiki');
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [wikiModalOpen, setWikiModalOpen] = useState<boolean>(false);
+  const [wikiTab, setWikiTab] = useState<'index' | 'log'>('index');
+  const [wikiData, setWikiData] = useState<{
+    indexMarkdown: string;
+    logMarkdown: string;
+    indexFilePath?: string;
+    logFilePath?: string;
+  } | null>(null);
+
+  const openWikiModal = useCallback(async (tab: 'index' | 'log' = 'index') => {
+    setWikiTab(tab);
+    setWikiModalOpen(true);
+    try {
+      const res = await fetch('/api/wiki');
+      if (res.ok) {
+        const data = await res.json();
+        setWikiData(data);
+      }
+    } catch {
+      // Ignore fetch errors
+    }
+  }, []);
+
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -333,6 +362,7 @@ export default function App() {
     setPaletteOpen(false);
     setShowCreateModal(false);
     setDeleteOpen(false);
+    setWikiModalOpen(false);
     setConfirmDeleteText('');
   }, []);
 
@@ -820,18 +850,19 @@ export default function App() {
       .filter(
         (a) =>
           !q ||
-          `${a.title} ${a.slug} ${a.tags.join(' ')}`
+          `${a.title} ${a.slug} ${a.category || ''} ${a.description || ''} ${a.tags.join(' ')} ${(a.links || []).join(' ')}`
             .toLowerCase()
             .includes(q)
       )
       .map((a, idx) => {
         const typeInfo = TYPE_META[a.type] || TYPE_META.code;
         const agentInfo = getAgentInfo(a.agent);
+        const catPrefix = a.category ? `${a.category} · ` : '';
         return {
           key: `art-${a.id}`,
-          header: idx === 0 ? 'Artifacts' : '',
+          header: idx === 0 ? 'Artifacts (LLM Wiki)' : '',
           label: a.title,
-          meta: `v${a.currentVersion} · ${agentInfo.label}`,
+          meta: `${catPrefix}v${a.currentVersion} · ${agentInfo.label}`,
           Icon: typeInfo.Icon,
           run: () => {
             setSelectedId(a.id);
@@ -842,6 +873,16 @@ export default function App() {
       });
 
     const rawActions = [
+      {
+        key: 'act-wiki-index',
+        label: 'Open LLM Wiki Master Index (index.md)',
+        meta: 'Wiki',
+        Icon: BookOpen,
+        run: () => {
+          setPaletteOpen(false);
+          openWikiModal('index');
+        },
+      },
       {
         key: 'act-new',
         label: 'New artifact',
@@ -909,6 +950,7 @@ export default function App() {
     artifacts,
     query,
     theme,
+    openWikiModal,
     openCreateModal,
     toggleTheme,
     handleExportHtml,
@@ -980,6 +1022,27 @@ export default function App() {
     [detail]
   );
 
+  const artifactsByCategory = useMemo(() => {
+    const groups = new Map<string, ArtifactMetadata[]>();
+    for (const item of artifacts) {
+      const cat = item.category || 'concepts/general';
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(item);
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [artifacts]);
+
+  const detailLinkedArtifacts = useMemo(() => {
+    if (!detail) return [];
+    const linkedSlugs = new Set<string>(detail.links || []);
+    for (const other of artifacts) {
+      if (other.slug !== detail.slug && (other.links || []).includes(detail.slug)) {
+        linkedSlugs.add(other.slug);
+      }
+    }
+    return artifacts.filter((a) => linkedSlugs.has(a.slug));
+  }, [detail, artifacts]);
+
   // ==========================================================================
   // STANDALONE CLAUDE ARTIFACT DETAIL PAGE (/artifacts/:slug or /?artifact=:slug)
   // ==========================================================================
@@ -1043,6 +1106,12 @@ export default function App() {
                       <h1 className="m-0 text-[14.5px] font-semibold text-ink truncate">
                         {detail.title}
                       </h1>
+                      {detail.category && (
+                        <span className="hidden sm:inline-flex items-center gap-1 font-mono text-[11px] px-1.5 py-[1px] rounded bg-sage-soft text-sage border border-[var(--c-sage-border)] shrink-0">
+                          <FolderOpen className="w-[10px] h-[10px]" />
+                          {detail.category}
+                        </span>
+                      )}
                       <span className="hidden md:inline-block font-mono text-[11px] px-1.5 py-[1px] rounded bg-sunken text-ink-3 shrink-0">
                         {detailType.label}
                       </span>
@@ -1064,6 +1133,23 @@ export default function App() {
                       </span>
                       <span>·</span>
                       <span>{formatRelativeTime(detail.updatedAt)}</span>
+                      {detailLinkedArtifacts.length > 0 && (
+                        <>
+                          <span className="hidden lg:inline">·</span>
+                          <span className="hidden lg:inline-flex items-center gap-1 truncate">
+                            {detailLinkedArtifacts.slice(0, 2).map((rel) => (
+                              <button
+                                key={rel.id}
+                                onClick={() => navigateToArtifactPage(rel.slug)}
+                                title={`Linked Wiki Artifact: ${rel.title}`}
+                                className="font-mono text-[10.5px] px-1.5 py-[1px] rounded bg-sunken hover:bg-sage-soft text-ink-2 hover:text-sage transition-colors"
+                              >
+                                [[{rel.slug}]]
+                              </button>
+                            ))}
+                          </span>
+                        </>
+                      )}
                       {wsConnected && (
                         <>
                           <span>·</span>
@@ -1650,7 +1736,149 @@ export default function App() {
           </div>
         )}
 
-        {/* Toast */}
+        {/* LLM Wiki Master Index (index.md) & Chronological Log (log.md) Modal */}
+      {wikiModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setWikiModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 bg-[rgba(30,36,32,0.40)] flex justify-center items-start pt-10 px-6"
+        >
+          <div className="w-[820px] max-w-full max-h-[84vh] bg-raised border border-line rounded-[12px] shadow-[0_14px_38px_rgba(30,36,32,0.18)] flex flex-col overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-line flex items-center justify-between gap-3 shrink-0 bg-canvas">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-[30px] h-[30px] rounded-[7px] bg-sage-soft text-sage border border-[var(--c-sage-border)] flex items-center justify-center shrink-0">
+                  <BookOpen className="w-[15px] h-[15px]" />
+                </span>
+                <div className="min-w-0 flex flex-col">
+                  <span className="text-[14.5px] font-semibold text-ink truncate">
+                    MyArtifact LLM Wiki Governance (Karpathy Pattern)
+                  </span>
+                  <span className="font-mono text-[11px] text-ink-3 truncate">
+                    {wikiTab === 'index'
+                      ? wikiData?.indexFilePath || '~/.myartifact/index.md'
+                      : wikiData?.logFilePath || '~/.myartifact/log.md'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="inline-flex rounded-[6px] bg-sunken p-[2px] border border-line">
+                  <button
+                    onClick={() => setWikiTab('index')}
+                    className={`h-[26px] px-2.5 rounded-[4px] font-mono text-[11.5px] font-medium transition-colors ${
+                      wikiTab === 'index'
+                        ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.06)]'
+                        : 'text-ink-3 hover:text-ink-2'
+                    }`}
+                  >
+                    index.md (Catalog)
+                  </button>
+                  <button
+                    onClick={() => setWikiTab('log')}
+                    className={`h-[26px] px-2.5 rounded-[4px] font-mono text-[11.5px] font-medium transition-colors ${
+                      wikiTab === 'log'
+                        ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.06)]'
+                        : 'text-ink-3 hover:text-ink-2'
+                    }`}
+                  >
+                    log.md (Audit Trail)
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setWikiModalOpen(false)}
+                  className="w-[28px] h-[28px] rounded-[6px] bg-transparent hover:bg-sunken text-ink-2 flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+              {wikiTab === 'index' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {artifactsByCategory.map(([cat, items]) => (
+                    <div
+                      key={cat}
+                      className="p-3 rounded-[8px] border border-line bg-canvas flex flex-col gap-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[12px] font-semibold text-sage flex items-center gap-1.5">
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          {cat}
+                        </span>
+                        <span className="font-mono text-[11px] text-ink-3 px-1.5 rounded bg-sunken">
+                          {items.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setSelectedId(item.id);
+                              setWikiModalOpen(false);
+                            }}
+                            className="text-left p-2 rounded-[6px] bg-raised hover:bg-sage-soft border border-line transition-colors flex flex-col gap-0.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[12.5px] font-semibold text-ink truncate">
+                                {item.title}
+                              </span>
+                              <span className="font-mono text-[10.5px] text-ink-3 shrink-0">
+                                [[{item.slug}]] · v{item.currentVersion}
+                              </span>
+                            </div>
+                            {item.description && (
+                              <span className="text-[11.5px] text-ink-2 line-clamp-2">
+                                {item.description}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-[8px] border border-line bg-canvas overflow-hidden">
+                <div className="px-3.5 py-2 border-b border-line bg-sunken flex items-center justify-between">
+                  <span className="font-mono text-[11.5px] font-semibold text-ink-2">
+                    Raw Markdown ({wikiTab === 'index' ? 'index.md' : 'log.md'}) — Read by Agents via `myartifact index`
+                  </span>
+                  <button
+                    onClick={async () => {
+                      const text =
+                        wikiTab === 'index'
+                          ? wikiData?.indexMarkdown || ''
+                          : wikiData?.logMarkdown || '';
+                      try {
+                        await navigator.clipboard.writeText(text);
+                        showToast(`Copied ${wikiTab}.md`);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className="h-[24px] px-2 rounded bg-raised border border-line text-[11px] font-mono text-ink-2 hover:text-ink flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copy
+                  </button>
+                </div>
+                <pre className="m-0 p-3.5 font-mono text-[12px] leading-[1.55] text-ink whitespace-pre-wrap overflow-x-auto max-h-[340px]">
+                  {wikiTab === 'index'
+                    ? wikiData?.indexMarkdown || 'Loading index.md…'
+                    : wikiData?.logMarkdown || 'Loading log.md…'}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
         {toast && (
           <div
             role="status"
@@ -1726,8 +1954,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* 2. Search trigger */}
-        <div className="pt-3 px-3 pb-2 shrink-0">
+        {/* 2. Search trigger + LLM Wiki controls */}
+        <div className="pt-3 px-3 pb-2 flex flex-col gap-2 shrink-0 border-b border-line">
           <button
             onClick={() => {
               setVerOpen(false);
@@ -1740,65 +1968,184 @@ export default function App() {
           >
             <Search className="w-[14px] h-[14px] text-ink-3 shrink-0" />
             <span className="flex-1 text-ink-3 text-[13px] truncate">
-              Search or jump to…
+              Search wiki…
             </span>
             <kbd className="font-mono text-[11px] text-ink-2 bg-sunken border border-line border-b-2 rounded-[4px] px-[5px]">
               ⌘K
             </kbd>
           </button>
-        </div>
 
-        {/* 3. Artifact list */}
-        <nav className="flex-1 overflow-y-auto pt-1 px-2 pb-3 flex flex-col gap-0.5">
-          {artifacts.map((item) => {
-            const selected = detail?.id === item.id || selectedId === item.id;
-            const agentInfo = getAgentInfo(item.agent);
-            const itemIconSvg = resolveArtifactIconSvg(item);
-
-            return (
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="inline-flex rounded-[6px] bg-sunken p-[2px] border border-line">
               <button
-                key={item.id}
-                onClick={() => {
-                  setSelectedId(item.id);
-                  setVerOpen(false);
-                  setMenuOpen(false);
-                }}
-                className={`grid grid-cols-[28px_minmax(0,1fr)_auto] gap-[10px] items-center px-[10px] py-2 rounded-[8px] text-left w-full transition-colors ${
-                  selected
-                    ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
-                    : 'bg-transparent hover:bg-sunken'
+                onClick={() => setSidebarMode('wiki')}
+                className={`h-[22px] px-2 rounded-[4px] text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                  sidebarMode === 'wiki'
+                    ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.06)]'
+                    : 'text-ink-3 hover:text-ink-2'
                 }`}
               >
-                <span
-                  className="w-[28px] h-[28px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
-                  dangerouslySetInnerHTML={{ __html: itemIconSvg }}
-                />
-
-                <span className="min-w-0 flex flex-col gap-[1px]">
-                  <span className="text-[13px] font-medium truncate text-ink">
-                    {item.title}
-                  </span>
-                  <span className="text-[12px] text-ink-2 flex items-center gap-1.5 whitespace-nowrap truncate">
-                    <span
-                      className="w-[6px] h-[6px] rounded-full shrink-0"
-                      style={{ background: agentInfo.dot }}
-                    />
-                    {agentInfo.label} · {formatRelativeTime(item.updatedAt)}
-                  </span>
-                </span>
-
-                <span
-                  className={`font-mono text-[11px] rounded-[4px] px-1.5 py-[1px] ${
-                    item.currentVersion > 1
-                      ? 'bg-brass-soft text-brass-ink'
-                      : 'bg-transparent text-ink-3'
-                  }`}
-                >
-                  v{item.currentVersion}
-                </span>
+                <FolderOpen className="w-3 h-3" />
+                <span>LLM Wiki</span>
               </button>
-            );
-          })}
+              <button
+                onClick={() => setSidebarMode('recent')}
+                className={`h-[22px] px-2 rounded-[4px] text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                  sidebarMode === 'recent'
+                    ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.06)]'
+                    : 'text-ink-3 hover:text-ink-2'
+                }`}
+              >
+                <History className="w-3 h-3" />
+                <span>Recent</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => openWikiModal('index')}
+              title="Open LLM Wiki Master Catalog (index.md) & Log (log.md)"
+              className="h-[24px] px-2 rounded-[6px] bg-sage-soft hover:bg-sunken text-sage border border-[var(--c-sage-border)] font-mono text-[11px] font-medium flex items-center gap-1 transition-colors"
+            >
+              <BookOpen className="w-3 h-3" />
+              <span>index.md</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3. Artifact list (LLM Wiki category folders or Recent flat list) */}
+        <nav className="flex-1 overflow-y-auto pt-2 px-2 pb-3 flex flex-col gap-1">
+          {sidebarMode === 'wiki'
+            ? artifactsByCategory.map(([cat, items]) => {
+                const isCollapsed = Boolean(collapsedCategories[cat]);
+                return (
+                  <div key={cat} className="flex flex-col gap-0.5 mb-1">
+                    <button
+                      onClick={() =>
+                        setCollapsedCategories((prev) => ({
+                          ...prev,
+                          [cat]: !prev[cat],
+                        }))
+                      }
+                      className="flex items-center justify-between px-2 py-1 rounded-[6px] text-[11px] font-mono font-semibold text-ink-2 hover:bg-sunken transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        {isCollapsed ? (
+                          <ChevronRight className="w-3 h-3 text-ink-3 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 text-ink-3 shrink-0" />
+                        )}
+                        <FolderOpen className="w-3 h-3 text-sage shrink-0" />
+                        <span className="truncate">{cat}</span>
+                      </span>
+                      <span className="text-[10.5px] text-ink-3 px-1.5 rounded bg-sunken">
+                        {items.length}
+                      </span>
+                    </button>
+
+                    {!isCollapsed &&
+                      items.map((item) => {
+                        const selected =
+                          detail?.id === item.id || selectedId === item.id;
+                        const agentInfo = getAgentInfo(item.agent);
+                        const itemIconSvg = resolveArtifactIconSvg(item);
+
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setSelectedId(item.id);
+                              setVerOpen(false);
+                              setMenuOpen(false);
+                            }}
+                            title={item.description || item.title}
+                            className={`grid grid-cols-[26px_minmax(0,1fr)_auto] gap-[9px] items-center pl-[14px] pr-[8px] py-1.5 rounded-[8px] text-left w-full transition-colors ${
+                              selected
+                                ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
+                                : 'bg-transparent hover:bg-sunken'
+                            }`}
+                          >
+                            <span
+                              className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
+                              dangerouslySetInnerHTML={{ __html: itemIconSvg }}
+                            />
+
+                            <span className="min-w-0 flex flex-col gap-[1px]">
+                              <span className="text-[12.5px] font-medium truncate text-ink">
+                                {item.title}
+                              </span>
+                              <span className="text-[11px] text-ink-3 flex items-center gap-1.5 whitespace-nowrap truncate">
+                                <span
+                                  className="w-[5px] h-[5px] rounded-full shrink-0"
+                                  style={{ background: agentInfo.dot }}
+                                />
+                                {item.slug}
+                              </span>
+                            </span>
+
+                            <span
+                              className={`font-mono text-[10.5px] rounded-[4px] px-1.5 py-[1px] ${
+                                item.currentVersion > 1
+                                  ? 'bg-brass-soft text-brass-ink'
+                                  : 'bg-transparent text-ink-3'
+                              }`}
+                            >
+                              v{item.currentVersion}
+                            </span>
+                          </button>
+                        );
+                      })}
+                  </div>
+                );
+              })
+            : artifacts.map((item) => {
+                const selected = detail?.id === item.id || selectedId === item.id;
+                const agentInfo = getAgentInfo(item.agent);
+                const itemIconSvg = resolveArtifactIconSvg(item);
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedId(item.id);
+                      setVerOpen(false);
+                      setMenuOpen(false);
+                    }}
+                    className={`grid grid-cols-[28px_minmax(0,1fr)_auto] gap-[10px] items-center px-[10px] py-2 rounded-[8px] text-left w-full transition-colors ${
+                      selected
+                        ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
+                        : 'bg-transparent hover:bg-sunken'
+                    }`}
+                  >
+                    <span
+                      className="w-[28px] h-[28px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
+                      dangerouslySetInnerHTML={{ __html: itemIconSvg }}
+                    />
+
+                    <span className="min-w-0 flex flex-col gap-[1px]">
+                      <span className="text-[13px] font-medium truncate text-ink">
+                        {item.title}
+                      </span>
+                      <span className="text-[12px] text-ink-2 flex items-center gap-1.5 whitespace-nowrap truncate">
+                        <span
+                          className="w-[6px] h-[6px] rounded-full shrink-0"
+                          style={{ background: agentInfo.dot }}
+                        />
+                        {agentInfo.label} · {formatRelativeTime(item.updatedAt)}
+                      </span>
+                    </span>
+
+                    <span
+                      className={`font-mono text-[11px] rounded-[4px] px-1.5 py-[1px] ${
+                        item.currentVersion > 1
+                          ? 'bg-brass-soft text-brass-ink'
+                          : 'bg-transparent text-ink-3'
+                      }`}
+                    >
+                      v{item.currentVersion}
+                    </span>
+                  </button>
+                );
+              })}
         </nav>
       </aside>
 
@@ -1820,6 +2167,12 @@ export default function App() {
                   <h1 className="m-0 text-[17px] leading-[26px] font-semibold tracking-[-0.01em] truncate text-ink">
                     {detail.title}
                   </h1>
+                  {detail.category && (
+                    <span className="hidden md:inline-flex items-center gap-1 font-mono text-[11px] px-2 py-[2px] rounded-[5px] bg-sage-soft text-sage border border-[var(--c-sage-border)] shrink-0">
+                      <FolderOpen className="w-[11px] h-[11px]" />
+                      {detail.category}
+                    </span>
+                  )}
                   {detailAgent && (
                     <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-2 whitespace-nowrap">
                       <span
@@ -1828,6 +2181,20 @@ export default function App() {
                       />
                       {detailAgent.label}
                     </span>
+                  )}
+                  {detailLinkedArtifacts.length > 0 && (
+                    <div className="hidden xl:flex items-center gap-1 min-w-0">
+                      {detailLinkedArtifacts.slice(0, 3).map((rel) => (
+                        <button
+                          key={rel.id}
+                          onClick={() => setSelectedId(rel.id)}
+                          title={`Jump to linked Wiki artifact: ${rel.title}`}
+                          className="font-mono text-[11px] px-1.5 py-[1px] rounded bg-sunken hover:bg-sage-soft text-ink-2 hover:text-sage transition-colors truncate max-w-[160px]"
+                        >
+                          [[{rel.slug}]]
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
 
@@ -2788,6 +3155,148 @@ export default function App() {
               >
                 Delete artifact
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LLM Wiki Master Index (index.md) & Chronological Log (log.md) Modal */}
+      {wikiModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setWikiModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 bg-[rgba(30,36,32,0.40)] flex justify-center items-start pt-10 px-6"
+        >
+          <div className="w-[820px] max-w-full max-h-[84vh] bg-raised border border-line rounded-[12px] shadow-[0_14px_38px_rgba(30,36,32,0.18)] flex flex-col overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-line flex items-center justify-between gap-3 shrink-0 bg-canvas">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-[30px] h-[30px] rounded-[7px] bg-sage-soft text-sage border border-[var(--c-sage-border)] flex items-center justify-center shrink-0">
+                  <BookOpen className="w-[15px] h-[15px]" />
+                </span>
+                <div className="min-w-0 flex flex-col">
+                  <span className="text-[14.5px] font-semibold text-ink truncate">
+                    MyArtifact LLM Wiki Governance (Karpathy Pattern)
+                  </span>
+                  <span className="font-mono text-[11px] text-ink-3 truncate">
+                    {wikiTab === 'index'
+                      ? wikiData?.indexFilePath || '~/.myartifact/index.md'
+                      : wikiData?.logFilePath || '~/.myartifact/log.md'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="inline-flex rounded-[6px] bg-sunken p-[2px] border border-line">
+                  <button
+                    onClick={() => setWikiTab('index')}
+                    className={`h-[26px] px-2.5 rounded-[4px] font-mono text-[11.5px] font-medium transition-colors ${
+                      wikiTab === 'index'
+                        ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.06)]'
+                        : 'text-ink-3 hover:text-ink-2'
+                    }`}
+                  >
+                    index.md (Catalog)
+                  </button>
+                  <button
+                    onClick={() => setWikiTab('log')}
+                    className={`h-[26px] px-2.5 rounded-[4px] font-mono text-[11.5px] font-medium transition-colors ${
+                      wikiTab === 'log'
+                        ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.06)]'
+                        : 'text-ink-3 hover:text-ink-2'
+                    }`}
+                  >
+                    log.md (Audit Trail)
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setWikiModalOpen(false)}
+                  className="w-[28px] h-[28px] rounded-[6px] bg-transparent hover:bg-sunken text-ink-2 flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+              {wikiTab === 'index' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {artifactsByCategory.map(([cat, items]) => (
+                    <div
+                      key={cat}
+                      className="p-3 rounded-[8px] border border-line bg-canvas flex flex-col gap-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[12px] font-semibold text-sage flex items-center gap-1.5">
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          {cat}
+                        </span>
+                        <span className="font-mono text-[11px] text-ink-3 px-1.5 rounded bg-sunken">
+                          {items.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setSelectedId(item.id);
+                              setWikiModalOpen(false);
+                            }}
+                            className="text-left p-2 rounded-[6px] bg-raised hover:bg-sage-soft border border-line transition-colors flex flex-col gap-0.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[12.5px] font-semibold text-ink truncate">
+                                {item.title}
+                              </span>
+                              <span className="font-mono text-[10.5px] text-ink-3 shrink-0">
+                                [[{item.slug}]] · v{item.currentVersion}
+                              </span>
+                            </div>
+                            {item.description && (
+                              <span className="text-[11.5px] text-ink-2 line-clamp-2">
+                                {item.description}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-[8px] border border-line bg-canvas overflow-hidden">
+                <div className="px-3.5 py-2 border-b border-line bg-sunken flex items-center justify-between">
+                  <span className="font-mono text-[11.5px] font-semibold text-ink-2">
+                    Raw Markdown ({wikiTab === 'index' ? 'index.md' : 'log.md'}) — Read by Agents via `myartifact index`
+                  </span>
+                  <button
+                    onClick={async () => {
+                      const text =
+                        wikiTab === 'index'
+                          ? wikiData?.indexMarkdown || ''
+                          : wikiData?.logMarkdown || '';
+                      try {
+                        await navigator.clipboard.writeText(text);
+                        showToast(`Copied ${wikiTab}.md`);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className="h-[24px] px-2 rounded bg-raised border border-line text-[11px] font-mono text-ink-2 hover:text-ink flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copy
+                  </button>
+                </div>
+                <pre className="m-0 p-3.5 font-mono text-[12px] leading-[1.55] text-ink whitespace-pre-wrap overflow-x-auto max-h-[340px]">
+                  {wikiTab === 'index'
+                    ? wikiData?.indexMarkdown || 'Loading index.md…'
+                    : wikiData?.logMarkdown || 'Loading log.md…'}
+                </pre>
+              </div>
             </div>
           </div>
         </div>
