@@ -40,6 +40,7 @@ export function initDatabase(dbPath: string): DatabaseSyncType {
       agent TEXT NOT NULL DEFAULT 'user',
       project TEXT NOT NULL DEFAULT 'default',
       tags_json TEXT NOT NULL DEFAULT '[]',
+      icon TEXT NOT NULL DEFAULT '',
       current_version INTEGER NOT NULL DEFAULT 1,
       file_path TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -107,6 +108,11 @@ export function initDatabase(dbPath: string): DatabaseSyncType {
       FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
     );
   `);
+
+  const cols = db.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'icon')) {
+    db.exec("ALTER TABLE artifacts ADD COLUMN icon TEXT NOT NULL DEFAULT '';");
+  }
 
   return db;
 }

@@ -4,6 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { initDatabase } from './db.js';
+import { resolveArtifactIconSvg } from './icons.js';
 import {
   encodeTfEventHeader,
   encodeTfEventScalar,
@@ -183,8 +184,12 @@ export class ArtifactStore {
   }
 
   private writeMetaJson(slug: string, meta: ArtifactMetadata): void {
-    const metaPath = path.join(this.artifactsDir, slug, 'meta.json');
+    const artifactFolder = path.join(this.artifactsDir, slug);
+    const metaPath = path.join(artifactFolder, 'meta.json');
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+    if (meta.icon) {
+      fs.writeFileSync(path.join(artifactFolder, 'icon.svg'), meta.icon, 'utf8');
+    }
   }
 
   public createArtifact(input: CreateArtifactInput): ArtifactDetail {
@@ -199,6 +204,14 @@ export class ArtifactStore {
     const description = input.description || '';
     const tags = input.tags || [];
     const summary = input.summary || 'Initial version (v1)';
+    const icon = resolveArtifactIconSvg({
+      slug,
+      title: input.title,
+      type,
+      tags,
+      icon: input.icon,
+      content: input.content,
+    });
 
     const artifactFolder = path.join(this.artifactsDir, slug);
     const versionsFolder = path.join(artifactFolder, 'versions');
@@ -210,6 +223,7 @@ export class ArtifactStore {
 
     fs.writeFileSync(currentFilePath, input.content, 'utf8');
     fs.writeFileSync(v1FilePath, input.content, 'utf8');
+    fs.writeFileSync(path.join(artifactFolder, 'icon.svg'), icon, 'utf8');
 
     const contentHash = this.computeHash(input.content);
     const byteSize = Buffer.byteLength(input.content, 'utf8');
@@ -217,8 +231,8 @@ export class ArtifactStore {
     this.db
       .prepare(
         `INSERT INTO artifacts (
-          id, slug, title, description, type, language, agent, project, tags_json, current_version, file_path, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+          id, slug, title, description, type, language, agent, project, tags_json, icon, current_version, file_path, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
       )
       .run(
         id,
@@ -230,6 +244,7 @@ export class ArtifactStore {
         agent,
         project,
         JSON.stringify(tags),
+        icon,
         currentFilePath,
         now,
         now
@@ -264,6 +279,14 @@ export class ArtifactStore {
     const agent = input.agent ?? existing.agent;
     const project = input.project ?? existing.project;
     const tags = input.tags ?? existing.tags;
+    const icon = resolveArtifactIconSvg({
+      slug: existing.slug,
+      title,
+      type,
+      tags,
+      icon: input.icon ?? existing.icon,
+      content: input.content,
+    });
 
     const newHash = this.computeHash(input.content);
     const latestVersionObj = existing.versions[existing.versions.length - 1];
@@ -298,7 +321,7 @@ export class ArtifactStore {
     this.db
       .prepare(
         `UPDATE artifacts
-         SET title = ?, description = ?, type = ?, language = ?, agent = ?, project = ?, tags_json = ?, current_version = ?, file_path = ?, updated_at = ?
+         SET title = ?, description = ?, type = ?, language = ?, agent = ?, project = ?, tags_json = ?, icon = ?, current_version = ?, file_path = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
@@ -309,6 +332,7 @@ export class ArtifactStore {
         agent,
         project,
         JSON.stringify(tags),
+        icon,
         nextVersion,
         currentFilePath,
         now,
@@ -334,6 +358,7 @@ export class ArtifactStore {
         agent: input.agent,
         project: input.project,
         tags: input.tags,
+        icon: input.icon,
         summary: input.summary,
       });
     }
@@ -1025,16 +1050,28 @@ export class ArtifactStore {
     } catch {
       tags = [];
     }
+    const slug = String(row.slug);
+    const title = String(row.title);
+    const type = String(row.type) as ArtifactType;
+    const rawIcon = String(row.icon || '');
+    const icon = resolveArtifactIconSvg({
+      slug,
+      title,
+      type,
+      tags,
+      icon: rawIcon,
+    });
     return {
       id: String(row.id),
-      slug: String(row.slug),
-      title: String(row.title),
+      slug,
+      title,
       description: String(row.description || ''),
-      type: String(row.type) as ArtifactType,
+      type,
       language: String(row.language || ''),
       agent: String(row.agent || 'user'),
       project: String(row.project || 'default'),
       tags,
+      icon,
       currentVersion: Number(row.current_version || 1),
       filePath: String(row.file_path),
       createdAt: String(row.created_at),

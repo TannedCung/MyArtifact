@@ -19,6 +19,7 @@ export interface ArtifactMetadata {
   agent: AgentSource;
   project: string;
   tags: string[];
+  icon?: string;
   currentVersion: number;
   filePath: string;
   createdAt: string;
@@ -51,6 +52,7 @@ export interface CreateArtifactInput {
   agent?: AgentSource;
   project?: string;
   tags?: string[];
+  icon?: string;
   summary?: string;
 }
 
@@ -63,6 +65,7 @@ export interface UpdateArtifactInput {
   agent?: AgentSource;
   project?: string;
   tags?: string[];
+  icon?: string;
   summary?: string;
 }
 
