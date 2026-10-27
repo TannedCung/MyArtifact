@@ -295,6 +295,19 @@ export async function startArtifactServer(
         return;
       }
 
+      // GET /api/wiki (Karpathy LLM Wiki index.md + log.md + categories + backlinks)
+      if (pathname === '/api/wiki' && req.method === 'GET') {
+        const taxonomy = store.getWikiTaxonomy();
+        const indexMarkdown = store.getWikiIndexMarkdown();
+        const logMarkdown = store.getWikiLogMarkdown();
+        sendJson(res, 200, {
+          ...taxonomy,
+          indexMarkdown,
+          logMarkdown,
+        });
+        return;
+      }
+
       // GET /api/artifacts
       if (pathname === '/api/artifacts' && req.method === 'GET') {
         const artifacts = store.listArtifacts({
@@ -302,6 +315,7 @@ export async function startArtifactServer(
           agent: url.searchParams.get('agent') || undefined,
           type: (url.searchParams.get('type') as ArtifactType) || undefined,
           project: url.searchParams.get('project') || undefined,
+          category: url.searchParams.get('category') || undefined,
           tag: url.searchParams.get('tag') || undefined,
           limit: url.searchParams.get('limit') ? Number(url.searchParams.get('limit')) : undefined,
         });
@@ -325,7 +339,9 @@ export async function startArtifactServer(
           content: body.content,
           agent: typeof body.agent === 'string' ? body.agent : 'user',
           project: typeof body.project === 'string' ? body.project : 'default',
+          category: typeof body.category === 'string' ? body.category : undefined,
           tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+          links: Array.isArray(body.links) ? body.links.map(String) : undefined,
           icon: typeof body.icon === 'string' ? body.icon : undefined,
           summary: typeof body.summary === 'string' ? body.summary : undefined,
         };
@@ -376,7 +392,9 @@ export async function startArtifactServer(
             content: body.content,
             agent: typeof body.agent === 'string' ? body.agent : undefined,
             project: typeof body.project === 'string' ? body.project : undefined,
+            category: typeof body.category === 'string' ? body.category : undefined,
             tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+            links: Array.isArray(body.links) ? body.links.map(String) : undefined,
             icon: typeof body.icon === 'string' ? body.icon : undefined,
             summary: typeof body.summary === 'string' ? body.summary : undefined,
           };

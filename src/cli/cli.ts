@@ -60,7 +60,13 @@ program
   )
   .option('-a, --agent <agent>', 'Assistant name (claude-code | codex | antigravity | user)', 'user')
   .option('-p, --project <project>', 'Project name', 'default')
+  .option(
+    '-c, --category <category>',
+    'LLM Wiki category path (e.g. experiments/reasoning, concepts/architecture, papers/research)'
+  )
+  .option('--description <description>', 'One-line summary for the LLM Wiki index.md')
   .option('--tags <tags>', 'Comma-separated tags')
+  .option('--links <links>', 'Comma-separated related artifact slugs ([[wiki-links]])')
   .option('--icon <icon>', 'Custom 32x32 SVG logo markup, file path, or preset id')
   .option('-s, --summary <summary>', 'Version commit message / summary')
   .option('-d, --data-dir <dir>', 'Custom storage directory')
@@ -87,6 +93,12 @@ program
           .map((t) => t.trim())
           .filter(Boolean)
       : [opts.type || inferred.type];
+    const links = opts.links
+      ? String(opts.links)
+          .split(',')
+          .map((l) => l.trim())
+          .filter(Boolean)
+      : undefined;
 
     let iconArg: string | undefined = opts.icon;
     if (iconArg && !iconArg.trim().startsWith('<svg') && fs.existsSync(path.resolve(iconArg))) {
@@ -96,12 +108,15 @@ program
     const store = new ArtifactStore(opts.dataDir);
     const artifact = store.upsertBySlug(slug, {
       title,
+      description: opts.description,
       type: (opts.type as ArtifactType) || inferred.type,
       language: inferred.language,
       content,
       agent: opts.agent,
       project: opts.project,
+      category: opts.category,
       tags,
+      links,
       icon: iconArg,
       summary: opts.summary,
     });
@@ -111,10 +126,48 @@ program
 
     const port = process.env.MYARTIFACT_PORT || '4173';
     console.log(
-      `✅ Synced artifact "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion} [${artifact.type}]`
+      `✅ Synced artifact "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion} [${artifact.type}] in [${artifact.category}]`
     );
     console.log(`   ➜ Artifact Page: http://127.0.0.1:${port}/artifacts/${artifact.slug}`);
+    console.log(`   ➜ Wiki Index:    ${store.wikiIndexPath}`);
     console.log(`   ➜ Local File:    ${artifact.filePath}`);
+  });
+
+program
+  .command('index')
+  .description('Print the LLM Wiki master catalog (index.md) or structured taxonomy so agents can orient before creating or looking up artifacts')
+  .option('--json', 'Output structured categories and backlinks as JSON')
+  .option('--sync', 'Force re-sync of ~/.myartifact/index.md from SQLite')
+  .option('-d, --data-dir <dir>', 'Custom storage directory')
+  .action((opts) => {
+    const store = new ArtifactStore(opts.dataDir);
+    const md = opts.sync ? store.syncWikiIndexFile() : store.getWikiIndexMarkdown();
+    if (opts.json) {
+      const taxonomy = store.getWikiTaxonomy();
+      store.close();
+      console.log(JSON.stringify({ ...taxonomy, indexMarkdown: md }, null, 2));
+      return;
+    }
+    store.close();
+    process.stdout.write(md + '\n');
+  });
+
+program
+  .command('log')
+  .description('Print the append-only LLM Wiki chronological operation log (log.md)')
+  .option('-n, --lines <count>', 'Show only the last N log entries')
+  .option('-d, --data-dir <dir>', 'Custom storage directory')
+  .action((opts) => {
+    const store = new ArtifactStore(opts.dataDir);
+    const logMd = store.getWikiLogMarkdown();
+    store.close();
+    if (opts.lines) {
+      const allLines = logMd.trim().split('\n');
+      const tailCount = Math.max(1, Number(opts.lines));
+      console.log(allLines.slice(-tailCount).join('\n'));
+      return;
+    }
+    process.stdout.write(logMd);
   });
 
 program
@@ -124,6 +177,7 @@ program
   .option('-a, --agent <agent>', 'Filter by agent (claude-code | codex | antigravity)')
   .option('--type <type>', 'Filter by artifact type')
   .option('-p, --project <project>', 'Filter by project')
+  .option('-c, --category <category>', 'Filter by LLM Wiki category path (e.g. experiments/reasoning)')
   .option('--json', 'Output as JSON')
   .option('-d, --data-dir <dir>', 'Custom storage directory')
   .action((opts) => {
@@ -133,6 +187,7 @@ program
       agent: opts.agent,
       type: opts.type as ArtifactType,
       project: opts.project,
+      category: opts.category,
     });
     store.close();
 
@@ -147,9 +202,16 @@ program
     }
 
     for (const item of list) {
+      const linksSuffix =
+        item.links && item.links.length > 0
+          ? ` [links: ${item.links.map((l) => `[[${l}]]`).join(', ')}]`
+          : '';
       console.log(
-        `• [${item.slug}] v${item.currentVersion} (${item.type} | ${item.agent}) — ${item.title}`
+        `• [${item.category}] [[${item.slug}]] v${item.currentVersion} (${item.type} | ${item.agent}) — ${item.title}${linksSuffix}`
       );
+      if (item.description) {
+        console.log(`    ↳ ${item.description}`);
+      }
     }
   });
 

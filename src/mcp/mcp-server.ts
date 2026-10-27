@@ -41,16 +41,31 @@ export const MCP_TOOLS = [
         },
         language: { type: 'string', description: 'Optional code language (e.g., tsx, python)' },
         content: { type: 'string', description: 'Complete source code or document content' },
-        description: { type: 'string', description: 'Short summary of the artifact' },
+        description: {
+          type: 'string',
+          description:
+            'One-line executive summary of the artifact for the LLM Wiki master catalog (index.md)',
+        },
         agent: {
           type: 'string',
           description: 'Creating assistant identifier (e.g., claude-code, codex, antigravity)',
         },
         project: { type: 'string', description: 'Project or workspace name' },
+        category: {
+          type: 'string',
+          description:
+            'LLM Wiki category path decided by the agent (e.g., "experiments/reasoning", "concepts/architecture", "papers/research", "comparisons/tradeoffs", "roadmaps/platform")',
+        },
         tags: {
           type: 'array',
           items: { type: 'string' },
           description: 'Searchable tags',
+        },
+        links: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Related artifact slugs to cross-reference in the LLM Wiki graph (e.g. ["deepseek-r1-grpo-reasoning", "multi-approach-reasoning-tracker"])',
         },
         icon: {
           type: 'string',
@@ -75,6 +90,19 @@ export const MCP_TOOLS = [
         id: { type: 'string', description: 'Artifact ID or slug' },
         content: { type: 'string', description: 'Updated full content of the artifact' },
         title: { type: 'string', description: 'Optional updated title' },
+        description: {
+          type: 'string',
+          description: 'Optional updated 1-line summary for index.md',
+        },
+        category: {
+          type: 'string',
+          description: 'Optional updated LLM Wiki category path (e.g., "experiments/reasoning")',
+        },
+        links: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional updated related artifact slugs',
+        },
         icon: {
           type: 'string',
           description: 'Optional updated 32x32 SVG logo markup or preset id',
@@ -89,6 +117,20 @@ export const MCP_TOOLS = [
         },
       },
       required: ['id', 'content'],
+    },
+  },
+  {
+    name: 'artifact_wiki_index',
+    description:
+      'Read the LLM Wiki master catalog (~/.myartifact/index.md), category hierarchy, backlinks graph, and recent operation log (~/.myartifact/log.md). Always call this first before creating a new artifact (to decide category placement and cross-links) or when looking up past experiments and reports.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        includeLog: {
+          type: 'boolean',
+          description: 'Also include the recent operation log from log.md',
+        },
+      },
     },
   },
   {
@@ -128,6 +170,10 @@ export const MCP_TOOLS = [
           enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'tensorboard', 'code'],
         },
         project: { type: 'string', description: 'Filter by project name' },
+        category: {
+          type: 'string',
+          description: 'Filter by LLM Wiki category path (e.g., "experiments/reasoning")',
+        },
         limit: { type: 'number', description: 'Maximum results to return' },
       },
     },
@@ -222,7 +268,9 @@ export async function executeMcpTool(
         description: typeof args.description === 'string' ? args.description : undefined,
         agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
         project: typeof args.project === 'string' ? args.project : 'default',
+        category: typeof args.category === 'string' ? args.category : undefined,
         tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
+        links: Array.isArray(args.links) ? args.links.map(String) : undefined,
         icon: typeof args.icon === 'string' ? args.icon : undefined,
       };
 
@@ -235,12 +283,14 @@ export async function executeMcpTool(
       const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
       await notifyRunningDaemon({ type: 'artifact:created', artifact });
       return {
-        report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}). Open artifact page: ${artifactPageUrl}`,
+        report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}) in [${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
           type: artifact.type,
+          category: artifact.category,
+          links: artifact.links,
           agent: artifact.agent,
           currentVersion: artifact.currentVersion,
           filePath: artifact.filePath,
@@ -258,6 +308,9 @@ export async function executeMcpTool(
       const artifact = store.updateArtifact(id, {
         content,
         title: typeof args.title === 'string' ? args.title : undefined,
+        description: typeof args.description === 'string' ? args.description : undefined,
+        category: typeof args.category === 'string' ? args.category : undefined,
+        links: Array.isArray(args.links) ? args.links.map(String) : undefined,
         icon: typeof args.icon === 'string' ? args.icon : undefined,
         summary: typeof args.summary === 'string' ? args.summary : undefined,
         agent: typeof args.agent === 'string' ? args.agent : undefined,
@@ -269,11 +322,13 @@ export async function executeMcpTool(
       const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
       await notifyRunningDaemon({ type: 'artifact:updated', artifact });
       return {
-        report: `Updated "${artifact.title}" to v${artifact.currentVersion}. Open artifact page: ${artifactPageUrl}`,
+        report: `Updated "${artifact.title}" to v${artifact.currentVersion} in [${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
+          category: artifact.category,
+          links: artifact.links,
           currentVersion: artifact.currentVersion,
           filePath: artifact.filePath,
           iconUrl,
@@ -281,6 +336,17 @@ export async function executeMcpTool(
           previewUrl: artifactPageUrl,
           studioUrl,
         },
+      };
+    }
+
+    case 'artifact_wiki_index': {
+      const indexMarkdown = store.getWikiIndexMarkdown();
+      const taxonomy = store.getWikiTaxonomy();
+      const logMarkdown = args.includeLog ? store.getWikiLogMarkdown() : undefined;
+      return {
+        ...taxonomy,
+        indexMarkdown,
+        ...(logMarkdown !== undefined ? { logMarkdown } : {}),
       };
     }
 
@@ -313,6 +379,7 @@ export async function executeMcpTool(
         agent: typeof args.agent === 'string' ? args.agent : undefined,
         type: typeof args.type === 'string' ? (args.type as ArtifactType) : undefined,
         project: typeof args.project === 'string' ? args.project : undefined,
+        category: typeof args.category === 'string' ? args.category : undefined,
         limit: typeof args.limit === 'number' ? args.limit : 50,
       });
       return { artifacts };
