@@ -39,7 +39,9 @@ export function initDatabase(dbPath: string): DatabaseSyncType {
       language TEXT NOT NULL DEFAULT '',
       agent TEXT NOT NULL DEFAULT 'user',
       project TEXT NOT NULL DEFAULT 'default',
+      category TEXT NOT NULL DEFAULT '',
       tags_json TEXT NOT NULL DEFAULT '[]',
+      links_json TEXT NOT NULL DEFAULT '[]',
       icon TEXT NOT NULL DEFAULT '',
       current_version INTEGER NOT NULL DEFAULT 1,
       file_path TEXT NOT NULL,
@@ -112,6 +114,12 @@ export function initDatabase(dbPath: string): DatabaseSyncType {
   const cols = db.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'icon')) {
     db.exec("ALTER TABLE artifacts ADD COLUMN icon TEXT NOT NULL DEFAULT '';");
+  }
+  if (!cols.some((c) => c.name === 'category')) {
+    db.exec("ALTER TABLE artifacts ADD COLUMN category TEXT NOT NULL DEFAULT '';");
+  }
+  if (!cols.some((c) => c.name === 'links_json')) {
+    db.exec("ALTER TABLE artifacts ADD COLUMN links_json TEXT NOT NULL DEFAULT '[]';");
   }
 
   return db;

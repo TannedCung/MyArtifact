@@ -18,7 +18,9 @@ export interface ArtifactMetadata {
   language: string;
   agent: AgentSource;
   project: string;
+  category: string;
   tags: string[];
+  links: string[];
   icon?: string;
   currentVersion: number;
   filePath: string;
@@ -51,7 +53,9 @@ export interface CreateArtifactInput {
   content: string;
   agent?: AgentSource;
   project?: string;
+  category?: string;
   tags?: string[];
+  links?: string[];
   icon?: string;
   summary?: string;
 }
@@ -64,7 +68,9 @@ export interface UpdateArtifactInput {
   content: string;
   agent?: AgentSource;
   project?: string;
+  category?: string;
   tags?: string[];
+  links?: string[];
   icon?: string;
   summary?: string;
 }
@@ -74,6 +80,7 @@ export interface ListArtifactsFilter {
   agent?: string;
   type?: ArtifactType;
   project?: string;
+  category?: string;
   tag?: string;
   limit?: number;
 }

@@ -130,11 +130,129 @@ export function inferTypeFromPathOrContent(filePath?: string, content?: string):
   return { type: 'markdown', language: 'markdown' };
 }
 
+export function normalizeWikiCategory(rawCategory?: string): string {
+  if (!rawCategory) return '';
+  return rawCategory
+    .trim()
+    .toLowerCase()
+    .split(/[\\/]+/)
+    .map((seg) =>
+      seg
+        .trim()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+    )
+    .filter(Boolean)
+    .join('/');
+}
+
+export function inferWikiCategory(input: {
+  slug: string;
+  title: string;
+  type: ArtifactType;
+  tags?: string[];
+  category?: string;
+  content?: string;
+}): string {
+  const explicit = normalizeWikiCategory(input.category);
+  if (explicit) return explicit;
+
+  if (input.content) {
+    const commentMatch = input.content.match(
+      /(?:\/\*|<!--)\s*category\s*:\s*([a-zA-Z0-9/_-]+)\s*(?:\*\/|-->)/i
+    );
+    if (commentMatch && commentMatch[1]) {
+      const fromComment = normalizeWikiCategory(commentMatch[1]);
+      if (fromComment) return fromComment;
+    }
+  }
+
+  const hay = `${input.slug} ${input.title} ${(input.tags || []).join(' ')}`.toLowerCase();
+  if (hay.includes('latex') || hay.includes('paper') || hay.includes('arxiv') || hay.includes('scaling')) {
+    return 'papers/research';
+  }
+  if (input.type === 'tensorboard' || hay.includes('lora') || hay.includes('finetune') || hay.includes('checkpoint')) {
+    return 'experiments/training';
+  }
+  if (hay.includes('grpo') || hay.includes('reasoning') || hay.includes('multi-approach') || hay.includes('rl')) {
+    return 'experiments/reasoning';
+  }
+  if (hay.includes('eval') || hay.includes('benchmark') || hay.includes('pass@1')) {
+    return 'experiments/benchmarks';
+  }
+  if (hay.includes('cost') || hay.includes('latency') || hay.includes('simulator') || hay.includes('comparison')) {
+    return 'comparisons/tradeoffs';
+  }
+  if (hay.includes('roadmap') || hay.includes('tracker') || hay.includes('telemetry') || hay.includes('milestone')) {
+    return 'roadmaps/platform';
+  }
+  if (input.type === 'mermaid' || hay.includes('architecture') || hay.includes('engine') || hay.includes('blog') || hay.includes('design')) {
+    return 'concepts/architecture';
+  }
+  return 'concepts/general';
+}
+
+export function extractWikiLinks(
+  content: string,
+  explicitLinks?: string[],
+  selfSlug?: string
+): string[] {
+  const found = new Set<string>();
+  for (const l of explicitLinks || []) {
+    const clean = slugify(l);
+    if (clean && clean !== selfSlug) found.add(clean);
+  }
+  if (content) {
+    // Match [[slug]] or [[slug|label]]
+    const wikiMatches = content.matchAll(/\[\[([a-z0-9-]{2,64})(?:\|[^\]]+)?\]\]/gi);
+    for (const m of wikiMatches) {
+      const s = slugify(m[1]);
+      if (s && s !== selfSlug) found.add(s);
+    }
+    // Match /artifacts/<slug>
+    const urlMatches = content.matchAll(/\/artifacts\/([a-z0-9-]{2,64})\b/gi);
+    for (const m of urlMatches) {
+      const s = slugify(m[1]);
+      if (s && s !== selfSlug && s !== 'icon') found.add(s);
+    }
+  }
+  return Array.from(found);
+}
+
+export function extractAutoDescription(
+  description: string | undefined,
+  title: string,
+  type: ArtifactType,
+  content: string
+): string {
+  if (description && description.trim()) {
+    return description.trim().replace(/\s+/g, ' ').slice(0, 280);
+  }
+  if (!content) return `${title} (${type} artifact)`;
+
+  // Strip style/script/svg blocks and tags for HTML/React
+  const stripped = content
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (stripped.length > 24) {
+    return stripped.slice(0, 220) + (stripped.length > 220 ? '…' : '');
+  }
+  return `${title} (${type} artifact)`;
+}
+
 export class ArtifactStore {
   public readonly dataDir: string;
   public readonly artifactsDir: string;
   public readonly dropzoneDir: string;
   public readonly runsDir: string;
+  public readonly wikiIndexPath: string;
+  public readonly wikiLogPath: string;
   private db: DatabaseSync;
 
   constructor(dataDir: string = getDefaultDataDir()) {
@@ -142,6 +260,8 @@ export class ArtifactStore {
     this.artifactsDir = path.join(this.dataDir, 'artifacts');
     this.dropzoneDir = path.join(this.dataDir, 'dropzone');
     this.runsDir = path.join(this.dataDir, 'runs');
+    this.wikiIndexPath = path.join(this.dataDir, 'index.md');
+    this.wikiLogPath = path.join(this.dataDir, 'log.md');
 
     fs.mkdirSync(this.artifactsDir, { recursive: true });
     fs.mkdirSync(this.dropzoneDir, { recursive: true });
@@ -172,15 +292,18 @@ export class ArtifactStore {
     slug: string,
     title: string,
     description: string,
+    category: string,
     tags: string[],
+    links: string[],
     content: string
   ): void {
     this.db.prepare('DELETE FROM artifacts_fts WHERE artifact_id = ?').run(artifactId);
+    const enrichedTags = [category, ...tags, ...links.map((l) => `link:${l}`)].filter(Boolean).join(' ');
     this.db
       .prepare(
         'INSERT INTO artifacts_fts (artifact_id, slug, title, description, tags, content) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .run(artifactId, slug, title, description, tags.join(' '), content);
+      .run(artifactId, slug, title, description, enrichedTags, content);
   }
 
   private writeMetaJson(slug: string, meta: ArtifactMetadata): void {
@@ -192,6 +315,154 @@ export class ArtifactStore {
     }
   }
 
+  public syncWikiIndexFile(): string {
+    const all = this.listArtifacts({ limit: 1000 });
+    const byCategory = new Map<string, ArtifactMetadata[]>();
+    for (const item of all) {
+      const cat = item.category || inferWikiCategory(item);
+      if (!byCategory.has(cat)) byCategory.set(cat, []);
+      byCategory.get(cat)!.push(item);
+    }
+
+    const sortedCategories = Array.from(byCategory.keys()).sort((a, b) => a.localeCompare(b));
+    const lines: string[] = [
+      '# MyArtifact LLM Wiki — Master Index (`index.md`)',
+      '',
+      '> **Agent Governance (Andrej Karpathy `llm-wiki.md` Pattern):**',
+      '> 1. **Orient First:** Read this `index.md` (`myartifact index`) before creating a new artifact or answering look-back questions.',
+      '> 2. **Decide Category Placement:** Place new artifacts into an existing category folder below (or create a clean `<domain>/<topic>` category) via `--category`.',
+      '> 3. **Write a Crisp Summary & Cross-Links:** Provide a 1-line `--description` for this index and link related slugs via `--links slug1,slug2`.',
+      '',
+      `**Total Artifacts:** ${all.length} across ${sortedCategories.length} categories · **Last Synced:** ${new Date().toISOString()}`,
+      '',
+      '## Category Overview',
+      '',
+      '| Category Path | Count | Artifacts |',
+      '| :--- | :---: | :--- |',
+    ];
+
+    for (const cat of sortedCategories) {
+      const items = byCategory.get(cat)!;
+      const slugList = items.map((i) => `[[${i.slug}]]`).join(', ');
+      lines.push(`| \`${cat}\` | ${items.length} | ${slugList} |`);
+    }
+
+    lines.push('', '---', '');
+
+    for (const cat of sortedCategories) {
+      const items = byCategory.get(cat)!;
+      lines.push(`## 📂 \`${cat}\``);
+      lines.push('');
+      for (const item of items) {
+        const dateShort = item.updatedAt.slice(0, 10);
+        const desc = item.description || `${item.title} (${item.type})`;
+        const linksStr =
+          item.links && item.links.length > 0
+            ? ` · **Links:** ${item.links.map((l) => `[[${l}]]`).join(', ')}`
+            : '';
+        const tagsStr =
+          item.tags && item.tags.length > 0
+            ? ` · **Tags:** ${item.tags.map((t) => `\`${t}\``).join(', ')}`
+            : '';
+        lines.push(
+          `- **[[${item.slug}]]** — **[${item.title}](/artifacts/${item.slug})** (\`${item.type}\` · \`v${item.currentVersion}\` · \`${item.agent}\` · ${dateShort})`
+        );
+        lines.push(`  - ${desc}${tagsStr}${linksStr}`);
+      }
+      lines.push('');
+    }
+
+    const md = lines.join('\n');
+    fs.writeFileSync(this.wikiIndexPath, md, 'utf8');
+    return md;
+  }
+
+  public appendWikiLog(
+    action: 'CREATE' | 'UPDATE' | 'DELETE' | 'ROLLBACK' | 'LINT',
+    artifact: {
+      slug: string;
+      title: string;
+      category?: string;
+      agent?: string;
+      currentVersion?: number;
+      links?: string[];
+    },
+    summary: string
+  ): void {
+    const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    if (!fs.existsSync(this.wikiLogPath)) {
+      const header = [
+        '# MyArtifact LLM Wiki — Chronological Operation Log (`log.md`)',
+        '',
+        '> Append-only audit trail of all artifact creations, version iterations, category placements, and cross-link updates.',
+        '',
+      ].join('\n');
+      fs.writeFileSync(this.wikiLogPath, header, 'utf8');
+    }
+    const cat = artifact.category || 'uncategorized';
+    const ver = artifact.currentVersion ? `v${artifact.currentVersion}` : '';
+    const agent = artifact.agent || 'user';
+    const linksPart =
+      artifact.links && artifact.links.length > 0
+        ? ` → links: ${artifact.links.map((l) => `[[${l}]]`).join(', ')}`
+        : '';
+    const line = `- **[${nowIso}]** \`${action}\` | \`${agent}\` | \`${cat}\` → **[[${artifact.slug}]]** (*${artifact.title}* ${ver}) — ${summary}${linksPart}\n`;
+    fs.appendFileSync(this.wikiLogPath, line, 'utf8');
+  }
+
+  public getWikiIndexMarkdown(): string {
+    if (!fs.existsSync(this.wikiIndexPath)) {
+      return this.syncWikiIndexFile();
+    }
+    return fs.readFileSync(this.wikiIndexPath, 'utf8');
+  }
+
+  public getWikiLogMarkdown(): string {
+    if (!fs.existsSync(this.wikiLogPath)) {
+      return '# MyArtifact LLM Wiki — Chronological Operation Log (`log.md`)\n\n*(No operations logged yet.)*\n';
+    }
+    return fs.readFileSync(this.wikiLogPath, 'utf8');
+  }
+
+  public getWikiTaxonomy(): {
+    categories: Array<{ category: string; count: number; slugs: string[] }>;
+    backlinks: Record<string, string[]>;
+    indexFilePath: string;
+    logFilePath: string;
+  } {
+    const all = this.listArtifacts({ limit: 1000 });
+    const catMap = new Map<string, string[]>();
+    const backlinks: Record<string, string[]> = {};
+
+    for (const item of all) {
+      const cat = item.category || inferWikiCategory(item);
+      if (!catMap.has(cat)) catMap.set(cat, []);
+      catMap.get(cat)!.push(item.slug);
+
+      for (const target of item.links || []) {
+        if (!backlinks[target]) backlinks[target] = [];
+        if (!backlinks[target].includes(item.slug)) {
+          backlinks[target].push(item.slug);
+        }
+      }
+    }
+
+    const categories = Array.from(catMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([category, slugs]) => ({
+        category,
+        count: slugs.length,
+        slugs,
+      }));
+
+    return {
+      categories,
+      backlinks,
+      indexFilePath: this.wikiIndexPath,
+      logFilePath: this.wikiLogPath,
+    };
+  }
+
   public createArtifact(input: CreateArtifactInput): ArtifactDetail {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
@@ -201,8 +472,17 @@ export class ArtifactStore {
     const slug = this.uniqueSlug(input.slug || input.title);
     const agent = input.agent || 'user';
     const project = input.project || 'default';
-    const description = input.description || '';
     const tags = input.tags || [];
+    const category = inferWikiCategory({
+      slug,
+      title: input.title,
+      type,
+      tags,
+      category: input.category,
+      content: input.content,
+    });
+    const links = extractWikiLinks(input.content, input.links, slug);
+    const description = extractAutoDescription(input.description, input.title, type, input.content);
     const summary = input.summary || 'Initial version (v1)';
     const icon = resolveArtifactIconSvg({
       slug,
@@ -231,8 +511,8 @@ export class ArtifactStore {
     this.db
       .prepare(
         `INSERT INTO artifacts (
-          id, slug, title, description, type, language, agent, project, tags_json, icon, current_version, file_path, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+          id, slug, title, description, type, language, agent, project, category, tags_json, links_json, icon, current_version, file_path, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
       )
       .run(
         id,
@@ -243,7 +523,9 @@ export class ArtifactStore {
         language,
         agent,
         project,
+        category,
         JSON.stringify(tags),
+        JSON.stringify(links),
         icon,
         currentFilePath,
         now,
@@ -258,10 +540,12 @@ export class ArtifactStore {
       )
       .run(id, agent, summary, v1FilePath, contentHash, byteSize, now);
 
-    this.updateFtsIndex(id, slug, input.title, description, tags, input.content);
+    this.updateFtsIndex(id, slug, input.title, description, category, tags, links, input.content);
 
     const detail = this.getArtifact(id)!;
     this.writeMetaJson(slug, detail);
+    this.syncWikiIndexFile();
+    this.appendWikiLog('CREATE', detail, summary);
     return detail;
   }
 
@@ -273,12 +557,30 @@ export class ArtifactStore {
 
     const now = new Date().toISOString();
     const title = input.title ?? existing.title;
-    const description = input.description ?? existing.description;
     const type = input.type ?? existing.type;
     const language = input.language ?? existing.language;
     const agent = input.agent ?? existing.agent;
     const project = input.project ?? existing.project;
     const tags = input.tags ?? existing.tags;
+    const category = inferWikiCategory({
+      slug: existing.slug,
+      title,
+      type,
+      tags,
+      category: input.category ?? existing.category,
+      content: input.content,
+    });
+    const links = extractWikiLinks(
+      input.content,
+      input.links ?? existing.links,
+      existing.slug
+    );
+    const description = extractAutoDescription(
+      input.description ?? existing.description,
+      title,
+      type,
+      input.content
+    );
     const icon = resolveArtifactIconSvg({
       slug: existing.slug,
       title,
@@ -321,7 +623,7 @@ export class ArtifactStore {
     this.db
       .prepare(
         `UPDATE artifacts
-         SET title = ?, description = ?, type = ?, language = ?, agent = ?, project = ?, tags_json = ?, icon = ?, current_version = ?, file_path = ?, updated_at = ?
+         SET title = ?, description = ?, type = ?, language = ?, agent = ?, project = ?, category = ?, tags_json = ?, links_json = ?, icon = ?, current_version = ?, file_path = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
@@ -331,7 +633,9 @@ export class ArtifactStore {
         language,
         agent,
         project,
+        category,
         JSON.stringify(tags),
+        JSON.stringify(links),
         icon,
         nextVersion,
         currentFilePath,
@@ -339,10 +643,21 @@ export class ArtifactStore {
         existing.id
       );
 
-    this.updateFtsIndex(existing.id, existing.slug, title, description, tags, input.content);
+    this.updateFtsIndex(
+      existing.id,
+      existing.slug,
+      title,
+      description,
+      category,
+      tags,
+      links,
+      input.content
+    );
 
     const updated = this.getArtifact(existing.id)!;
     this.writeMetaJson(existing.slug, updated);
+    this.syncWikiIndexFile();
+    this.appendWikiLog('UPDATE', updated, input.summary || (contentChanged ? `Updated to v${nextVersion}` : 'Updated metadata'));
     return updated;
   }
 
@@ -357,7 +672,9 @@ export class ArtifactStore {
         content: input.content,
         agent: input.agent,
         project: input.project,
+        category: input.category,
         tags: input.tags,
+        links: input.links,
         icon: input.icon,
         summary: input.summary,
       });
@@ -474,6 +791,12 @@ export class ArtifactStore {
       .all(...params, limit) as Record<string, unknown>[];
 
     let results = rows.map((r) => this.mapRowToMetadata(r));
+    if (filter.category && filter.category !== 'all') {
+      const normCat = normalizeWikiCategory(filter.category);
+      results = results.filter(
+        (a) => a.category === normCat || a.category.startsWith(`${normCat}/`)
+      );
+    }
     if (filter.tag) {
       results = results.filter((a) => a.tags.includes(filter.tag!));
     }
@@ -495,6 +818,8 @@ export class ArtifactStore {
     if (fs.existsSync(runFolder)) {
       fs.rmSync(runFolder, { recursive: true, force: true });
     }
+    this.syncWikiIndexFile();
+    this.appendWikiLog('DELETE', existing, 'Deleted artifact');
     return true;
   }
 
@@ -830,12 +1155,15 @@ export class ArtifactStore {
       artifact.slug,
       fullManifest.title,
       artifact.description,
+      artifact.category,
       artifact.tags,
+      artifact.links,
       serialized
     );
 
     const updated = this.getArtifact(artifact.id)!;
     this.writeMetaJson(updated.slug, updated);
+    this.syncWikiIndexFile();
     return updated;
   }
 
@@ -1045,14 +1373,28 @@ export class ArtifactStore {
 
   private mapRowToMetadata(row: Record<string, unknown>): ArtifactMetadata {
     let tags: string[] = [];
+    let links: string[] = [];
     try {
       tags = JSON.parse(String(row.tags_json || '[]'));
     } catch {
       tags = [];
     }
+    try {
+      links = JSON.parse(String(row.links_json || '[]'));
+    } catch {
+      links = [];
+    }
     const slug = String(row.slug);
     const title = String(row.title);
     const type = String(row.type) as ArtifactType;
+    const rawCategory = String(row.category || '');
+    const category = inferWikiCategory({
+      slug,
+      title,
+      type,
+      tags,
+      category: rawCategory,
+    });
     const rawIcon = String(row.icon || '');
     const icon = resolveArtifactIconSvg({
       slug,
@@ -1070,7 +1412,9 @@ export class ArtifactStore {
       language: String(row.language || ''),
       agent: String(row.agent || 'user'),
       project: String(row.project || 'default'),
+      category,
       tags,
+      links,
       icon,
       currentVersion: Number(row.current_version || 1),
       filePath: String(row.file_path),
