@@ -304,8 +304,10 @@ export default function App() {
   const [newContent, setNewContent] = useState<string>('');
   const [submitted, setSubmitted] = useState<boolean>(false);
 
-  // LLM Wiki (Karpathy pattern: category folders + index.md + log.md)
+  // LLM Wiki (Karpathy pattern: project -> category folders + index.md + log.md)
   const [sidebarMode, setSidebarMode] = useState<'wiki' | 'recent'>('wiki');
+  const [selectedProject, setSelectedProject] = useState<string>('all');
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [wikiModalOpen, setWikiModalOpen] = useState<boolean>(false);
   const [wikiTab, setWikiTab] = useState<'index' | 'log'>('index');
@@ -316,19 +318,24 @@ export default function App() {
     logFilePath?: string;
   } | null>(null);
 
-  const openWikiModal = useCallback(async (tab: 'index' | 'log' = 'index') => {
-    setWikiTab(tab);
-    setWikiModalOpen(true);
-    try {
-      const res = await fetch('/api/wiki');
-      if (res.ok) {
-        const data = await res.json();
-        setWikiData(data);
+  const openWikiModal = useCallback(
+    async (tab: 'index' | 'log' = 'index', projOverride?: string) => {
+      setWikiTab(tab);
+      setWikiModalOpen(true);
+      try {
+        const proj = projOverride ?? selectedProject;
+        const qs = proj && proj !== 'all' ? `?project=${encodeURIComponent(proj)}` : '';
+        const res = await fetch(`/api/wiki${qs}`);
+        if (res.ok) {
+          const data = await res.json();
+          setWikiData(data);
+        }
+      } catch {
+        // Ignore fetch errors
       }
-    } catch {
-      // Ignore fetch errors
-    }
-  }, []);
+    },
+    [selectedProject]
+  );
 
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -850,19 +857,19 @@ export default function App() {
       .filter(
         (a) =>
           !q ||
-          `${a.title} ${a.slug} ${a.category || ''} ${a.description || ''} ${a.tags.join(' ')} ${(a.links || []).join(' ')}`
+          `${a.title} ${a.slug} ${a.project || ''} ${a.category || ''} ${a.description || ''} ${a.tags.join(' ')} ${(a.links || []).join(' ')}`
             .toLowerCase()
             .includes(q)
       )
       .map((a, idx) => {
         const typeInfo = TYPE_META[a.type] || TYPE_META.code;
         const agentInfo = getAgentInfo(a.agent);
-        const catPrefix = a.category ? `${a.category} · ` : '';
+        const projCatPrefix = [a.project, a.category].filter(Boolean).join(' / ');
         return {
           key: `art-${a.id}`,
           header: idx === 0 ? 'Artifacts (LLM Wiki)' : '',
           label: a.title,
-          meta: `${catPrefix}v${a.currentVersion} · ${agentInfo.label}`,
+          meta: `${projCatPrefix ? `${projCatPrefix} · ` : ''}v${a.currentVersion} · ${agentInfo.label}`,
           Icon: typeInfo.Icon,
           run: () => {
             setSelectedId(a.id);
@@ -1022,15 +1029,54 @@ export default function App() {
     [detail]
   );
 
+  const allProjects = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of artifacts) {
+      const proj = item.project || 'general';
+      counts.set(proj, (counts.get(proj) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([project, count]) => ({ project, count }));
+  }, [artifacts]);
+
+  const filteredArtifacts = useMemo(() => {
+    if (!selectedProject || selectedProject === 'all') return artifacts;
+    return artifacts.filter(
+      (a) => (a.project || 'general').toLowerCase() === selectedProject.toLowerCase()
+    );
+  }, [artifacts, selectedProject]);
+
+  const projectsWithCategories = useMemo(() => {
+    const projMap = new Map<string, Map<string, ArtifactMetadata[]>>();
+    for (const item of filteredArtifacts) {
+      const proj = item.project || 'general';
+      const cat = item.category || 'concepts/general';
+      if (!projMap.has(proj)) projMap.set(proj, new Map());
+      const catMap = projMap.get(proj)!;
+      if (!catMap.has(cat)) catMap.set(cat, []);
+      catMap.get(cat)!.push(item);
+    }
+    return Array.from(projMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([project, catMap]) => {
+        const categories = Array.from(catMap.entries()).sort((a, b) =>
+          a[0].localeCompare(b[0])
+        );
+        const count = categories.reduce((acc, [, arr]) => acc + arr.length, 0);
+        return { project, count, categories };
+      });
+  }, [filteredArtifacts]);
+
   const artifactsByCategory = useMemo(() => {
     const groups = new Map<string, ArtifactMetadata[]>();
-    for (const item of artifacts) {
-      const cat = item.category || 'concepts/general';
+    for (const item of filteredArtifacts) {
+      const cat = `${item.project || 'general'} / ${item.category || 'concepts/general'}`;
       if (!groups.has(cat)) groups.set(cat, []);
       groups.get(cat)!.push(item);
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [artifacts]);
+  }, [filteredArtifacts]);
 
   const detailLinkedArtifacts = useMemo(() => {
     if (!detail) return [];
@@ -1106,10 +1152,10 @@ export default function App() {
                       <h1 className="m-0 text-[14.5px] font-semibold text-ink truncate">
                         {detail.title}
                       </h1>
-                      {detail.category && (
+                      {(detail.project || detail.category) && (
                         <span className="hidden sm:inline-flex items-center gap-1 font-mono text-[11px] px-1.5 py-[1px] rounded bg-sage-soft text-sage border border-[var(--c-sage-border)] shrink-0">
                           <FolderOpen className="w-[10px] h-[10px]" />
-                          {detail.category}
+                          {[detail.project, detail.category].filter(Boolean).join(' / ')}
                         </span>
                       )}
                       <span className="hidden md:inline-block font-mono text-[11px] px-1.5 py-[1px] rounded bg-sunken text-ink-3 shrink-0">
@@ -2010,94 +2056,169 @@ export default function App() {
               <span>index.md</span>
             </button>
           </div>
+
+          {/* Project Switcher Pill Bar */}
+          {allProjects.length > 0 && (
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
+              <button
+                onClick={() => setSelectedProject('all')}
+                className={`h-[22px] px-2 rounded-[5px] font-mono text-[10.5px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+                  selectedProject === 'all'
+                    ? 'bg-sage text-canvas'
+                    : 'bg-sunken text-ink-2 hover:text-ink'
+                }`}
+              >
+                All ({artifacts.length})
+              </button>
+              {allProjects.map((p) => {
+                const active = selectedProject === p.project;
+                return (
+                  <button
+                    key={p.project}
+                    onClick={() =>
+                      setSelectedProject(active ? 'all' : p.project)
+                    }
+                    title={`Filter by project: ${p.project}`}
+                    className={`h-[22px] px-2 rounded-[5px] font-mono text-[10.5px] font-medium whitespace-nowrap shrink-0 flex items-center gap-1 transition-colors ${
+                      active
+                        ? 'bg-sage text-canvas'
+                        : 'bg-sunken text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    <span>{p.project}</span>
+                    <span className={active ? 'opacity-80' : 'text-ink-3'}>
+                      {p.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* 3. Artifact list (LLM Wiki category folders or Recent flat list) */}
-        <nav className="flex-1 overflow-y-auto pt-2 px-2 pb-3 flex flex-col gap-1">
+        {/* 3. Artifact list (Project -> Category LLM Wiki tree or Recent flat list) */}
+        <nav className="flex-1 overflow-y-auto pt-2 px-2 pb-3 flex flex-col gap-1.5">
           {sidebarMode === 'wiki'
-            ? artifactsByCategory.map(([cat, items]) => {
-                const isCollapsed = Boolean(collapsedCategories[cat]);
+            ? projectsWithCategories.map(({ project, count, categories }) => {
+                const projCollapsed = Boolean(collapsedProjects[project]);
                 return (
-                  <div key={cat} className="flex flex-col gap-0.5 mb-1">
+                  <div
+                    key={project}
+                    className="flex flex-col gap-0.5 rounded-[8px] border border-line bg-raised/50 p-1"
+                  >
+                    {/* Project Header */}
                     <button
                       onClick={() =>
-                        setCollapsedCategories((prev) => ({
+                        setCollapsedProjects((prev) => ({
                           ...prev,
-                          [cat]: !prev[cat],
+                          [project]: !prev[project],
                         }))
                       }
-                      className="flex items-center justify-between px-2 py-1 rounded-[6px] text-[11px] font-mono font-semibold text-ink-2 hover:bg-sunken transition-colors"
+                      className="flex items-center justify-between px-2 py-1 rounded-[6px] text-[11.5px] font-mono font-semibold text-ink hover:bg-sunken transition-colors"
                     >
                       <span className="flex items-center gap-1.5 truncate">
-                        {isCollapsed ? (
-                          <ChevronRight className="w-3 h-3 text-ink-3 shrink-0" />
+                        {projCollapsed ? (
+                          <ChevronRight className="w-3.5 h-3.5 text-ink-3 shrink-0" />
                         ) : (
-                          <ChevronDown className="w-3 h-3 text-ink-3 shrink-0" />
+                          <ChevronDown className="w-3.5 h-3.5 text-ink-3 shrink-0" />
                         )}
-                        <FolderOpen className="w-3 h-3 text-sage shrink-0" />
-                        <span className="truncate">{cat}</span>
+                        <Layers className="w-3.5 h-3.5 text-sage shrink-0" />
+                        <span className="truncate">{project}</span>
                       </span>
-                      <span className="text-[10.5px] text-ink-3 px-1.5 rounded bg-sunken">
-                        {items.length}
+                      <span className="text-[10.5px] text-sage font-semibold px-1.5 rounded bg-sage-soft">
+                        {count}
                       </span>
                     </button>
 
-                    {!isCollapsed &&
-                      items.map((item) => {
-                        const selected =
-                          detail?.id === item.id || selectedId === item.id;
-                        const agentInfo = getAgentInfo(item.agent);
-                        const itemIconSvg = resolveArtifactIconSvg(item);
-
+                    {/* Categories within Project */}
+                    {!projCollapsed &&
+                      categories.map(([cat, items]) => {
+                        const catKey = `${project}:${cat}`;
+                        const isCollapsed = Boolean(collapsedCategories[catKey]);
                         return (
-                          <button
-                            key={item.id}
-                            onClick={() => {
-                              setSelectedId(item.id);
-                              setVerOpen(false);
-                              setMenuOpen(false);
-                            }}
-                            title={item.description || item.title}
-                            className={`grid grid-cols-[26px_minmax(0,1fr)_auto] gap-[9px] items-center pl-[14px] pr-[8px] py-1.5 rounded-[8px] text-left w-full transition-colors ${
-                              selected
-                                ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
-                                : 'bg-transparent hover:bg-sunken'
-                            }`}
-                          >
-                            <span
-                              className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
-                              dangerouslySetInnerHTML={{ __html: itemIconSvg }}
-                            />
-
-                            <span className="min-w-0 flex flex-col gap-[1px]">
-                              <span className="text-[12.5px] font-medium truncate text-ink">
-                                {item.title}
-                              </span>
-                              <span className="text-[11px] text-ink-3 flex items-center gap-1.5 whitespace-nowrap truncate">
-                                <span
-                                  className="w-[5px] h-[5px] rounded-full shrink-0"
-                                  style={{ background: agentInfo.dot }}
-                                />
-                                {item.slug}
-                              </span>
-                            </span>
-
-                            <span
-                              className={`font-mono text-[10.5px] rounded-[4px] px-1.5 py-[1px] ${
-                                item.currentVersion > 1
-                                  ? 'bg-brass-soft text-brass-ink'
-                                  : 'bg-transparent text-ink-3'
-                              }`}
+                          <div key={catKey} className="flex flex-col gap-0.5 pl-2">
+                            <button
+                              onClick={() =>
+                                setCollapsedCategories((prev) => ({
+                                  ...prev,
+                                  [catKey]: !prev[catKey],
+                                }))
+                              }
+                              className="flex items-center justify-between px-2 py-1 rounded-[6px] text-[11px] font-mono font-medium text-ink-2 hover:bg-sunken transition-colors"
                             >
-                              v{item.currentVersion}
-                            </span>
-                          </button>
+                              <span className="flex items-center gap-1.5 truncate">
+                                {isCollapsed ? (
+                                  <ChevronRight className="w-3 h-3 text-ink-3 shrink-0" />
+                                ) : (
+                                  <ChevronDown className="w-3 h-3 text-ink-3 shrink-0" />
+                                )}
+                                <FolderOpen className="w-3 h-3 text-sage shrink-0" />
+                                <span className="truncate">{cat}</span>
+                              </span>
+                              <span className="text-[10px] text-ink-3 px-1.5 rounded bg-sunken">
+                                {items.length}
+                              </span>
+                            </button>
+
+                            {!isCollapsed &&
+                              items.map((item) => {
+                                const selected =
+                                  detail?.id === item.id || selectedId === item.id;
+                                const agentInfo = getAgentInfo(item.agent);
+                                const itemIconSvg = resolveArtifactIconSvg(item);
+
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => {
+                                      setSelectedId(item.id);
+                                      setVerOpen(false);
+                                      setMenuOpen(false);
+                                    }}
+                                    title={item.description || item.title}
+                                    className={`grid grid-cols-[26px_minmax(0,1fr)_auto] gap-[9px] items-center pl-[14px] pr-[8px] py-1.5 rounded-[8px] text-left w-full transition-colors ${
+                                      selected
+                                        ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
+                                        : 'bg-transparent hover:bg-sunken'
+                                    }`}
+                                  >
+                                    <span
+                                      className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
+                                      dangerouslySetInnerHTML={{ __html: itemIconSvg }}
+                                    />
+
+                                    <span className="min-w-0 flex flex-col gap-[1px]">
+                                      <span className="text-[12.5px] font-medium truncate text-ink">
+                                        {item.title}
+                                      </span>
+                                      <span className="text-[11px] text-ink-3 flex items-center gap-1.5 whitespace-nowrap truncate">
+                                        <span
+                                          className="w-[5px] h-[5px] rounded-full shrink-0"
+                                          style={{ background: agentInfo.dot }}
+                                        />
+                                        {item.slug}
+                                      </span>
+                                    </span>
+
+                                    <span
+                                      className={`font-mono text-[10.5px] rounded-[4px] px-1.5 py-[1px] ${
+                                        item.currentVersion > 1
+                                          ? 'bg-brass-soft text-brass-ink'
+                                          : 'bg-transparent text-ink-3'
+                                      }`}
+                                    >
+                                      v{item.currentVersion}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                          </div>
                         );
                       })}
                   </div>
                 );
               })
-            : artifacts.map((item) => {
+            : filteredArtifacts.map((item) => {
                 const selected = detail?.id === item.id || selectedId === item.id;
                 const agentInfo = getAgentInfo(item.agent);
                 const itemIconSvg = resolveArtifactIconSvg(item);
@@ -2130,7 +2251,7 @@ export default function App() {
                           className="w-[6px] h-[6px] rounded-full shrink-0"
                           style={{ background: agentInfo.dot }}
                         />
-                        {agentInfo.label} · {formatRelativeTime(item.updatedAt)}
+                        {item.project} · {formatRelativeTime(item.updatedAt)}
                       </span>
                     </span>
 
@@ -2167,11 +2288,22 @@ export default function App() {
                   <h1 className="m-0 text-[17px] leading-[26px] font-semibold tracking-[-0.01em] truncate text-ink">
                     {detail.title}
                   </h1>
-                  {detail.category && (
-                    <span className="hidden md:inline-flex items-center gap-1 font-mono text-[11px] px-2 py-[2px] rounded-[5px] bg-sage-soft text-sage border border-[var(--c-sage-border)] shrink-0">
+                  {(detail.project || detail.category) && (
+                    <button
+                      onClick={() =>
+                        detail.project &&
+                        setSelectedProject((prev) =>
+                          prev === detail.project ? 'all' : detail.project
+                        )
+                      }
+                      title={`Filter sidebar by project: ${detail.project}`}
+                      className="hidden md:inline-flex items-center gap-1 font-mono text-[11px] px-2 py-[2px] rounded-[5px] bg-sage-soft hover:bg-sunken text-sage border border-[var(--c-sage-border)] shrink-0 transition-colors"
+                    >
                       <FolderOpen className="w-[11px] h-[11px]" />
-                      {detail.category}
-                    </span>
+                      <span>
+                        {[detail.project, detail.category].filter(Boolean).join(' / ')}
+                      </span>
+                    </button>
                   )}
                   {detailAgent && (
                     <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-2 whitespace-nowrap">
