@@ -28,42 +28,50 @@ Use **MyArtifact** whenever you generate substantial visual documents, interacti
 
 ---
 
-## 1. Best Practice: Andrej Karpathy's "LLM Wiki" Workflow (\`index.md\` + \`log.md\`)
+## 1. Best Practice: Andrej Karpathy's "LLM Wiki" Workflow (Project → Category → \`index.md\` + \`log.md\`)
 
-As the number of artifacts grows, flat unorganized files become hard to look back on. You act as the **LLM Wiki Librarian** for \`~/.myartifact\`:
-- **\`~/.myartifact/index.md\` (Master Catalog):** Content-oriented map of every artifact grouped by hierarchical \`category\`, with 1-line summaries, tags, and \`[[slug]]\` cross-links.
-- **\`~/.myartifact/log.md\` (Chronological Audit Log):** Append-only timeline of every create, update, category placement, and link operation.
+As the number of artifacts grows across multiple initiatives, flat unorganized files become hard to track. You act as the **LLM Wiki Librarian** for \`~/.myartifact\`, organizing every document and report by **Project (\`--project\`)** first, and then by **Category (\`--category\`)**:
+- **\`~/.myartifact/index.md\` (Master Catalog):** Content-oriented map grouped by **Project (\`📦 <project>\`) → Category (\`📂 <category>\`)**, with 1-line summaries, tags, and \`[[slug]]\` cross-links.
+- **\`~/.myartifact/log.md\` (Chronological Audit Log):** Append-only timeline of every create, update, project/category placement, and link operation.
 
-### Routine A — Creating or Updating an Artifact (Orient → Place → Link → Push)
+### Routine A — Creating or Updating an Artifact (Orient → Project & Category → Link → Compound)
 1. **Orient First (Read \`index.md\`):**
-   - Run \`${cliCommand} index\` (or call the \`artifact_wiki_index\` MCP tool) **before** pushing a new artifact so you know what categories and related artifacts already exist.
-2. **Decide Category Placement (\`--category\`):**
-   - Place the artifact into an existing \`<domain>/<topic>\` folder from \`index.md\`, or create a clean category following this taxonomy:
-     - \`concepts/<topic>\` — System architecture diagrams, foundational explainers, engineering deep-dives (e.g., \`concepts/architecture\`).
-     - \`experiments/<topic>\` — Empirical runs, RL/GRPO trackers, multi-approach ablations, TensorBoard runs, eval reports (e.g., \`experiments/reasoning\`, \`experiments/training\`, \`experiments/benchmarks\`).
-     - \`comparisons/<topic>\` — Cross-cutting syntheses, cost/latency simulators, trade-off tables (e.g., \`comparisons/tradeoffs\`).
-     - \`papers/<topic>\` — Formal LaTeX / arXiv-style technical reports and derivations (e.g., \`papers/research\`).
-     - \`roadmaps/<topic>\` — Milestone trackers, release checklists, and telemetry boards (e.g., \`roadmaps/platform\`).
+   - Run \`${cliCommand} index\` (or \`${cliCommand} index --project <project>\`, or call \`artifact_wiki_index\`) **before** pushing a new artifact so you know which projects, categories, and related artifacts already exist.
+2. **Assign Project (\`--project\`) & Category (\`--category\`):**
+   - **Project (\`--project <project-slug>\`):** Always group documents and reports under their project slug (reuse an existing project from \`index.md\` such as \`argos-v3\`, \`reasoning-lab\`, \`myartifact\`, or use the active repository name).
+   - **Category (\`--category <category>\`):** Within the project, place the artifact into a clean category folder:
+     - \`roadmaps\` / \`overview\` — Project overview, milestone plans, and multi-track progress trackers.
+     - \`concepts\` / \`architecture\` — System architecture diagrams, blueprints, and foundational explainers.
+     - \`experiments\` / \`training\` — Empirical runs, RL/GRPO/LoRA training runs, and ablations.
+     - \`benchmarks\` / \`comparisons\` — Evaluation reports, multi-regime comparisons, and cost/latency trade-offs.
+     - \`papers\` — Formal LaTeX / arXiv-style technical reports and derivations.
 3. **Write a High-Signal 1-Line Summary (\`--description\`) & Cross-Links (\`--links\`):**
-   - Always pass \`--description "<1-line takeaway with key metrics/conclusions>"\` so \`index.md\` captures the core finding without needing to parse 500 lines of HTML/JSX.
-   - Always pass \`--links <slug1,slug2>\` (and/or embed \`[[slug]]\` or \`/artifacts/<slug>\` links) to connect related runs, trackers, and papers into a compounding knowledge graph.
+   - Always pass \`--description "<1-line takeaway with key metrics/conclusions>"\` so \`index.md\` captures the core finding without needing to open 500 lines of HTML/JSX.
+   - Always pass \`--links <slug1,slug2>\` (and/or embed \`[[slug]]\` or \`/artifacts/<slug>\` links) to connect related runs, trackers, and papers within the project.
+4. **Compound Knowledge (Update Living Project Trackers):**
+   - When a new experiment or report adds new results to a project, check \`index.md\` for any living project tracker or benchmark summary in that project and update it (\`v2 → v3\`) so the project overview stays up to date.
 
 ### Routine B — Looking Up Past Work (Agent-Driven RAG via \`index.md\`)
 When the user asks a question about prior experiments, metrics, or design decisions:
-1. **Read \`index.md\` First:** Run \`${cliCommand} index\` (or \`artifact_wiki_index\`) to scan categories, 1-line summaries, and \`[[wiki-links]]\`.
-2. **Filter or Full-Text Search:** Use \`${cliCommand} list --category <path>\` or \`${cliCommand} list --query "<keyword>"\` (backed by SQLite FTS5 across titles, descriptions, tags, categories, links, and code).
+1. **Read \`index.md\` First:** Run \`${cliCommand} index\` (or \`${cliCommand} index --project <project>\`) to scan projects, categories, 1-line summaries, and \`[[wiki-links]]\`.
+2. **Filter by Project, Category, or Full-Text Search:** Use \`${cliCommand} list --project <project>\`, \`${cliCommand} list --category <path>\`, or \`${cliCommand} list --query "<keyword>"\` (backed by SQLite FTS5).
 3. **Inspect Relevant Artifacts:** Read full content or state via \`${cliCommand} get <slug>\` (or \`artifact_get\`).
-4. **Compound Knowledge:** When synthesizing a complex comparison across multiple artifacts, publish the synthesis back as a new artifact in \`comparisons/\` linked to its sources!
+4. **Save Valuable Syntheses:** When synthesizing a complex comparison across multiple project artifacts, publish the synthesis back as a new artifact in that project's \`comparisons\` category linked to its sources!
+
+### Routine C — Wiki Lint & Project Hygiene
+When asked to clean up or organize artifacts:
+1. Run \`${cliCommand} index\` to spot artifacts in the wrong \`project\` or \`category\`, missing 1-line \`description\` summaries, or lacking \`--links\`.
+2. Update their metadata and cross-links so every project forms a coherent, navigable subgraph.
 
 ---
 
 ## 2. Preferred Integration: MCP Tools (If Available)
 If the \`myartifact\` MCP server is mounted, call its tools directly:
-- \`artifact_wiki_index\`: **Call first** to read \`~/.myartifact/index.md\`, category hierarchy, backlinks, and \`log.md\`.
-- \`artifact_create\`: Create or upsert an artifact (\`title\`, \`slug\`, \`type\`, \`category\`, \`description\`, \`links\`, \`tags\`, \`icon\`, \`content\`, \`agent\`, \`upsert: true\`).
-- \`artifact_update\`: Iterate on an existing artifact by \`id\` or \`slug\`, recording a new version checkpoint (\`v2\`, \`v3\`...) with \`summary\`, \`category\`, \`description\`, and \`links\`.
+- \`artifact_wiki_index\`: **Call first** to read \`~/.myartifact/index.md\` (optionally filtered by \`project\`), project/category hierarchy, backlinks, and \`log.md\`.
+- \`artifact_create\`: Create or upsert an artifact (\`title\`, \`slug\`, \`type\`, \`project\`, \`category\`, \`description\`, \`links\`, \`tags\`, \`icon\`, \`content\`, \`agent\`, \`upsert: true\`).
+- \`artifact_update\`: Iterate on an existing artifact by \`id\` or \`slug\`, recording a new version checkpoint (\`v2\`, \`v3\`...) with \`summary\`, \`project\`, \`category\`, \`description\`, and \`links\`.
 - \`artifact_get\`: Read an artifact's current or historical source code and its \`window.storage\` data.
-- \`artifact_list\`: Search local artifacts by \`query\`, \`category\`, \`agent\`, \`type\`, or \`project\`.
+- \`artifact_list\`: Search local artifacts by \`query\`, \`project\`, \`category\`, \`agent\`, or \`type\`.
 - \`artifact_storage_set\`: Seed or update key-value state for an interactive artifact.
 
 ---
@@ -71,13 +79,15 @@ If the \`myartifact\` MCP server is mounted, call its tools directly:
 ## 3. CLI Integration (Always Available)
 If MCP tools are not mounted in the current session, use the CLI:
 \`\`\`bash
-# 1. Orient: Read the LLM Wiki master catalog (index.md) before creating or looking up
+# 1. Orient: Read the LLM Wiki master catalog (all projects or a single project)
 ${cliCommand} index
+${cliCommand} index --project reasoning-lab
 
-# 2. Push: Create or update an artifact placed in a structured wiki category with cross-links & custom icon
+# 2. Push: Create or update an artifact grouped under its project + category with cross-links & custom icon
 ${cliCommand} push ./grpo-report.html \\
   --id grpo-ablation-report \\
   --title "GRPO KL-Penalty Ablation Report" \\
+  --project "reasoning-lab" \\
   --category "experiments/reasoning" \\
   --description "KL beta=0.04 prevents format collapse and reaches 84.1% GSM8K (+6.3% over beta=0.01)." \\
   --links "deepseek-r1-grpo-reasoning,multi-approach-reasoning-tracker,latex-reasoning-scaling-paper" \\
@@ -86,8 +96,9 @@ ${cliCommand} push ./grpo-report.html \\
   --agent antigravity \\
   --summary "Initial ablation report with 4 KL penalty sweeps"
 
-# 3. Look Back: Filter by category or full-text search across the wiki
-${cliCommand} list --category experiments/reasoning
+# 3. Look Back: Filter by project, category, or full-text search across the wiki
+${cliCommand} list --project reasoning-lab
+${cliCommand} list --project argos-v3 --category robotics/benchmarks
 ${cliCommand} list --query "KL penalty"
 
 # 4. Audit Trail: View the chronological operation log (log.md)
