@@ -59,10 +59,13 @@ program
     'Artifact type (react | html | markdown | mermaid | svg | code)'
   )
   .option('-a, --agent <agent>', 'Assistant name (claude-code | codex | antigravity | user)', 'user')
-  .option('-p, --project <project>', 'Project name', 'default')
+  .option(
+    '-p, --project <project>',
+    'Project slug to group artifacts under (defaults to current workspace folder name or inferred project)'
+  )
   .option(
     '-c, --category <category>',
-    'LLM Wiki category path (e.g. experiments/reasoning, concepts/architecture, papers/research)'
+    'LLM Wiki category path within the project (e.g. experiments/reasoning, concepts/architecture, papers/research)'
   )
   .option('--description <description>', 'One-line summary for the LLM Wiki index.md')
   .option('--tags <tags>', 'Comma-separated tags')
@@ -126,7 +129,7 @@ program
 
     const port = process.env.MYARTIFACT_PORT || '4173';
     console.log(
-      `✅ Synced artifact "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion} [${artifact.type}] in [${artifact.category}]`
+      `✅ Synced artifact "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion} [${artifact.type}] in [${artifact.project} / ${artifact.category}]`
     );
     console.log(`   ➜ Artifact Page: http://127.0.0.1:${port}/artifacts/${artifact.slug}`);
     console.log(`   ➜ Wiki Index:    ${store.wikiIndexPath}`);
@@ -135,15 +138,19 @@ program
 
 program
   .command('index')
-  .description('Print the LLM Wiki master catalog (index.md) or structured taxonomy so agents can orient before creating or looking up artifacts')
-  .option('--json', 'Output structured categories and backlinks as JSON')
+  .description('Print the LLM Wiki master catalog (index.md) or structured taxonomy grouped by project and category')
+  .option('-p, --project <project>', 'Filter the wiki index to a specific project slug')
+  .option('--json', 'Output structured projects, categories, and backlinks as JSON')
   .option('--sync', 'Force re-sync of ~/.myartifact/index.md from SQLite')
   .option('-d, --data-dir <dir>', 'Custom storage directory')
   .action((opts) => {
     const store = new ArtifactStore(opts.dataDir);
-    const md = opts.sync ? store.syncWikiIndexFile() : store.getWikiIndexMarkdown();
+    if (opts.sync) {
+      store.syncWikiIndexFile();
+    }
+    const md = store.getWikiIndexMarkdown(opts.project);
     if (opts.json) {
-      const taxonomy = store.getWikiTaxonomy();
+      const taxonomy = store.getWikiTaxonomy(opts.project);
       store.close();
       console.log(JSON.stringify({ ...taxonomy, indexMarkdown: md }, null, 2));
       return;
@@ -176,7 +183,7 @@ program
   .option('-q, --query <query>', 'Full-text search query')
   .option('-a, --agent <agent>', 'Filter by agent (claude-code | codex | antigravity)')
   .option('--type <type>', 'Filter by artifact type')
-  .option('-p, --project <project>', 'Filter by project')
+  .option('-p, --project <project>', 'Filter by project slug')
   .option('-c, --category <category>', 'Filter by LLM Wiki category path (e.g. experiments/reasoning)')
   .option('--json', 'Output as JSON')
   .option('-d, --data-dir <dir>', 'Custom storage directory')
@@ -207,7 +214,7 @@ program
           ? ` [links: ${item.links.map((l) => `[[${l}]]`).join(', ')}]`
           : '';
       console.log(
-        `• [${item.category}] [[${item.slug}]] v${item.currentVersion} (${item.type} | ${item.agent}) — ${item.title}${linksSuffix}`
+        `• [${item.project} / ${item.category}] [[${item.slug}]] v${item.currentVersion} (${item.type} | ${item.agent}) — ${item.title}${linksSuffix}`
       );
       if (item.description) {
         console.log(`    ↳ ${item.description}`);

@@ -295,10 +295,11 @@ export async function startArtifactServer(
         return;
       }
 
-      // GET /api/wiki (Karpathy LLM Wiki index.md + log.md + categories + backlinks)
+      // GET /api/wiki (Karpathy LLM Wiki index.md + log.md + projects + categories + backlinks)
       if (pathname === '/api/wiki' && req.method === 'GET') {
-        const taxonomy = store.getWikiTaxonomy();
-        const indexMarkdown = store.getWikiIndexMarkdown();
+        const projFilter = url.searchParams.get('project') || undefined;
+        const taxonomy = store.getWikiTaxonomy(projFilter);
+        const indexMarkdown = store.getWikiIndexMarkdown(projFilter);
         const logMarkdown = store.getWikiLogMarkdown();
         sendJson(res, 200, {
           ...taxonomy,

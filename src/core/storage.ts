@@ -130,6 +130,50 @@ export function inferTypeFromPathOrContent(filePath?: string, content?: string):
   return { type: 'markdown', language: 'markdown' };
 }
 
+export function normalizeProjectName(rawProject?: string): string {
+  if (!rawProject) return '';
+  const cleaned = rawProject
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return cleaned === 'default' ? '' : cleaned;
+}
+
+export function inferWikiProject(input: {
+  slug: string;
+  title: string;
+  project?: string;
+  tags?: string[];
+}): string {
+  const explicit = normalizeProjectName(input.project);
+  if (explicit) return explicit;
+
+  const hay = `${input.slug} ${input.title} ${(input.tags || []).join(' ')}`.toLowerCase();
+  if (hay.includes('argos')) {
+    return 'argos-01';
+  }
+  if (
+    hay.includes('grpo') ||
+    hay.includes('reasoning') ||
+    hay.includes('qwen') ||
+    hay.includes('latex') ||
+    hay.includes('lora') ||
+    hay.includes('llm-cost')
+  ) {
+    return 'reasoning-lab';
+  }
+  if (
+    hay.includes('myartifact') ||
+    hay.includes('artifact-engine') ||
+    hay.includes('multi-agent') ||
+    hay.includes('telemetry')
+  ) {
+    return 'myartifact';
+  }
+  return 'general';
+}
+
 export function normalizeWikiCategory(rawCategory?: string): string {
   if (!rawCategory) return '';
   return rawCategory
@@ -315,64 +359,96 @@ export class ArtifactStore {
     }
   }
 
-  public syncWikiIndexFile(): string {
-    const all = this.listArtifacts({ limit: 1000 });
-    const byCategory = new Map<string, ArtifactMetadata[]>();
+  public buildWikiIndexMarkdown(projectFilter?: string): string {
+    const all = this.listArtifacts({
+      project: projectFilter,
+      limit: 1000,
+    });
+
+    // Group by project -> category -> artifacts
+    const byProject = new Map<string, Map<string, ArtifactMetadata[]>>();
+    const allCategories = new Set<string>();
+
     for (const item of all) {
+      const proj = item.project || inferWikiProject(item);
       const cat = item.category || inferWikiCategory(item);
-      if (!byCategory.has(cat)) byCategory.set(cat, []);
-      byCategory.get(cat)!.push(item);
+      allCategories.add(`${proj}/${cat}`);
+      if (!byProject.has(proj)) byProject.set(proj, new Map());
+      const catMap = byProject.get(proj)!;
+      if (!catMap.has(cat)) catMap.set(cat, []);
+      catMap.get(cat)!.push(item);
     }
 
-    const sortedCategories = Array.from(byCategory.keys()).sort((a, b) => a.localeCompare(b));
+    const sortedProjects = Array.from(byProject.keys()).sort((a, b) => a.localeCompare(b));
     const lines: string[] = [
       '# MyArtifact LLM Wiki — Master Index (`index.md`)',
       '',
-      '> **Agent Governance (Andrej Karpathy `llm-wiki.md` Pattern):**',
-      '> 1. **Orient First:** Read this `index.md` (`myartifact index`) before creating a new artifact or answering look-back questions.',
-      '> 2. **Decide Category Placement:** Place new artifacts into an existing category folder below (or create a clean `<domain>/<topic>` category) via `--category`.',
-      '> 3. **Write a Crisp Summary & Cross-Links:** Provide a 1-line `--description` for this index and link related slugs via `--links slug1,slug2`.',
+      '> **Agent Governance (Andrej Karpathy `llm-wiki.md` Pattern — Project + Category Hierarchy):**',
+      '> 1. **Orient First:** Read this `index.md` (`myartifact index` or `myartifact index --project <project>`) before creating a new artifact or answering look-back questions.',
+      '> 2. **Group by Project (`--project`):** Always assign the active project slug (e.g., `argos-v3`, `reasoning-lab`, `myartifact`, or the current repo name) so reports and trackers stay grouped by project.',
+      '> 3. **Decide Category (`--category`):** Within the project, place the artifact into a structured category (`overview`, `roadmaps`, `concepts`, `architecture`, `experiments`, `benchmarks`, `comparisons`, `papers`).',
+      '> 4. **Write a Crisp Summary & Cross-Links:** Provide a 1-line `--description` for this index, link related slugs via `--links`, and update living project trackers when new results arrive.',
       '',
-      `**Total Artifacts:** ${all.length} across ${sortedCategories.length} categories · **Last Synced:** ${new Date().toISOString()}`,
+      `**Total Artifacts:** ${all.length} across **${sortedProjects.length} projects** (${allCategories.size} project categories) · **Last Synced:** ${new Date().toISOString()}`,
       '',
-      '## Category Overview',
+      '## 📦 Projects Overview',
       '',
-      '| Category Path | Count | Artifacts |',
-      '| :--- | :---: | :--- |',
+      '| Project | Artifacts | Categories | Key Artifacts |',
+      '| :--- | :---: | :--- | :--- |',
     ];
 
-    for (const cat of sortedCategories) {
-      const items = byCategory.get(cat)!;
-      const slugList = items.map((i) => `[[${i.slug}]]`).join(', ');
-      lines.push(`| \`${cat}\` | ${items.length} | ${slugList} |`);
+    for (const proj of sortedProjects) {
+      const catMap = byProject.get(proj)!;
+      const cats = Array.from(catMap.keys()).sort();
+      const projItems = Array.from(catMap.values()).flat();
+      const topSlugs = projItems
+        .slice(0, 4)
+        .map((i) => `[[${i.slug}]]`)
+        .join(', ');
+      lines.push(
+        `| **\`${proj}\`** | ${projItems.length} | ${cats.map((c) => `\`${c}\``).join(', ')} | ${topSlugs}${projItems.length > 4 ? ', …' : ''} |`
+      );
     }
 
     lines.push('', '---', '');
 
-    for (const cat of sortedCategories) {
-      const items = byCategory.get(cat)!;
-      lines.push(`## 📂 \`${cat}\``);
+    for (const proj of sortedProjects) {
+      const catMap = byProject.get(proj)!;
+      const sortedCategories = Array.from(catMap.keys()).sort((a, b) => a.localeCompare(b));
+      const projTotal = Array.from(catMap.values()).reduce((acc, arr) => acc + arr.length, 0);
+
+      lines.push(`## 📦 Project: \`${proj}\` (${projTotal} artifacts)`);
       lines.push('');
-      for (const item of items) {
-        const dateShort = item.updatedAt.slice(0, 10);
-        const desc = item.description || `${item.title} (${item.type})`;
-        const linksStr =
-          item.links && item.links.length > 0
-            ? ` · **Links:** ${item.links.map((l) => `[[${l}]]`).join(', ')}`
-            : '';
-        const tagsStr =
-          item.tags && item.tags.length > 0
-            ? ` · **Tags:** ${item.tags.map((t) => `\`${t}\``).join(', ')}`
-            : '';
-        lines.push(
-          `- **[[${item.slug}]]** — **[${item.title}](/artifacts/${item.slug})** (\`${item.type}\` · \`v${item.currentVersion}\` · \`${item.agent}\` · ${dateShort})`
-        );
-        lines.push(`  - ${desc}${tagsStr}${linksStr}`);
+
+      for (const cat of sortedCategories) {
+        const items = catMap.get(cat)!;
+        lines.push(`### 📂 \`${proj}\` / \`${cat}\``);
+        lines.push('');
+        for (const item of items) {
+          const dateShort = item.updatedAt.slice(0, 10);
+          const desc = item.description || `${item.title} (${item.type})`;
+          const linksStr =
+            item.links && item.links.length > 0
+              ? ` · **Links:** ${item.links.map((l) => `[[${l}]]`).join(', ')}`
+              : '';
+          const tagsStr =
+            item.tags && item.tags.length > 0
+              ? ` · **Tags:** ${item.tags.map((t) => `\`${t}\``).join(', ')}`
+              : '';
+          lines.push(
+            `- **[[${item.slug}]]** — **[${item.title}](/artifacts/${item.slug})** (\`${item.type}\` · \`v${item.currentVersion}\` · \`${item.agent}\` · ${dateShort})`
+          );
+          lines.push(`  - ${desc}${tagsStr}${linksStr}`);
+        }
+        lines.push('');
       }
-      lines.push('');
     }
 
-    const md = lines.join('\n');
+    return lines.join('\n');
+  }
+
+  public syncWikiIndexFile(): string {
+    const md = this.buildWikiIndexMarkdown();
     fs.writeFileSync(this.wikiIndexPath, md, 'utf8');
     return md;
   }
@@ -382,6 +458,7 @@ export class ArtifactStore {
     artifact: {
       slug: string;
       title: string;
+      project?: string;
       category?: string;
       agent?: string;
       currentVersion?: number;
@@ -394,11 +471,12 @@ export class ArtifactStore {
       const header = [
         '# MyArtifact LLM Wiki — Chronological Operation Log (`log.md`)',
         '',
-        '> Append-only audit trail of all artifact creations, version iterations, category placements, and cross-link updates.',
+        '> Append-only audit trail of all artifact creations, version iterations, project/category placements, and cross-link updates.',
         '',
       ].join('\n');
       fs.writeFileSync(this.wikiLogPath, header, 'utf8');
     }
+    const proj = artifact.project || 'general';
     const cat = artifact.category || 'uncategorized';
     const ver = artifact.currentVersion ? `v${artifact.currentVersion}` : '';
     const agent = artifact.agent || 'user';
@@ -406,11 +484,14 @@ export class ArtifactStore {
       artifact.links && artifact.links.length > 0
         ? ` → links: ${artifact.links.map((l) => `[[${l}]]`).join(', ')}`
         : '';
-    const line = `- **[${nowIso}]** \`${action}\` | \`${agent}\` | \`${cat}\` → **[[${artifact.slug}]]** (*${artifact.title}* ${ver}) — ${summary}${linksPart}\n`;
+    const line = `- **[${nowIso}]** \`${action}\` | \`${agent}\` | \`${proj}/${cat}\` → **[[${artifact.slug}]]** (*${artifact.title}* ${ver}) — ${summary}${linksPart}\n`;
     fs.appendFileSync(this.wikiLogPath, line, 'utf8');
   }
 
-  public getWikiIndexMarkdown(): string {
+  public getWikiIndexMarkdown(projectFilter?: string): string {
+    if (projectFilter && projectFilter !== 'all') {
+      return this.buildWikiIndexMarkdown(projectFilter);
+    }
     if (!fs.existsSync(this.wikiIndexPath)) {
       return this.syncWikiIndexFile();
     }
@@ -424,18 +505,33 @@ export class ArtifactStore {
     return fs.readFileSync(this.wikiLogPath, 'utf8');
   }
 
-  public getWikiTaxonomy(): {
+  public getWikiTaxonomy(projectFilter?: string): {
+    projects: Array<{
+      project: string;
+      count: number;
+      categories: Array<{ category: string; count: number; slugs: string[] }>;
+    }>;
     categories: Array<{ category: string; count: number; slugs: string[] }>;
     backlinks: Record<string, string[]>;
     indexFilePath: string;
     logFilePath: string;
   } {
-    const all = this.listArtifacts({ limit: 1000 });
+    const all = this.listArtifacts({
+      project: projectFilter,
+      limit: 1000,
+    });
+    const projMap = new Map<string, Map<string, string[]>>();
     const catMap = new Map<string, string[]>();
     const backlinks: Record<string, string[]> = {};
 
     for (const item of all) {
+      const proj = item.project || inferWikiProject(item);
       const cat = item.category || inferWikiCategory(item);
+      if (!projMap.has(proj)) projMap.set(proj, new Map());
+      const pCats = projMap.get(proj)!;
+      if (!pCats.has(cat)) pCats.set(cat, []);
+      pCats.get(cat)!.push(item.slug);
+
       if (!catMap.has(cat)) catMap.set(cat, []);
       catMap.get(cat)!.push(item.slug);
 
@@ -447,6 +543,20 @@ export class ArtifactStore {
       }
     }
 
+    const projects = Array.from(projMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([project, pCats]) => {
+        const categories = Array.from(pCats.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([category, slugs]) => ({
+            category,
+            count: slugs.length,
+            slugs,
+          }));
+        const count = categories.reduce((acc, c) => acc + c.count, 0);
+        return { project, count, categories };
+      });
+
     const categories = Array.from(catMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([category, slugs]) => ({
@@ -456,6 +566,7 @@ export class ArtifactStore {
       }));
 
     return {
+      projects,
       categories,
       backlinks,
       indexFilePath: this.wikiIndexPath,
@@ -471,8 +582,13 @@ export class ArtifactStore {
     const language = input.language || inferred.language;
     const slug = this.uniqueSlug(input.slug || input.title);
     const agent = input.agent || 'user';
-    const project = input.project || 'default';
     const tags = input.tags || [];
+    const project = inferWikiProject({
+      slug,
+      title: input.title,
+      project: input.project,
+      tags,
+    });
     const category = inferWikiCategory({
       slug,
       title: input.title,
@@ -560,8 +676,13 @@ export class ArtifactStore {
     const type = input.type ?? existing.type;
     const language = input.language ?? existing.language;
     const agent = input.agent ?? existing.agent;
-    const project = input.project ?? existing.project;
     const tags = input.tags ?? existing.tags;
+    const project = inferWikiProject({
+      slug: existing.slug,
+      title,
+      project: input.project ?? existing.project,
+      tags,
+    });
     const category = inferWikiCategory({
       slug: existing.slug,
       title,
@@ -778,11 +899,6 @@ export class ArtifactStore {
       params.push(filter.type);
     }
 
-    if (filter.project && filter.project !== 'all') {
-      conditions.push('project = ?');
-      params.push(filter.project);
-    }
-
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = filter.limit || 200;
 
@@ -791,6 +907,12 @@ export class ArtifactStore {
       .all(...params, limit) as Record<string, unknown>[];
 
     let results = rows.map((r) => this.mapRowToMetadata(r));
+    if (filter.project && filter.project !== 'all') {
+      const normProj = normalizeProjectName(filter.project) || filter.project.trim().toLowerCase();
+      results = results.filter(
+        (a) => a.project.toLowerCase() === normProj
+      );
+    }
     if (filter.category && filter.category !== 'all') {
       const normCat = normalizeWikiCategory(filter.category);
       results = results.filter(
@@ -1387,6 +1509,13 @@ export class ArtifactStore {
     const slug = String(row.slug);
     const title = String(row.title);
     const type = String(row.type) as ArtifactType;
+    const rawProject = String(row.project || '');
+    const project = inferWikiProject({
+      slug,
+      title,
+      project: rawProject,
+      tags,
+    });
     const rawCategory = String(row.category || '');
     const category = inferWikiCategory({
       slug,
@@ -1411,7 +1540,7 @@ export class ArtifactStore {
       type,
       language: String(row.language || ''),
       agent: String(row.agent || 'user'),
-      project: String(row.project || 'default'),
+      project,
       category,
       tags,
       links,

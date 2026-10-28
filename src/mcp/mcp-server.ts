@@ -94,6 +94,10 @@ export const MCP_TOOLS = [
           type: 'string',
           description: 'Optional updated 1-line summary for index.md',
         },
+        project: {
+          type: 'string',
+          description: 'Optional updated project slug (e.g., "argos-v3", "reasoning-lab", "myartifact")',
+        },
         category: {
           type: 'string',
           description: 'Optional updated LLM Wiki category path (e.g., "experiments/reasoning")',
@@ -122,10 +126,14 @@ export const MCP_TOOLS = [
   {
     name: 'artifact_wiki_index',
     description:
-      'Read the LLM Wiki master catalog (~/.myartifact/index.md), category hierarchy, backlinks graph, and recent operation log (~/.myartifact/log.md). Always call this first before creating a new artifact (to decide category placement and cross-links) or when looking up past experiments and reports.',
+      'Read the LLM Wiki master catalog (~/.myartifact/index.md) grouped by project and category, backlinks graph, and recent operation log (~/.myartifact/log.md). Always call this first before creating a new artifact (to decide project/category placement and cross-links) or when looking up past experiments and reports.',
     inputSchema: {
       type: 'object',
       properties: {
+        project: {
+          type: 'string',
+          description: 'Optional project slug filter to view only one project in index.md',
+        },
         includeLog: {
           type: 'boolean',
           description: 'Also include the recent operation log from log.md',
@@ -283,12 +291,13 @@ export async function executeMcpTool(
       const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
       await notifyRunningDaemon({ type: 'artifact:created', artifact });
       return {
-        report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}) in [${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
+        report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}) in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
           type: artifact.type,
+          project: artifact.project,
           category: artifact.category,
           links: artifact.links,
           agent: artifact.agent,
@@ -309,6 +318,7 @@ export async function executeMcpTool(
         content,
         title: typeof args.title === 'string' ? args.title : undefined,
         description: typeof args.description === 'string' ? args.description : undefined,
+        project: typeof args.project === 'string' ? args.project : undefined,
         category: typeof args.category === 'string' ? args.category : undefined,
         links: Array.isArray(args.links) ? args.links.map(String) : undefined,
         icon: typeof args.icon === 'string' ? args.icon : undefined,
@@ -322,11 +332,12 @@ export async function executeMcpTool(
       const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
       await notifyRunningDaemon({ type: 'artifact:updated', artifact });
       return {
-        report: `Updated "${artifact.title}" to v${artifact.currentVersion} in [${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
+        report: `Updated "${artifact.title}" to v${artifact.currentVersion} in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
+          project: artifact.project,
           category: artifact.category,
           links: artifact.links,
           currentVersion: artifact.currentVersion,
@@ -340,8 +351,9 @@ export async function executeMcpTool(
     }
 
     case 'artifact_wiki_index': {
-      const indexMarkdown = store.getWikiIndexMarkdown();
-      const taxonomy = store.getWikiTaxonomy();
+      const projFilter = typeof args.project === 'string' ? args.project : undefined;
+      const indexMarkdown = store.getWikiIndexMarkdown(projFilter);
+      const taxonomy = store.getWikiTaxonomy(projFilter);
       const logMarkdown = args.includeLog ? store.getWikiLogMarkdown() : undefined;
       return {
         ...taxonomy,
