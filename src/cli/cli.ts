@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   ArtifactStore,
+  evaluateVisualOpportunity,
   inferTypeFromPathOrContent,
   slugify,
 } from '../core/storage.js';
@@ -51,7 +52,9 @@ program
 
 program
   .command('push [file]')
-  .description('Create or update an artifact from a local file (incrementing version if slug exists)')
+  .description(
+    'Create or update an artifact from a local file (prefer .tsx/.html visualizers over .md text dumps; increments version if slug exists)'
+  )
   .option('-i, --id <slug>', 'Artifact slug or ID (auto-derived from filename/title if omitted)')
   .option('-t, --title <title>', 'Artifact title')
   .option(
@@ -124,6 +127,14 @@ program
       summary: opts.summary,
     });
 
+    const visualHint = evaluateVisualOpportunity({
+      type: artifact.type,
+      category: artifact.category,
+      content: artifact.content,
+      title: artifact.title,
+    });
+    const wikiIndexPath = store.wikiIndexPath;
+
     await notifyRunningDaemon({ type: 'artifact:updated', artifact });
     store.close();
 
@@ -132,8 +143,11 @@ program
       `✅ Synced artifact "${artifact.title}" (${artifact.slug}) -> v${artifact.currentVersion} [${artifact.type}] in [${artifact.project} / ${artifact.category}]`
     );
     console.log(`   ➜ Artifact Page: http://127.0.0.1:${port}/artifacts/${artifact.slug}`);
-    console.log(`   ➜ Wiki Index:    ${store.wikiIndexPath}`);
+    console.log(`   ➜ Wiki Index:    ${wikiIndexPath}`);
     console.log(`   ➜ Local File:    ${artifact.filePath}`);
+    if (visualHint) {
+      console.log(`   💡 ${visualHint}`);
+    }
   });
 
 program

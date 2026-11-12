@@ -194,4 +194,65 @@ describe('Server REST API, MCP Tools, and Dropzone Watcher', () => {
     store.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  test('MCP nudges visual-first on dense Markdown tables and cleanly upgrades v1 markdown -> v2 react', async () => {
+    const tmpDir = createTempDir();
+    const store = new ArtifactStore(tmpDir);
+
+    const mdTable = [
+      '# Sim-to-Real Benchmark',
+      '',
+      '| Scenario | Policy | Torque |',
+      '| :--- | :--- | ---: |',
+      '| s1 | p1 | 2.21 |',
+      '| s2 | p1 | 2.28 |',
+      '| s3 | p1 | 2.35 |',
+      '| s4 | p1 | 2.45 |',
+      '| s5 | p1 | 2.19 |',
+      '| s6 | p1 | 2.12 |',
+    ].join('\n');
+
+    const v1Res = await executeMcpTool(store, 'artifact_create', {
+      title: 'Sim-to-Real Benchmark',
+      slug: 'sim2real-bench',
+      type: 'markdown',
+      project: 'argos-01',
+      category: 'experiments/benchmarks',
+      agent: 'antigravity',
+      content: mdTable,
+    });
+
+    assert.ok(typeof v1Res.visualRecommendation === 'string');
+    assert.ok(String(v1Res.visualRecommendation).includes('6 table data rows'));
+    const artifactDir = path.join(store.artifactsDir, 'sim2real-bench');
+    assert.ok(fs.existsSync(path.join(artifactDir, 'current.md')));
+
+    // Upgrade v1 (markdown) -> v2 (react)
+    const v2Res = await executeMcpTool(store, 'artifact_update', {
+      id: 'sim2real-bench',
+      type: 'react',
+      agent: 'antigravity',
+      summary: 'Upgrade benchmark table to interactive Recharts dashboard',
+      content: 'import React from "react"; export default function App() { return <div>Chart</div>; }',
+    });
+
+    assert.equal(v2Res.visualRecommendation, undefined);
+    const v2Art = v2Res.artifact as Record<string, unknown>;
+    assert.equal(v2Art.type, 'react');
+    assert.equal(v2Art.currentVersion, 2);
+    assert.ok(!fs.existsSync(path.join(artifactDir, 'current.md')));
+    assert.ok(fs.existsSync(path.join(artifactDir, 'current.tsx')));
+    assert.ok(fs.existsSync(path.join(artifactDir, 'versions', 'v1.md')));
+    assert.ok(fs.existsSync(path.join(artifactDir, 'versions', 'v2.tsx')));
+
+    // Rollback to v1 restores markdown type cleanly
+    const rolledBack = store.rollbackArtifact('sim2real-bench', 1, 'user');
+    assert.equal(rolledBack.type, 'markdown');
+    assert.equal(rolledBack.currentVersion, 3);
+    assert.ok(fs.existsSync(path.join(artifactDir, 'current.md')));
+    assert.ok(!fs.existsSync(path.join(artifactDir, 'current.tsx')));
+
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

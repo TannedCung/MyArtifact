@@ -81,6 +81,69 @@ export function getExtensionForType(type: ArtifactType, language?: string): stri
   }
 }
 
+export function getDefaultLanguageForType(type: ArtifactType): string {
+  switch (type) {
+    case 'react':
+      return 'tsx';
+    case 'html':
+      return 'html';
+    case 'markdown':
+      return 'markdown';
+    case 'mermaid':
+      return 'mermaid';
+    case 'svg':
+      return 'svg';
+    case 'tensorboard':
+      return 'tensorboard';
+    case 'code':
+      return 'text';
+  }
+}
+
+export function evaluateVisualOpportunity(input: {
+  type: ArtifactType;
+  category?: string;
+  content: string;
+  title: string;
+}): string | undefined {
+  if (input.type !== 'markdown') return undefined;
+
+  const lines = (input.content || '').split(/\r?\n/);
+  let inTableData = false;
+  let tableDataRows = 0;
+  for (const line of lines) {
+    const isSeparator = /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(line);
+    const isTableRow = /^\s*\|.*\|\s*$/.test(line);
+    if (isSeparator) {
+      inTableData = true;
+    } else if (inTableData && isTableRow) {
+      tableDataRows++;
+    } else if (!isTableRow) {
+      inTableData = false;
+    }
+  }
+
+  if (tableDataRows >= 5) {
+    return `Visual-first recommendation: This Markdown artifact has ${tableDataRows} table data rows. Consider upgrading it (vN+1) to an interactive "react" (.tsx with Recharts charts, ceiling/budget reference lines, and filter pills) or "html" visualizer so patterns and outliers stand out immediately.`;
+  }
+
+  const catOrTitle = `${input.category || ''} ${input.title}`;
+  if (/(benchmark|comparison|experiment|ablation|eval)/i.test(catOrTitle)) {
+    return 'Visual-first recommendation: Benchmarks, ablations, and comparisons are easier to follow as an interactive "react" (Recharts bar/line/radar charts + KPI cards) or "tensorboard" artifact rather than plain Markdown text.';
+  }
+
+  if (
+    /(architecture|fsm|state-machine|pinout|wiring|bring-up|physical-build|roadmap|tracker)/i.test(
+      catOrTitle
+    ) ||
+    (input.content || '').length >= 4500
+  ) {
+    return 'Visual-first recommendation: Technical guides, architectures, hardware pinouts, and trackers communicate faster as an interactive "react" or "html" workbench (inline SVG spatial/pinout diagrams, clickable state steppers, and window.storage checklists) rather than long Markdown prose.';
+  }
+
+  return undefined;
+}
+
 export function inferTypeFromPathOrContent(filePath?: string, content?: string): {
   type: ArtifactType;
   language: string;
@@ -383,11 +446,11 @@ export class ArtifactStore {
     const lines: string[] = [
       '# MyArtifact LLM Wiki — Master Index (`index.md`)',
       '',
-      '> **Agent Governance (Andrej Karpathy `llm-wiki.md` Pattern — Project + Category Hierarchy):**',
+      '> **Agent Governance (Visual-First + Andrej Karpathy `llm-wiki.md` Pattern):**',
       '> 1. **Orient First:** Read this `index.md` (`myartifact index` or `myartifact index --project <project>`) before creating a new artifact or answering look-back questions.',
-      '> 2. **Group by Project (`--project`):** Always assign the active project slug (e.g., `argos-v3`, `reasoning-lab`, `myartifact`, or the current repo name) so reports and trackers stay grouped by project.',
-      '> 3. **Decide Category (`--category`):** Within the project, place the artifact into a structured category (`overview`, `roadmaps`, `concepts`, `architecture`, `experiments`, `benchmarks`, `comparisons`, `papers`).',
-      '> 4. **Write a Crisp Summary & Cross-Links:** Provide a 1-line `--description` for this index, link related slugs via `--links`, and update living project trackers when new results arrive.',
+      '> 2. **Visual-First Default (`react` / `html` > `markdown`):** Build interactive `react` (`.tsx` with Recharts, Lucide, Tailwind, inline SVG) or `html` visualizers whenever explaining benchmarks, >5-row metric tables, architectures, state machines, hardware pinouts/layouts, or checklists. Reserve plain `markdown` ONLY for short narrative notes where charts, diagrams, or interactive controls add zero clarity.',
+      '> 3. **Group by Project (`--project`) & Category (`--category`):** Always assign the active project slug (e.g., `argos-01`, `reasoning-lab`, `myartifact`, or the current repo name) and place the artifact into a structured category (`overview`, `roadmaps`, `concepts`, `architecture`, `experiments`, `benchmarks`, `comparisons`, `papers`).',
+      '> 4. **Write a Crisp Summary & Cross-Links:** Provide a 1-line `--description` with key metrics/conclusions, link related slugs via `--links`, and upgrade living trackers/reports (`v1 -> v2`, including `markdown -> react` visual upgrades) when new results arrive.',
       '',
       `**Total Artifacts:** ${all.length} across **${sortedProjects.length} projects** (${allCategories.size} project categories) · **Last Synced:** ${new Date().toISOString()}`,
       '',
@@ -673,8 +736,17 @@ export class ArtifactStore {
 
     const now = new Date().toISOString();
     const title = input.title ?? existing.title;
-    const type = input.type ?? existing.type;
-    const language = input.language ?? existing.language;
+    const inferredUpdate = inferTypeFromPathOrContent(undefined, input.content);
+    const type: ArtifactType =
+      input.type ??
+      (inferredUpdate.type !== 'markdown' ? inferredUpdate.type : existing.type);
+    const language =
+      input.language ??
+      (type !== existing.type
+        ? inferredUpdate.type === type
+          ? inferredUpdate.language
+          : getDefaultLanguageForType(type)
+        : existing.language);
     const agent = input.agent ?? existing.agent;
     const tags = input.tags ?? existing.tags;
     const project = inferWikiProject({
@@ -728,6 +800,18 @@ export class ArtifactStore {
       const versionFilePath = path.join(versionsFolder, `v${nextVersion}${ext}`);
       fs.writeFileSync(versionFilePath, input.content, 'utf8');
       fs.writeFileSync(currentFilePath, input.content, 'utf8');
+      if (
+        existing.filePath &&
+        path.resolve(existing.filePath) !== path.resolve(currentFilePath) &&
+        path.basename(existing.filePath).startsWith('current.') &&
+        fs.existsSync(existing.filePath)
+      ) {
+        try {
+          fs.unlinkSync(existing.filePath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
 
       const byteSize = Buffer.byteLength(input.content, 'utf8');
       const summary = input.summary || `Updated to v${nextVersion}`;
@@ -812,8 +896,12 @@ export class ArtifactStore {
     if (historicalContent === null) {
       throw new Error(`Version ${targetVersion} not found for artifact ${idOrSlug}`);
     }
+    const targetVerMeta = existing.versions.find((v) => v.version === targetVersion);
+    const restoredType = inferTypeFromPathOrContent(targetVerMeta?.filePath, historicalContent);
     return this.updateArtifact(existing.id, {
       content: historicalContent,
+      type: restoredType.type,
+      language: restoredType.language,
       agent,
       summary: `Rolled back to v${targetVersion}`,
     });
@@ -841,7 +929,7 @@ export class ArtifactStore {
       version: Number(v.version),
       agent: String(v.agent),
       summary: String(v.summary),
-      filePath: String(v.file_path),
+      filePath: this.resolveStoredFilePath(String(v.file_path)),
       contentHash: String(v.content_hash),
       byteSize: Number(v.byte_size),
       createdAt: String(v.created_at),
@@ -862,10 +950,12 @@ export class ArtifactStore {
       .prepare('SELECT file_path FROM artifact_versions WHERE artifact_id = ? AND version = ?')
       .get(existing.id, version) as { file_path: string } | undefined;
 
-    if (!versionRow || !fs.existsSync(versionRow.file_path)) {
+    if (!versionRow) return null;
+    const resolvedPath = this.resolveStoredFilePath(versionRow.file_path);
+    if (!fs.existsSync(resolvedPath)) {
       return null;
     }
-    return fs.readFileSync(versionRow.file_path, 'utf8');
+    return fs.readFileSync(resolvedPath, 'utf8');
   }
 
   public listArtifacts(filter: ListArtifactsFilter = {}): ArtifactMetadata[] {
@@ -1546,10 +1636,23 @@ export class ArtifactStore {
       links,
       icon,
       currentVersion: Number(row.current_version || 1),
-      filePath: String(row.file_path),
+      filePath: this.resolveStoredFilePath(String(row.file_path)),
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     };
+  }
+
+  private resolveStoredFilePath(storedPath: string): string {
+    if (!storedPath || fs.existsSync(storedPath)) return storedPath;
+    const normalized = storedPath.replace(/\\/g, '/');
+    const marker = '/artifacts/';
+    const idx = normalized.lastIndexOf(marker);
+    if (idx >= 0) {
+      const rel = normalized.slice(idx + marker.length);
+      const candidate = path.join(this.artifactsDir, ...rel.split('/'));
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return storedPath;
   }
 
   public close(): void {

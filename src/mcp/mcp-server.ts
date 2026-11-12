@@ -4,7 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { ArtifactStore } from '../core/storage.js';
+import { ArtifactStore, evaluateVisualOpportunity } from '../core/storage.js';
 import type { ArtifactType } from '../core/types.js';
 
 export async function notifyRunningDaemon(payload: Record<string, unknown>): Promise<void> {
@@ -25,7 +25,7 @@ export const MCP_TOOLS = [
   {
     name: 'artifact_create',
     description:
-      'Create (or upsert by slug) a local visual artifact (React .tsx/.jsx with Tailwind/Lucide/Recharts, HTML, Markdown, Mermaid, SVG, or Code). Stored privately on disk and rendered in the local MyArtifact UI.',
+      'Create (or upsert by slug) a local interactive visual artifact. VISUAL-FIRST POLICY: Prefer interactive "react" (.tsx/.jsx with Tailwind, Recharts, Lucide, and inline SVG) or "html" whenever explaining benchmarks, multi-row metric comparisons, system architectures, state machines, hardware pinouts/layouts, or checklists. Reserve plain "markdown" strictly for short narrative notes where charts, diagrams, or interactive controls do not improve clarity.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -37,7 +37,8 @@ export const MCP_TOOLS = [
         type: {
           type: 'string',
           enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'tensorboard', 'code'],
-          description: 'Artifact format type',
+          description:
+            'Artifact format. Prefer "react" or "html" for visual dashboards, benchmarks, hardware/architecture workbenches, and interactive tools; "mermaid"/"svg" for standalone diagrams; reserve "markdown" only for brief narrative notes.',
         },
         language: { type: 'string', description: 'Optional code language (e.g., tsx, python)' },
         content: { type: 'string', description: 'Complete source code or document content' },
@@ -83,24 +84,39 @@ export const MCP_TOOLS = [
   {
     name: 'artifact_update',
     description:
-      'Update an existing artifact by ID or slug, creating a new immutable version checkpoint (v2, v3, ...) and hot-reloading the live preview.',
+      'Update an existing artifact by ID or slug (including upgrading a v1 text/markdown artifact into a v2 interactive react/html visual artifact), creating a new immutable version checkpoint (v2, v3, ...) and hot-reloading the live preview.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Artifact ID or slug' },
         content: { type: 'string', description: 'Updated full content of the artifact' },
         title: { type: 'string', description: 'Optional updated title' },
+        type: {
+          type: 'string',
+          enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'tensorboard', 'code'],
+          description:
+            'Optional updated artifact format (e.g., set to "react" or "html" when upgrading a v1 markdown report into an interactive visual v2)',
+        },
+        language: {
+          type: 'string',
+          description: 'Optional updated language (e.g., tsx, html)',
+        },
         description: {
           type: 'string',
           description: 'Optional updated 1-line summary for index.md',
         },
         project: {
           type: 'string',
-          description: 'Optional updated project slug (e.g., "argos-v3", "reasoning-lab", "myartifact")',
+          description: 'Optional updated project slug (e.g., "argos-01", "reasoning-lab", "myartifact")',
         },
         category: {
           type: 'string',
           description: 'Optional updated LLM Wiki category path (e.g., "experiments/reasoning")',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional updated searchable tags',
         },
         links: {
           type: 'array',
@@ -126,7 +142,7 @@ export const MCP_TOOLS = [
   {
     name: 'artifact_wiki_index',
     description:
-      'Read the LLM Wiki master catalog (~/.myartifact/index.md) grouped by project and category, backlinks graph, and recent operation log (~/.myartifact/log.md). Always call this first before creating a new artifact (to decide project/category placement and cross-links) or when looking up past experiments and reports.',
+      'Read the LLM Wiki master catalog (~/.myartifact/index.md) grouped by project and category, backlinks graph, and recent operation log (~/.myartifact/log.md). Always call this first before creating a new artifact (to decide project/category placement and cross-links—while choosing interactive "react"/"html" visuals even if older entries in the project used "markdown") or when looking up past experiments and reports.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -289,9 +305,16 @@ export async function executeMcpTool(
       const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
       const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
       const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
+      const visualRecommendation = evaluateVisualOpportunity({
+        type: artifact.type,
+        category: artifact.category,
+        content: artifact.content,
+        title: artifact.title,
+      });
       await notifyRunningDaemon({ type: 'artifact:created', artifact });
       return {
-        report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}) in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
+        report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}) in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}${visualRecommendation ? ` | ${visualRecommendation}` : ''}`,
+        ...(visualRecommendation ? { visualRecommendation } : {}),
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
@@ -317,9 +340,12 @@ export async function executeMcpTool(
       const artifact = store.updateArtifact(id, {
         content,
         title: typeof args.title === 'string' ? args.title : undefined,
+        type: typeof args.type === 'string' ? (args.type as ArtifactType) : undefined,
+        language: typeof args.language === 'string' ? args.language : undefined,
         description: typeof args.description === 'string' ? args.description : undefined,
         project: typeof args.project === 'string' ? args.project : undefined,
         category: typeof args.category === 'string' ? args.category : undefined,
+        tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
         links: Array.isArray(args.links) ? args.links.map(String) : undefined,
         icon: typeof args.icon === 'string' ? args.icon : undefined,
         summary: typeof args.summary === 'string' ? args.summary : undefined,
@@ -330,13 +356,21 @@ export async function executeMcpTool(
       const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
       const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
       const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
+      const visualRecommendation = evaluateVisualOpportunity({
+        type: artifact.type,
+        category: artifact.category,
+        content: artifact.content,
+        title: artifact.title,
+      });
       await notifyRunningDaemon({ type: 'artifact:updated', artifact });
       return {
-        report: `Updated "${artifact.title}" to v${artifact.currentVersion} in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}`,
+        report: `Updated "${artifact.title}" to v${artifact.currentVersion} (${artifact.type}) in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}${visualRecommendation ? ` | ${visualRecommendation}` : ''}`,
+        ...(visualRecommendation ? { visualRecommendation } : {}),
         artifact: {
           id: artifact.id,
           slug: artifact.slug,
           title: artifact.title,
+          type: artifact.type,
           project: artifact.project,
           category: artifact.category,
           links: artifact.links,

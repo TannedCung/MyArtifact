@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 export interface SetupOptions {
   targetDir?: string;
@@ -12,153 +13,176 @@ export interface SetupResult {
   writtenFiles: string[];
 }
 
+export function resolveDefaultCliEntryPath(): string {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(moduleDir, './cli/cli.js'),
+    path.resolve(moduleDir, '../cli/cli.js'),
+    path.resolve(moduleDir, '../../dist/cli/cli.js'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return candidates[2];
+}
+
 export function buildUniversalSkillMarkdown(cliCommand = 'npx myartifact'): string {
   return `---
 name: myartifact
 description: >-
-  Create, version, organize, and look up interactive visual artifacts (React components,
-  HTML dashboards, LaTeX reports, Mermaid diagrams, SVG graphics, Markdown notes, and
-  TensorBoard runs) locally across Claude Code, Codex, and Antigravity using Andrej
-  Karpathy's LLM Wiki pattern (index.md + log.md + structured categories + cross-links).
+  Create, version, organize, and look up interactive visual artifacts (React Recharts
+  dashboards, interactive SVG hardware/architecture workbenches, HTML mini-apps, Mermaid
+  diagrams, and TensorBoard runs) locally across Claude Code, Codex, and Antigravity.
+  Always prefer interactive visual artifacts over text-only Markdown whenever charts,
+  diagrams, spatial maps, or interactive controls explain faster.
 ---
 
-# MyArtifact — Cross-Assistant Visual Artifact & LLM Wiki Skill
+# MyArtifact — Visual-First Studio & Cross-Assistant LLM Wiki Skill
 
-Use **MyArtifact** whenever you generate substantial visual documents, interactive React apps, multi-track progress trackers, LaTeX papers, data dashboards, diagrams, or stateful mini-tools, **or** when looking back across past project experiments and reports.
+Use **MyArtifact** whenever you explain benchmarks, multi-regime comparisons, system architectures, state machines, hardware builds/pinouts, roadmaps, or ML runs—**or** when looking back across prior project experiments in \`~/.myartifact/index.md\`.
 
 ---
 
-## 1. Best Practice: Andrej Karpathy's "LLM Wiki" Workflow (Project → Category → \`index.md\` + \`log.md\`)
+## 1. Core Rule: Visual-First ("Show Visually — Never Dump Walls of Text")
 
-As the number of artifacts grows across multiple initiatives, flat unorganized files become hard to track. You act as the **LLM Wiki Librarian** for \`~/.myartifact\`, organizing every document and report by **Project (\`--project\`)** first, and then by **Category (\`--category\`)**:
-- **\`~/.myartifact/index.md\` (Master Catalog):** Content-oriented map grouped by **Project (\`📦 <project>\`) → Category (\`📂 <category>\`)**, with 1-line summaries, tags, and \`[[slug]]\` cross-links.
-- **\`~/.myartifact/log.md\` (Chronological Audit Log):** Append-only timeline of every create, update, project/category placement, and link operation.
+**Default to interactive \`react\` (\`.tsx\`) or \`html\` artifacts.** Plain \`markdown\` with long prose or dense numeric tables is hard for humans to scan and wastes the sandboxed renderer.
 
-### Routine A — Creating or Updating an Artifact (Orient → Project & Category → Link → Compound)
+### Format Decision Matrix
+
+| What You Are Explaining | Choose \`type\` | Visual Pattern to Build |
+| :--- | :--- | :--- |
+| **Benchmarks, ablations, eval matrices, latency/cost sweeps** (\`>= 5\` numeric rows) | **\`react\`** (\`.tsx\`) | KPI summary strip + \`recharts\` (\`BarChart\`, \`LineChart\`, \`RadarChart\`, \`ScatterChart\`) + hardware/SLA ceiling \`<ReferenceLine>\` + scenario/policy filter pills + compact table |
+| **Hardware builds, pinouts, 2D/3D spatial packaging, wiring, bring-up guides** | **\`react\`** or **\`html\`** | Interactive workbench: custom inline \`<svg>\` chassis/pinout/rail diagram (click/hover channels or zones to inspect specs & clamps) + \`window.storage\` step/BOM checklists |
+| **State machines (FSMs), control loops, pipelines, multi-agent architectures** | **\`react\`** or **\`mermaid\` / \`svg\`** | Interactive \`react\` state/node stepper (click states/transitions to inspect guards & invariants) or clean \`mermaid\` / \`svg\` topology—not prose tables |
+| **Project roadmaps, multi-track progress, living trackers** | **\`react\`** (\`.tsx\`) | Tabbed milestone/track explorer with status badges, metric bars, and clickable \`/artifacts/<slug>\` links |
+| **ML training curves & model checkpoints** | **\`tensorboard\`** | \`tb_log_scalars\` + \`tb_save_checkpoint\` (or \`${cliCommand} tb log\` / \`tb save-model\`) |
+| **Short narrative notes / changelogs** (no metrics, spatial layout, or state) | \`markdown\` | Concise GFM note—**only** when charts, diagrams, or interactive controls genuinely add zero clarity |
+
+### Anti-Patterns to Avoid
+- **Never** push a \`>5\`-row numeric comparison or benchmark table as raw \`markdown\`; plot it with \`recharts\` and highlight thresholds, ceilings, and winners visually.
+- **Never** describe physical coordinates, connector pinouts, or multi-stage state machines purely in paragraphs when an inline \`<svg>\` schematic or interactive inspector makes them clear in seconds.
+- **Never** copy \`type: "markdown"\` just because older entries in \`index.md\` used \`markdown\`. When iterating on an existing \`markdown\` report (\`v1 -> v2\`), upgrade its \`type\` to \`react\` or \`html\` if visualization explains it better.
+
+---
+
+## 2. Visual Design & Layout Rules ("Moss" Studio Palette)
+
+Structure interactive \`react\` and \`html\` artifacts for instant visual scanning:
+1. **Top KPI Strip:** 3–5 scannable stat cards with explicit units (\`ms\`, \`µs\`, \`N·m\`, \`%\`, \`GB/s\`) and delta/ceiling badges.
+2. **Primary Visual Stage:** Interactive \`recharts\` chart (with \`<ReferenceLine>\` for budgets/limits, clean horizontal gridlines, no vertical grid clutter) **or** an interactive inline \`<svg>\` schematic/map.
+3. **Interactive Controls / Tabs:** Scenario filter pills, metric switchers, clickable SVG subsystems, or \`window.storage\`-backed runbook/BOM checkboxes.
+4. **Compact Reference Table:** Cleanly formatted supporting numbers below or beside the visual—never a raw text wall at the top.
+
+**Recommended "Moss" Palette Tokens:**
+- **Moss Day (default, high-contrast warm paper):** bg \`#F7F4ED\`, card surface \`#FCFBF7\`, sunken chip/well \`#EFEBE1\`, border \`#E2DDD0\`, primary ink \`#1E2420\`, muted ink \`#4A524A\`, sage accent \`#55684F\` (soft \`#E4EADF\`), brass highlight \`#C8A96B\` (soft \`#F8F1E3\`), danger/ceiling \`#B4553F\` (soft \`#F4E2DB\`).
+- **Moss Night (dense telemetry / dark monitoring):** bg \`#151A16\`, surface \`#1D231E\`, sunken \`#111512\`, border \`#2D352E\`, ink \`#ECEAE3\`, muted \`#9AA196\`, accent \`#8FA28A\`, highlight \`#C8A96B\`, danger \`#D98068\`.
+- **Chart Series Order:** \`['#55684F', '#C8A96B', '#7C93A8', '#B8876F', '#8FA28A']\`.
+- **Responsiveness & Polish:** Use responsive grids (\`grid-cols-1 md:grid-cols-3\`, max-width \`72rem\`) that work from \`390px\` mobile up to desktop. Use \`lucide-react\` icons, monospace (\`font-mono\`) for numbers/registers/CLI commands, and real data (never placeholder lorem ipsum).
+
+---
+
+## 3. Andrej Karpathy's "LLM Wiki" Workflow (Project → Category → \`index.md\` + \`log.md\`)
+
+Every visual artifact is indexed in \`~/.myartifact\` by **Project (\`--project\`)** and **Category (\`--category\`)**:
+- **\`~/.myartifact/index.md\` (Master Catalog):** Grouped by **Project (\`📦 <project>\`) → Category (\`📂 <category>\`)**, with 1-line metric takeaways, tags, and \`[[slug]]\` cross-links.
+- **\`~/.myartifact/log.md\` (Chronological Audit Log):** Append-only timeline of creates, version upgrades, and cross-link updates.
+
+### Routine A — Creating or Updating an Artifact (Orient → Visualize → Categorize → Compound)
 1. **Orient First (Read \`index.md\`):**
-   - Run \`${cliCommand} index\` (or \`${cliCommand} index --project <project>\`, or call \`artifact_wiki_index\`) **before** pushing a new artifact so you know which projects, categories, and related artifacts already exist.
+   - Call \`artifact_wiki_index\` (or run \`${cliCommand} index --project <project>\`) **before** creating an artifact to check existing slugs, categories, and living trackers—and update an existing slug (\`v2\`, \`v3\`) rather than creating duplicates.
 2. **Assign Project (\`--project\`) & Category (\`--category\`):**
-   - **Project (\`--project <project-slug>\`):** Always group documents and reports under their project slug (reuse an existing project from \`index.md\` such as \`argos-v3\`, \`reasoning-lab\`, \`myartifact\`, or use the active repository name).
-   - **Category (\`--category <category>\`):** Within the project, place the artifact into a clean category folder:
-     - \`roadmaps\` / \`overview\` — Project overview, milestone plans, and multi-track progress trackers.
-     - \`concepts\` / \`architecture\` — System architecture diagrams, blueprints, and foundational explainers.
-     - \`experiments\` / \`training\` — Empirical runs, RL/GRPO/LoRA training runs, and ablations.
-     - \`benchmarks\` / \`comparisons\` — Evaluation reports, multi-regime comparisons, and cost/latency trade-offs.
-     - \`papers\` — Formal LaTeX / arXiv-style technical reports and derivations.
+   - **Project:** Reuse an existing project slug from \`index.md\` (e.g., \`argos-01\`, \`free-guy\`, \`reasoning-lab\`, \`myartifact\`) or the active repo name.
+   - **Category:** \`roadmaps\` / \`overview\`, \`concepts\` / \`architecture\`, \`experiments\` / \`training\`, \`benchmarks\` / \`comparisons\`, or \`papers\`.
 3. **Write a High-Signal 1-Line Summary (\`--description\`) & Cross-Links (\`--links\`):**
-   - Always pass \`--description "<1-line takeaway with key metrics/conclusions>"\` so \`index.md\` captures the core finding without needing to open 500 lines of HTML/JSX.
-   - Always pass \`--links <slug1,slug2>\` (and/or embed \`[[slug]]\` or \`/artifacts/<slug>\` links) to connect related runs, trackers, and papers within the project.
-4. **Compound Knowledge (Update Living Project Trackers):**
-   - When a new experiment or report adds new results to a project, check \`index.md\` for any living project tracker or benchmark summary in that project and update it (\`v2 → v3\`) so the project overview stays up to date.
+   - Pass \`--description "<1-line takeaway with key metrics/conclusions>"\` and \`--links <slug1,slug2>\` (or \`/artifacts/<slug>\` links) to connect related benchmarks, hardware guides, and trackers.
+4. **Compound Knowledge:**
+   - When new results land, update the project's living tracker or benchmark dashboard (\`v2 -> v3\`) so the project overview stays current.
 
 ### Routine B — Looking Up Past Work (Agent-Driven RAG via \`index.md\`)
-When the user asks a question about prior experiments, metrics, or design decisions:
-1. **Read \`index.md\` First:** Run \`${cliCommand} index\` (or \`${cliCommand} index --project <project>\`) to scan projects, categories, 1-line summaries, and \`[[wiki-links]]\`.
-2. **Filter by Project, Category, or Full-Text Search:** Use \`${cliCommand} list --project <project>\`, \`${cliCommand} list --category <path>\`, or \`${cliCommand} list --query "<keyword>"\` (backed by SQLite FTS5).
-3. **Inspect Relevant Artifacts:** Read full content or state via \`${cliCommand} get <slug>\` (or \`artifact_get\`).
-4. **Save Valuable Syntheses:** When synthesizing a complex comparison across multiple project artifacts, publish the synthesis back as a new artifact in that project's \`comparisons\` category linked to its sources!
+1. Read \`index.md\` first (\`artifact_wiki_index\` or \`${cliCommand} index --project <project>\`).
+2. Search via \`artifact_list\` or \`${cliCommand} list --project <project> --query "<keyword>"\` (SQLite FTS5), then inspect via \`artifact_get\` / \`${cliCommand} get <slug>\`.
+3. When synthesizing complex multi-run comparisons, publish the synthesis back as an interactive \`react\` artifact in \`comparisons\`!
 
-### Routine C — Wiki Lint & Project Hygiene
-When asked to clean up or organize artifacts:
-1. Run \`${cliCommand} index\` to spot artifacts in the wrong \`project\` or \`category\`, missing 1-line \`description\` summaries, or lacking \`--links\`.
-2. Update their metadata and cross-links so every project forms a coherent, navigable subgraph.
+### Routine C — Wiki Lint & Visual Hygiene
+When asked to clean up or improve project artifacts:
+1. Inspect \`index.md\` for misplaced projects/categories, missing 1-line descriptions/links, or text-heavy \`markdown\` reports full of raw tables.
+2. Upgrade dense \`markdown\` benchmarks/guides into \`v2\` interactive \`react\`/\`html\` visualizers (historic \`v1\` Markdown remains preserved in version history).
 
 ---
 
-## 2. Preferred Integration: MCP Tools (If Available)
+## 4. Preferred Integration: MCP Tools (If Available)
 If the \`myartifact\` MCP server is mounted, call its tools directly:
-- \`artifact_wiki_index\`: **Call first** to read \`~/.myartifact/index.md\` (optionally filtered by \`project\`), project/category hierarchy, backlinks, and \`log.md\`.
-- \`artifact_create\`: Create or upsert an artifact (\`title\`, \`slug\`, \`type\`, \`project\`, \`category\`, \`description\`, \`links\`, \`tags\`, \`icon\`, \`content\`, \`agent\`, \`upsert: true\`).
-- \`artifact_update\`: Iterate on an existing artifact by \`id\` or \`slug\`, recording a new version checkpoint (\`v2\`, \`v3\`...) with \`summary\`, \`project\`, \`category\`, \`description\`, and \`links\`.
-- \`artifact_get\`: Read an artifact's current or historical source code and its \`window.storage\` data.
-- \`artifact_list\`: Search local artifacts by \`query\`, \`project\`, \`category\`, \`agent\`, or \`type\`.
-- \`artifact_storage_set\`: Seed or update key-value state for an interactive artifact.
+- \`artifact_wiki_index\`: **Call first** to read \`~/.myartifact/index.md\`, project/category hierarchy, backlinks, and \`log.md\`.
+- \`artifact_create\`: Create or upsert a visual artifact (\`title\`, \`slug\`, \`type: "react" | "html" | ...\`, \`project\`, \`category\`, \`description\`, \`links\`, \`tags\`, \`icon\`, \`content\`, \`agent\`, \`upsert: true\`).
+- \`artifact_update\`: Iterate on an existing artifact by \`id\` or \`slug\` (\`v2\`, \`v3\`...), including upgrading \`type\` from \`markdown\` to \`react\`/\`html\`, with \`summary\`, \`description\`, \`links\`, and \`icon\`.
+- \`artifact_get\` / \`artifact_list\` / \`artifact_storage_set\`: Inspect source/history, run FTS5 search, or seed \`window.storage\` state.
+- \`tb_log_scalars\` / \`tb_save_checkpoint\`: Log live training curves (\`.tfevents\` + SQLite) and version model checkpoints.
 
 ---
 
-## 3. CLI Integration (Always Available)
+## 5. CLI Integration (Always Available)
 If MCP tools are not mounted in the current session, use the CLI:
 \`\`\`bash
-# 1. Orient: Read the LLM Wiki master catalog (all projects or a single project)
+# 1. Orient: Read the LLM Wiki master catalog (all projects or one project)
 ${cliCommand} index
-${cliCommand} index --project reasoning-lab
+${cliCommand} index --project argos-01
 
-# 2. Push: Create or update an artifact grouped under its project + category with cross-links & custom icon
-${cliCommand} push ./grpo-report.html \\
-  --id grpo-ablation-report \\
-  --title "GRPO KL-Penalty Ablation Report" \\
-  --project "reasoning-lab" \\
-  --category "experiments/reasoning" \\
-  --description "KL beta=0.04 prevents format collapse and reaches 84.1% GSM8K (+6.3% over beta=0.01)." \\
-  --links "deepseek-r1-grpo-reasoning,multi-approach-reasoning-tracker,latex-reasoning-scaling-paper" \\
-  --tags "grpo,rl,ablation,gsm8k" \\
+# 2. Push: Publish or upgrade an interactive React (.tsx) visual dashboard
+${cliCommand} push ./sim2real-benchmark.tsx \\
+  --id argos-v3-td8125-sim2real-benchmark \\
+  --title "Argos V3 TD-8125MG Sim-to-Real Benchmark" \\
+  --type react \\
+  --project "argos-01" \\
+  --category "experiments/benchmarks" \\
+  --description "0 falls across 7 surfaces; M2 MoE halves carpet torque saturation (12% -> 6%) at 2.03ms RPi 3B latency." \\
+  --links "argos-v3-physical-build-td8125-rpi3b-guide,argos-v3-15-regime-comparison" \\
+  --tags "argos-01,sim2real,benchmark,recharts" \\
   --icon grpo-rl \\
   --agent antigravity \\
-  --summary "Initial ablation report with 4 KL penalty sweeps"
+  --summary "Interactive Recharts torque ceiling & latency budget dashboard"
 
-# 3. Look Back: Filter by project, category, or full-text search across the wiki
-${cliCommand} list --project reasoning-lab
-${cliCommand} list --project argos-v3 --category robotics/benchmarks
-${cliCommand} list --query "KL penalty"
-
-# 4. Audit Trail: View the chronological operation log (log.md)
+# 3. Look Back, Audit Log, or Inspect Historical Versions
+${cliCommand} list --project argos-01
+${cliCommand} list --query "torque saturation"
 ${cliCommand} log --lines 20
-
-# 5. Read an artifact's source or specific historical version
-${cliCommand} get grpo-ablation-report --version 1
+${cliCommand} get argos-v3-td8125-sim2real-benchmark --version 1
 \`\`\`
 
 ---
 
-## 4. Per-Artifact Custom Icon / Logo (\`icon\`) & Standalone Page (\`/artifacts/<slug>\`)
-Every artifact has its own standalone Claude Artifact-style page at \`http://127.0.0.1:4173/artifacts/<slug>\` with its own **browser tab favicon** and **header logo** (distinct from the MyArtifact studio logo).
-- Always design a custom \`32x32\` SVG logo (\`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">...</svg>\`) matching the artifact's topic and theme palette, and pass it via the \`icon\` argument (or \`--icon\` in CLI, or between \`/* icon:start */ ... /* icon:end */\` in source).
-- Built-in preset IDs: \`latex-paper\`, \`multi-approach\`, \`grpo-rl\`, \`roadmap-tracker\`, \`coder-eval\`, \`engine-blog\`, \`llama-lora\`, \`agent-eval\`, \`arch-flow\`, \`release-shield\`, \`dashboard\`, \`report\`, \`diagram\`, \`tool\`, \`training\`.
-- When reporting completion to the user, always link directly to \`http://127.0.0.1:4173/artifacts/<slug>\`.
+## 6. Per-Artifact Custom Icon (\`icon\`) & Standalone Page (\`/artifacts/<slug>\`)
+Every artifact renders on its own standalone page at \`http://127.0.0.1:4173/artifacts/<slug>\` with a dedicated **browser tab favicon** and **header emblem**.
+- Always craft a custom \`32x32\` SVG logo (\`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">...</svg>\`) matching the artifact's topic and palette via \`icon\` / \`--icon\` (or preset IDs: \`dashboard\`, \`report\`, \`diagram\`, \`tool\`, \`training\`, \`grpo-rl\`, \`latex-paper\`, \`multi-approach\`, \`roadmap-tracker\`, \`coder-eval\`, \`arch-flow\`).
+- Always share the direct standalone URL \`http://127.0.0.1:4173/artifacts/<slug>\` with the user.
 
 ---
 
-## 5. Claude-Compatible Sandbox Capabilities
+## 7. Sandbox Capabilities & Persistent State (\`window.storage\`)
 
-### Supported Artifact Types (\`type\`)
-- \`react\` (\`.tsx\` / \`.jsx\`): Compiled in-browser with Babel + TypeScript + JSX.
-  - Must export a default React component: \`export default function App() { ... }\`
-  - **Styling**: **Tailwind CSS** is pre-loaded globally.
-  - **Pre-installed ESM Libraries** available via standard \`import\`:
-    - \`react\`, \`react-dom/client\`
-    - \`lucide-react\` (Icons)
-    - \`recharts\` (Interactive charts)
-    - \`d3\`, \`three\`, \`lodash\`, \`papaparse\`, \`mathjs\`, \`canvas-confetti\`
-- \`html\` (\`.html\`): Full HTML/CSS/JS single-file applications (Tailwind & \`window.storage\` pre-injected).
-- \`mermaid\` (\`.mmd\`): Flowcharts, sequence diagrams, state & ER diagrams.
-- \`svg\` (\`.svg\`): Scalable vector graphics.
-- \`markdown\` (\`.md\`): GitHub Flavored Markdown with embedded \`\`\`mermaid blocks and KaTeX math.
-
-### Persistent State API (\`window.storage\`)
-Interactive React and HTML artifacts can persist up to **20 MB** of local state across sessions using the Claude Artifacts-compatible async \`window.storage\` API:
+- **\`react\` (\`.tsx\` / \`.jsx\`):** Compiled in-browser with Babel + TypeScript + global **Tailwind CSS**. Must \`export default function App() { ... }\`. Pre-mapped ESM imports: \`react\`, \`react-dom/client\`, \`lucide-react\`, \`recharts\`, \`d3\`, \`three\`, \`lodash\`, \`papaparse\`, \`mathjs\`, \`canvas-confetti\`.
+- **\`html\` (\`.html\`):** Single-file HTML/CSS/JS with Tailwind & \`window.storage\` pre-injected.
+- **\`mermaid\` (\`.mmd\`) / \`svg\` (\`.svg\`) / \`tensorboard\` / \`markdown\` (\`.md\` with KaTeX + Mermaid).**
+- **Persistent \`window.storage\` API (up to 20 MB per artifact; guard with \`window.storage?.\` for offline export):**
 \`\`\`tsx
-// Read key
-const item = await window.storage.get('user_prefs');
-const prefs = item ? JSON.parse(item.value) : { theme: 'dark' };
-
-// Write key
-await window.storage.set('user_prefs', JSON.stringify(prefs));
-
-// Delete key
-await window.storage.delete('user_prefs');
-
-// List keys by prefix
-const { keys } = await window.storage.list('note:');
+const saved = await window.storage?.get('checklist:steps');
+const steps = saved ? JSON.parse(saved.value) : {};
+await window.storage?.set('checklist:steps', JSON.stringify(nextSteps));
 \`\`\`
 `;
 }
 
 export function installAgentIntegrations(options: SetupOptions = {}): SetupResult {
   const targetDir = path.resolve(options.targetDir || process.cwd());
-  const cliEntryPath =
-    options.cliEntryPath || path.resolve(process.cwd(), 'dist/cli/cli.js');
-  const cliCmd = `node "${cliEntryPath}"`;
-  const skillMd = buildUniversalSkillMarkdown(cliCmd);
+  const resolvedCliPath = options.cliEntryPath || resolveDefaultCliEntryPath();
+  const isSelfWorkspace =
+    !options.cliEntryPath &&
+    path.resolve(targetDir, 'dist/cli/cli.js') === path.resolve(resolvedCliPath);
+
+  const workspaceCliPath = isSelfWorkspace ? './dist/cli/cli.js' : resolvedCliPath;
+  const workspaceSkillMd = buildUniversalSkillMarkdown(`node "${workspaceCliPath}"`);
+  const globalSkillMd = buildUniversalSkillMarkdown(`node "${resolvedCliPath}"`);
   const writtenFiles: string[] = [];
 
   const writeFileSafe = (filePath: string, content: string) => {
@@ -170,13 +194,13 @@ export function installAgentIntegrations(options: SetupOptions = {}): SetupResul
   // 1. Antigravity & Codex workspace skill (.agents/skills/myartifact/SKILL.md)
   writeFileSafe(
     path.join(targetDir, '.agents', 'skills', 'myartifact', 'SKILL.md'),
-    skillMd
+    workspaceSkillMd
   );
 
   // 2. Claude Code workspace skill (.claude/skills/myartifact/SKILL.md)
   writeFileSafe(
     path.join(targetDir, '.claude', 'skills', 'myartifact', 'SKILL.md'),
-    skillMd
+    workspaceSkillMd
   );
 
   // 3. Standard MCP config (.mcp.json for Claude Code / generic MCP clients)
@@ -192,28 +216,28 @@ export function installAgentIntegrations(options: SetupOptions = {}): SetupResul
   const servers = (mcpConfig.mcpServers || {}) as Record<string, unknown>;
   servers.myartifact = {
     command: 'node',
-    args: [cliEntryPath, 'mcp'],
+    args: [workspaceCliPath, 'mcp'],
   };
   mcpConfig.mcpServers = servers;
   writeFileSafe(mcpJsonPath, JSON.stringify(mcpConfig, null, 2) + '\n');
 
-  // 4. Global installations if --global is specified
+  // 4. Global installations if --global is specified (always use absolute path)
   if (options.global) {
     const home = os.homedir();
     // Antigravity global skill
     writeFileSafe(
       path.join(home, '.gemini', 'config', 'skills', 'myartifact', 'SKILL.md'),
-      skillMd
+      globalSkillMd
     );
     // Claude Code global skill
     writeFileSafe(
       path.join(home, '.claude', 'skills', 'myartifact', 'SKILL.md'),
-      skillMd
+      globalSkillMd
     );
     // Codex global skill
     writeFileSafe(
       path.join(home, '.codex', 'skills', 'myartifact', 'SKILL.md'),
-      skillMd
+      globalSkillMd
     );
   }
 
