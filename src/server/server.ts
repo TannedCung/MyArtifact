@@ -42,6 +42,7 @@ export interface ServerOptions {
   watchDirs?: string[];
   enableWatcher?: boolean;
   cloud?: CloudServerConfig;
+  allowedOrigins?: string[];
 }
 
 export interface RunningArtifactServer {
@@ -55,30 +56,176 @@ export interface RunningArtifactServer {
   close: () => Promise<void>;
 }
 
-function parseJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-    req.on('end', () => {
-      try {
-        const raw = Buffer.concat(chunks).toString('utf8');
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch (err) {
-        reject(err);
-      }
-    });
-    req.on('error', reject);
-  });
+const MAX_JSON_BODY_BYTES = 50 * 1024 * 1024;
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super('Request body too large');
+    this.name = 'PayloadTooLargeError';
+  }
 }
 
-function sendJson(res: http.ServerResponse, status: number, data: unknown): void {
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
+class BadJsonBodyError extends Error {
+  constructor(message = 'Invalid JSON request body') {
+    super(message);
+    this.name = 'BadJsonBodyError';
+  }
+}
+
+export function isAllowedLocalOrigin(
+  origin: string | undefined,
+  allowedOrigins?: string[]
+): boolean {
+  if (origin === undefined) return true;
+  const trimmed = origin.trim();
+  if (!trimmed || trimmed === 'null') return false;
+  if (allowedOrigins && allowedOrigins.includes(trimmed)) return true;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    if (parsed.username || parsed.password) return false;
+    if (parsed.origin !== trimmed) return false;
+    const hostname = parsed.hostname.toLowerCase();
+    return (
+      hostname === '127.0.0.1' ||
+      hostname === 'localhost' ||
+      hostname === '[::1]' ||
+      hostname === '::1'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackHostAddress(host: string): boolean {
+  const norm = host.trim().toLowerCase();
+  return norm === '127.0.0.1' || norm === 'localhost' || norm === '::1' || norm === '[::1]';
+}
+
+function isValidLoopbackHostHeader(hostHeader: string): boolean {
+  const trimmed = hostHeader.trim();
+  if (!trimmed || /[\s/?#@\\]/.test(trimmed)) return false;
+  if (!/^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i.test(trimmed)) {
+    return false;
+  }
+  try {
+    const parsed = new URL(`http://${trimmed}`);
+    const h = parsed.hostname.toLowerCase();
+    return (
+      (h === '127.0.0.1' || h === 'localhost' || h === '[::1]' || h === '::1') &&
+      !parsed.username &&
+      !parsed.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isPathWithinDir(targetPath: string, rootDir: string): boolean {
+  if (!targetPath || typeof targetPath !== 'string' || targetPath.includes('\0')) {
+    return false;
+  }
+  const resolvedRoot = path.resolve(rootDir);
+  const resolvedTarget = path.resolve(targetPath);
+  if (resolvedTarget !== resolvedRoot && !resolvedTarget.startsWith(resolvedRoot + path.sep)) {
+    return false;
+  }
+  try {
+    const realRoot = fs.existsSync(resolvedRoot)
+      ? fs.realpathSync(resolvedRoot)
+      : resolvedRoot;
+    if (fs.existsSync(resolvedTarget)) {
+      const realTarget = fs.realpathSync(resolvedTarget);
+      return realTarget === realRoot || realTarget.startsWith(realRoot + path.sep);
+    }
+    let cur = path.dirname(resolvedTarget);
+    while (cur && cur !== path.dirname(cur) && !fs.existsSync(cur)) {
+      cur = path.dirname(cur);
+    }
+    if (fs.existsSync(cur)) {
+      const realAncestor = fs.realpathSync(cur);
+      return realAncestor === realRoot || realAncestor.startsWith(realRoot + path.sep);
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+function sanitizeDispositionFilename(name: string): string {
+  return name.replace(/[\r\n"\\/\x00-\x1f]/g, '_');
+}
+
+function buildLocalCorsHeaders(
+  origin: string | undefined,
+  allowedOrigins?: string[]
+): Record<string, string> {
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
+  };
+  if (origin !== undefined && isAllowedLocalOrigin(origin, allowedOrigins)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers['Vary'] = 'Origin';
+  }
+  return headers;
+}
+
+function parseJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const contentLengthHeader = req.headers['content-length'];
+    if (contentLengthHeader !== undefined) {
+      const declaredLength = Number(contentLengthHeader);
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_JSON_BODY_BYTES) {
+        req.pause();
+        reject(new PayloadTooLargeError());
+        return;
+      }
+    }
+
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    let settled = false;
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    req.on('data', (chunk) => {
+      if (settled) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buf.byteLength;
+      if (totalBytes > MAX_JSON_BODY_BYTES) {
+        req.pause();
+        fail(new PayloadTooLargeError());
+        return;
+      }
+      chunks.push(buf);
+    });
+    req.on('end', () => {
+      if (settled) return;
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        if (!raw) {
+          settled = true;
+          resolve({});
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          fail(new BadJsonBodyError('JSON request body must be an object'));
+          return;
+        }
+        settled = true;
+        resolve(parsed as Record<string, unknown>);
+      } catch (err) {
+        fail(err instanceof Error ? err : new BadJsonBodyError());
+      }
+    });
+    req.on('error', (err) => fail(err));
   });
-  res.end(JSON.stringify(data));
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -198,21 +345,57 @@ export async function startArtifactServer(
         })
       : null;
 
+  const allowedOrigins = options.allowedOrigins || options.cloud?.allowedOrigins;
+  const isLoopbackHost = isLoopbackHostAddress(host);
+  const respondJson = (
+    res: http.ServerResponse,
+    status: number,
+    data: unknown,
+    origin?: string
+  ): void => {
+    res.writeHead(status, {
+      'Content-Type': 'application/json; charset=utf-8',
+      ...buildLocalCorsHeaders(origin, allowedOrigins),
+    });
+    res.end(JSON.stringify(data));
+  };
+
   const server = http.createServer(async (req, res) => {
+    const reqOrigin = req.headers.origin;
     try {
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204, {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+      if (
+        isLoopbackHost &&
+        req.headers.host !== undefined &&
+        !isValidLoopbackHostHeader(req.headers.host)
+      ) {
+        res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'Invalid Host header' }));
+        return;
+      }
+
+      if (reqOrigin !== undefined && !isAllowedLocalOrigin(reqOrigin, allowedOrigins)) {
+        res.writeHead(403, {
+          'Content-Type': 'application/json; charset=utf-8',
+          Vary: 'Origin',
         });
+        res.end(JSON.stringify({ error: 'Cross-origin request blocked' }));
+        return;
+      }
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, buildLocalCorsHeaders(reqOrigin, allowedOrigins));
         res.end();
         return;
       }
 
-      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+      const safeHostForUrl =
+        req.headers.host &&
+        /^(?:[a-zA-Z0-9.-]+|\[[0-9a-fA-F:]+\])(?::\d{1,5})?$/.test(req.headers.host.trim())
+          ? req.headers.host.trim()
+          : `${host === '0.0.0.0' ? '127.0.0.1' : host}:${requestedPort}`;
+      const url = new URL(req.url || '/', `http://${safeHostForUrl}`);
       const pathname = url.pathname;
-      const baseOrigin = `http://${req.headers.host || `${host}:${requestedPort}`}`;
+      const baseOrigin = `http://${safeHostForUrl}`;
       const buildArtifactLinks = (slug: string) => ({
         url: `${baseOrigin}/artifacts/${encodeURIComponent(slug)}`,
         previewUrl: `${baseOrigin}/artifacts/${encodeURIComponent(slug)}`,
@@ -224,6 +407,9 @@ export async function startArtifactServer(
         res.writeHead(200, {
           'Content-Type': 'image/svg+xml; charset=utf-8',
           'Cache-Control': 'public, max-age=3600',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+          'X-Content-Type-Options': 'nosniff',
+          ...buildLocalCorsHeaders(reqOrigin, allowedOrigins),
         });
         res.end(MYARTIFACT_LOGO_SVG);
         return;
@@ -231,24 +417,34 @@ export async function startArtifactServer(
 
       // Health & Info
       if (pathname === '/api/health' && req.method === 'GET') {
-        sendJson(res, 200, {
-          ok: true,
-          mode: 'local',
-          dataDir: store.dataDir,
-          dropzoneDir: store.dropzoneDir,
-          artifactsDir: store.artifactsDir,
-          runsDir: store.runsDir,
-        });
+        respondJson(
+          res,
+          200,
+          {
+            ok: true,
+            mode: 'local',
+            dataDir: store.dataDir,
+            dropzoneDir: store.dropzoneDir,
+            artifactsDir: store.artifactsDir,
+            runsDir: store.runsDir,
+          },
+          reqOrigin
+        );
         return;
       }
 
       if (pathname === '/api/auth/providers' && req.method === 'GET') {
-        sendJson(res, 200, {
-          mode: 'local',
-          googleEnabled: false,
-          allowDeviceFlow: false,
-          realtimeWs: true,
-        });
+        respondJson(
+          res,
+          200,
+          {
+            mode: 'local',
+            googleEnabled: false,
+            allowDeviceFlow: false,
+            realtimeWs: true,
+          },
+          reqOrigin
+        );
         return;
       }
 
@@ -260,14 +456,26 @@ export async function startArtifactServer(
           ...r,
           checkpoints: store.getModelCheckpoints(r.id),
         }));
-        sendJson(res, 200, { runs, runsDir: store.runsDir });
+        respondJson(res, 200, { runs, runsDir: store.runsDir }, reqOrigin);
         return;
       }
 
       if (pathname === '/api/tensorboard/import' && req.method === 'POST') {
         const body = await parseJsonBody(req);
         if (!body.filePath || typeof body.filePath !== 'string') {
-          sendJson(res, 400, { error: 'filePath is required' });
+          respondJson(res, 400, { error: 'filePath is required' }, reqOrigin);
+          return;
+        }
+        if (!isPathWithinDir(body.filePath, store.dataDir)) {
+          respondJson(
+            res,
+            403,
+            {
+              error:
+                'File path over HTTP must reside within MyArtifact data directory; use local CLI for external paths',
+            },
+            reqOrigin
+          );
           return;
         }
         const artifact = store.importTfEventsFile(body.filePath, {
@@ -277,7 +485,7 @@ export async function startArtifactServer(
           project: typeof body.project === 'string' ? body.project : undefined,
         });
         broadcast({ type: 'artifact:updated', artifact });
-        sendJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) });
+        respondJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) }, reqOrigin);
         return;
       }
 
@@ -317,20 +525,37 @@ export async function startArtifactServer(
             summary: typeof body.summary === 'string' ? body.summary : undefined,
           });
           broadcast({ type: 'artifact:updated', artifact });
-          sendJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) });
+          respondJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) }, reqOrigin);
           return;
         }
 
         // GET /api/tensorboard/runs/:slug/checkpoints
         if (tbParts[4] === 'checkpoints' && tbParts.length === 5 && req.method === 'GET') {
           const checkpoints = store.getModelCheckpoints(runSlug);
-          sendJson(res, 200, { checkpoints });
+          respondJson(res, 200, { checkpoints }, reqOrigin);
           return;
         }
 
         // POST /api/tensorboard/runs/:slug/checkpoints
         if (tbParts[4] === 'checkpoints' && tbParts.length === 5 && req.method === 'POST') {
           const body = await parseJsonBody(req);
+          if (
+            body.sourceFilePath !== undefined &&
+            body.sourceFilePath !== '' &&
+            (typeof body.sourceFilePath !== 'string' ||
+              !isPathWithinDir(body.sourceFilePath, store.dataDir))
+          ) {
+            respondJson(
+              res,
+              403,
+              {
+                error:
+                  'File path over HTTP must reside within MyArtifact data directory; use local CLI for external paths',
+              },
+              reqOrigin
+            );
+            return;
+          }
           const contentBuf =
             typeof body.contentBase64 === 'string'
               ? Buffer.from(body.contentBase64, 'base64')
@@ -362,7 +587,12 @@ export async function startArtifactServer(
           });
 
           broadcast({ type: 'artifact:updated', artifact });
-          sendJson(res, 201, { artifact, checkpoint, ...buildArtifactLinks(artifact.slug) });
+          respondJson(
+            res,
+            201,
+            { artifact, checkpoint, ...buildArtifactLinks(artifact.slug) },
+            reqOrigin
+          );
           return;
         }
 
@@ -375,12 +605,15 @@ export async function startArtifactServer(
         ) {
           const ckpt = store.getModelCheckpointById(decodeURIComponent(tbParts[5]));
           if (!ckpt || !fs.existsSync(ckpt.filePath)) {
-            sendJson(res, 404, { error: 'Model checkpoint file not found' });
+            respondJson(res, 404, { error: 'Model checkpoint file not found' }, reqOrigin);
             return;
           }
+          const safeCkptFilename = sanitizeDispositionFilename(ckpt.name || 'checkpoint.bin');
           res.writeHead(200, {
             'Content-Type': 'application/octet-stream',
-            'Content-Disposition': `attachment; filename="${ckpt.name}"`,
+            'Content-Disposition': `attachment; filename="${safeCkptFilename}"`,
+            'X-Content-Type-Options': 'nosniff',
+            ...buildLocalCorsHeaders(reqOrigin, allowedOrigins),
           });
           fs.createReadStream(ckpt.filePath).pipe(res);
           return;
@@ -391,7 +624,7 @@ export async function startArtifactServer(
       if (pathname === '/api/notify' && req.method === 'POST') {
         const body = await parseJsonBody(req);
         broadcast(body);
-        sendJson(res, 200, { ok: true });
+        respondJson(res, 200, { ok: true }, reqOrigin);
         return;
       }
 
@@ -401,11 +634,16 @@ export async function startArtifactServer(
         const taxonomy = store.getWikiTaxonomy(projFilter);
         const indexMarkdown = store.getWikiIndexMarkdown(projFilter);
         const logMarkdown = store.getWikiLogMarkdown();
-        sendJson(res, 200, {
-          ...taxonomy,
-          indexMarkdown,
-          logMarkdown,
-        });
+        respondJson(
+          res,
+          200,
+          {
+            ...taxonomy,
+            indexMarkdown,
+            logMarkdown,
+          },
+          reqOrigin
+        );
         return;
       }
 
@@ -420,7 +658,7 @@ export async function startArtifactServer(
           tag: url.searchParams.get('tag') || undefined,
           limit: url.searchParams.get('limit') ? Number(url.searchParams.get('limit')) : undefined,
         });
-        sendJson(res, 200, { artifacts });
+        respondJson(res, 200, { artifacts }, reqOrigin);
         return;
       }
 
@@ -428,7 +666,7 @@ export async function startArtifactServer(
       if (pathname === '/api/artifacts' && req.method === 'POST') {
         const body = await parseJsonBody(req);
         if (!body.content || typeof body.content !== 'string') {
-          sendJson(res, 400, { error: 'content is required' });
+          respondJson(res, 400, { error: 'content is required' }, reqOrigin);
           return;
         }
         const input: CreateArtifactInput = {
@@ -453,7 +691,7 @@ export async function startArtifactServer(
             : store.createArtifact(input);
 
         broadcast({ type: 'artifact:created', artifact });
-        sendJson(res, 201, { artifact, ...buildArtifactLinks(artifact.slug) });
+        respondJson(res, 201, { artifact, ...buildArtifactLinks(artifact.slug) }, reqOrigin);
         return;
       }
 
@@ -466,15 +704,20 @@ export async function startArtifactServer(
         if (parts.length === 3 && req.method === 'GET') {
           const artifact = store.getArtifact(idOrSlug);
           if (!artifact) {
-            sendJson(res, 404, { error: 'Artifact not found' });
+            respondJson(res, 404, { error: 'Artifact not found' }, reqOrigin);
             return;
           }
           const storageEntries = store.getAllStorageEntries(artifact.id);
-          sendJson(res, 200, {
-            artifact,
-            storage: storageEntries,
-            ...buildArtifactLinks(artifact.slug),
-          });
+          respondJson(
+            res,
+            200,
+            {
+              artifact,
+              storage: storageEntries,
+              ...buildArtifactLinks(artifact.slug),
+            },
+            reqOrigin
+          );
           return;
         }
 
@@ -482,7 +725,7 @@ export async function startArtifactServer(
         if (parts.length === 3 && req.method === 'PUT') {
           const body = await parseJsonBody(req);
           if (typeof body.content !== 'string') {
-            sendJson(res, 400, { error: 'content string is required' });
+            respondJson(res, 400, { error: 'content string is required' }, reqOrigin);
             return;
           }
           const updateInput: UpdateArtifactInput = {
@@ -501,7 +744,7 @@ export async function startArtifactServer(
           };
           const artifact = store.updateArtifact(idOrSlug, updateInput);
           broadcast({ type: 'artifact:updated', artifact });
-          sendJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) });
+          respondJson(res, 200, { artifact, ...buildArtifactLinks(artifact.slug) }, reqOrigin);
           return;
         }
 
@@ -509,13 +752,16 @@ export async function startArtifactServer(
         if (parts[3] === 'icon.svg' && req.method === 'GET') {
           const artifact = store.getArtifact(idOrSlug);
           if (!artifact) {
-            sendJson(res, 404, { error: 'Artifact not found' });
+            respondJson(res, 404, { error: 'Artifact not found' }, reqOrigin);
             return;
           }
           const svg = resolveArtifactIconSvg(artifact);
           res.writeHead(200, {
             'Content-Type': 'image/svg+xml; charset=utf-8',
             'Cache-Control': 'no-cache',
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+            'X-Content-Type-Options': 'nosniff',
+            ...buildLocalCorsHeaders(reqOrigin, allowedOrigins),
           });
           res.end(svg);
           return;
@@ -525,11 +771,11 @@ export async function startArtifactServer(
         if (parts.length === 3 && req.method === 'DELETE') {
           const deleted = store.deleteArtifact(idOrSlug);
           if (!deleted) {
-            sendJson(res, 404, { error: 'Artifact not found' });
+            respondJson(res, 404, { error: 'Artifact not found' }, reqOrigin);
             return;
           }
           broadcast({ type: 'artifact:deleted', id: idOrSlug });
-          sendJson(res, 200, { deleted: true });
+          respondJson(res, 200, { deleted: true }, reqOrigin);
           return;
         }
 
@@ -538,10 +784,10 @@ export async function startArtifactServer(
           const versionNum = Number(parts[4]);
           const content = store.getVersionContent(idOrSlug, versionNum);
           if (content === null) {
-            sendJson(res, 404, { error: `Version ${versionNum} not found` });
+            respondJson(res, 404, { error: `Version ${versionNum} not found` }, reqOrigin);
             return;
           }
-          sendJson(res, 200, { version: versionNum, content });
+          respondJson(res, 200, { version: versionNum, content }, reqOrigin);
           return;
         }
 
@@ -549,7 +795,7 @@ export async function startArtifactServer(
         if (parts[3] === 'diff' && req.method === 'GET') {
           const artifact = store.getArtifact(idOrSlug);
           if (!artifact) {
-            sendJson(res, 404, { error: 'Artifact not found' });
+            respondJson(res, 404, { error: 'Artifact not found' }, reqOrigin);
             return;
           }
           const toVer = Number(url.searchParams.get('to') || artifact.currentVersion);
@@ -565,13 +811,18 @@ export async function startArtifactServer(
             '',
             { context: 4 }
           );
-          sendJson(res, 200, {
-            fromVersion: fromVer,
-            toVersion: toVer,
-            fromContent,
-            toContent,
-            patch,
-          });
+          respondJson(
+            res,
+            200,
+            {
+              fromVersion: fromVer,
+              toVersion: toVer,
+              fromContent,
+              toContent,
+              patch,
+            },
+            reqOrigin
+          );
           return;
         }
 
@@ -580,7 +831,7 @@ export async function startArtifactServer(
           const body = await parseJsonBody(req);
           const targetVersion = Number(body.version);
           if (!targetVersion) {
-            sendJson(res, 400, { error: 'version is required' });
+            respondJson(res, 400, { error: 'version is required' }, reqOrigin);
             return;
           }
           const artifact = store.rollbackArtifact(
@@ -589,7 +840,7 @@ export async function startArtifactServer(
             typeof body.agent === 'string' ? body.agent : 'user'
           );
           broadcast({ type: 'artifact:updated', artifact });
-          sendJson(res, 200, { artifact });
+          respondJson(res, 200, { artifact }, reqOrigin);
           return;
         }
 
@@ -597,7 +848,7 @@ export async function startArtifactServer(
         if (parts[3] === 'export' && req.method === 'GET') {
           const artifact = store.getArtifact(idOrSlug);
           if (!artifact) {
-            sendJson(res, 404, { error: 'Artifact not found' });
+            respondJson(res, 404, { error: 'Artifact not found' }, reqOrigin);
             return;
           }
           const versionParam = url.searchParams.get('version');
@@ -622,13 +873,18 @@ export async function startArtifactServer(
           });
 
           const download = url.searchParams.get('download') === '1';
+          const safeExportFilename = sanitizeDispositionFilename(
+            `${artifact.slug}-v${versionParam || artifact.currentVersion}.html`
+          );
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
+            'Content-Security-Policy':
+              "sandbox allow-scripts allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock; default-src * 'unsafe-inline' 'unsafe-eval' blob: data:;",
+            'X-Content-Type-Options': 'nosniff',
+            ...buildLocalCorsHeaders(reqOrigin, allowedOrigins),
             ...(download
               ? {
-                  'Content-Disposition': `attachment; filename="${artifact.slug}-v${
-                    versionParam || artifact.currentVersion
-                  }.html"`,
+                  'Content-Disposition': `attachment; filename="${safeExportFilename}"`,
                 }
               : {}),
           });
@@ -640,7 +896,7 @@ export async function startArtifactServer(
         if (parts[3] === 'storage') {
           const artifact = store.getArtifact(idOrSlug);
           if (!artifact) {
-            sendJson(res, 404, { error: 'Artifact not found' });
+            respondJson(res, 404, { error: 'Artifact not found' }, reqOrigin);
             return;
           }
 
@@ -649,16 +905,16 @@ export async function startArtifactServer(
             const prefix = url.searchParams.get('prefix');
             if (key !== null) {
               const result = store.getStorageValue(artifact.id, key);
-              sendJson(res, 200, { result });
+              respondJson(res, 200, { result }, reqOrigin);
               return;
             }
             if (prefix !== null) {
               const result = store.listStorageKeys(artifact.id, prefix);
-              sendJson(res, 200, { result });
+              respondJson(res, 200, { result }, reqOrigin);
               return;
             }
             const entries = store.getAllStorageEntries(artifact.id);
-            sendJson(res, 200, { entries });
+            respondJson(res, 200, { entries }, reqOrigin);
             return;
           }
 
@@ -667,7 +923,7 @@ export async function startArtifactServer(
             const key = String(body.key || '');
             const value = String(body.value ?? '');
             if (!key) {
-              sendJson(res, 400, { error: 'key is required' });
+              respondJson(res, 400, { error: 'key is required' }, reqOrigin);
               return;
             }
             const result = store.setStorageValue(artifact.id, key, value);
@@ -676,7 +932,7 @@ export async function startArtifactServer(
               artifactId: artifact.id,
               entries: store.getAllStorageEntries(artifact.id),
             });
-            sendJson(res, 200, { result });
+            respondJson(res, 200, { result }, reqOrigin);
             return;
           }
 
@@ -689,7 +945,7 @@ export async function startArtifactServer(
                 artifactId: artifact.id,
                 entries: store.getAllStorageEntries(artifact.id),
               });
-              sendJson(res, 200, { result });
+              respondJson(res, 200, { result }, reqOrigin);
               return;
             }
             store.clearStorage(artifact.id);
@@ -698,7 +954,7 @@ export async function startArtifactServer(
               artifactId: artifact.id,
               entries: [],
             });
-            sendJson(res, 200, { cleared: true });
+            respondJson(res, 200, { cleared: true }, reqOrigin);
             return;
           }
         }
@@ -706,31 +962,100 @@ export async function startArtifactServer(
 
       // Serve static frontend files if built
       if (publicDir) {
-        const safePath = path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, '');
-        let filePath = path.join(publicDir, safePath === '/' ? 'index.html' : safePath);
+        let decodedPathname: string;
+        try {
+          decodedPathname = decodeURIComponent(pathname);
+        } catch {
+          respondJson(res, 400, { error: 'Invalid URL encoding' }, reqOrigin);
+          return;
+        }
+        if (decodedPathname.includes('\0')) {
+          respondJson(res, 400, { error: 'Invalid path' }, reqOrigin);
+          return;
+        }
+        const publicRoot = path.resolve(publicDir);
+        const realPublicRoot = fs.existsSync(publicRoot) ? fs.realpathSync(publicRoot) : publicRoot;
+        const relPath = decodedPathname === '/' ? '/index.html' : decodedPathname;
+        let filePath = path.resolve(
+          publicRoot,
+          '.' + (relPath.startsWith('/') ? relPath : '/' + relPath)
+        );
+        if (filePath !== publicRoot && !filePath.startsWith(publicRoot + path.sep)) {
+          respondJson(res, 403, { error: 'Forbidden' }, reqOrigin);
+          return;
+        }
         if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-          filePath = path.join(publicDir, 'index.html');
+          filePath = path.join(publicRoot, 'index.html');
         }
         if (fs.existsSync(filePath)) {
-          const ext = path.extname(filePath).toLowerCase();
+          const realFilePath = fs.realpathSync(filePath);
+          if (realFilePath !== realPublicRoot && !realFilePath.startsWith(realPublicRoot + path.sep)) {
+            respondJson(res, 403, { error: 'Forbidden' }, reqOrigin);
+            return;
+          }
+          const ext = path.extname(realFilePath).toLowerCase();
           res.writeHead(200, {
             'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+            'X-Content-Type-Options': 'nosniff',
           });
-          fs.createReadStream(filePath).pipe(res);
+          fs.createReadStream(realFilePath).pipe(res);
           return;
         }
       }
 
-      sendJson(res, 404, { error: 'Not found' });
+      respondJson(res, 404, { error: 'Not found' }, reqOrigin);
     } catch (err) {
+      if (err instanceof PayloadTooLargeError) {
+        if (!res.headersSent) {
+          res.writeHead(413, {
+            ...buildLocalCorsHeaders(reqOrigin, allowedOrigins),
+            'Content-Type': 'application/json; charset=utf-8',
+            Connection: 'close',
+          });
+          res.end(JSON.stringify({ error: 'Request body too large' }), () => {
+            req.destroy();
+          });
+        } else {
+          req.destroy();
+        }
+        return;
+      }
+      if (err instanceof SyntaxError || err instanceof BadJsonBodyError) {
+        respondJson(res, 400, { error: 'Invalid JSON request body' }, reqOrigin);
+        return;
+      }
+      if (err instanceof URIError) {
+        respondJson(res, 400, { error: 'Invalid URL encoding' }, reqOrigin);
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
-      sendJson(res, 500, { error: message });
+      respondJson(res, 500, { error: message }, reqOrigin);
     }
   });
 
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    verifyClient: (info, done) => {
+      const req = info.req;
+      if (
+        isLoopbackHost &&
+        req.headers.host !== undefined &&
+        !isValidLoopbackHostHeader(req.headers.host)
+      ) {
+        done(false, 403, 'Invalid Host header');
+        return;
+      }
+      if (!isAllowedLocalOrigin(req.headers.origin, allowedOrigins)) {
+        done(false, 403, 'Cross-origin request blocked');
+        return;
+      }
+      done(true);
+    },
+  });
   wss.on('connection', (ws) => {
     clients.add(ws);
+    ws.on('error', () => clients.delete(ws));
     ws.on('close', () => clients.delete(ws));
   });
 
