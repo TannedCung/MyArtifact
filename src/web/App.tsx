@@ -43,9 +43,15 @@ import {
   FolderOpen,
   BookOpen,
   ChevronRight,
+  Box,
+  Share2,
 } from 'lucide-react';
 import { SandboxRenderer } from './components/SandboxRenderer.js';
 import { DiffViewer } from './components/DiffViewer.js';
+import { CloudAuthGate } from './components/CloudAuthGate.js';
+import { WorkspaceBar } from './components/WorkspaceBar.js';
+import { BatchShareModal, type ShareModalTarget } from './components/BatchShareModal.js';
+import { cloudFetch } from './cloud-api.js';
 import {
   MYARTIFACT_LOGO_SVG,
   resolveArtifactIconSvg,
@@ -62,21 +68,32 @@ import type {
   ArtifactMetadata,
   ArtifactType,
   StorageEntry,
+  UserProfile,
+  Workspace,
 } from '../core/types.js';
 
 type ActiveTab = 'preview' | 'code' | 'diff' | 'storage';
 type ViewportSize = 'desktop' | 'tablet' | 'mobile';
 type StudioTheme = 'day' | 'night';
-type PageMode = 'artifact' | 'studio';
+type PageMode = 'artifact' | 'studio' | 'cli_authorize' | 'device_authorize';
 
 function parseRouteFromLocation(): {
   mode: PageMode;
   artifactSlug: string | null;
   version: number | null;
   tab: ActiveTab | null;
+  shareToken: string | null;
+  workspaceParam: string | null;
 } {
   if (typeof window === 'undefined') {
-    return { mode: 'studio', artifactSlug: null, version: null, tab: null };
+    return {
+      mode: 'studio',
+      artifactSlug: null,
+      version: null,
+      tab: null,
+      shareToken: null,
+      workspaceParam: null,
+    };
   }
   const { pathname, search } = window.location;
   const params = new URLSearchParams(search);
@@ -88,6 +105,41 @@ function parseRouteFromLocation(): {
     tabParam && ['preview', 'code', 'diff', 'storage'].includes(tabParam)
       ? tabParam
       : null;
+  const shareTokenFromQuery = params.get('share');
+  const workspaceParam = params.get('ws') || params.get('workspace');
+
+  if (pathname === '/auth/cli/authorize') {
+    return {
+      mode: 'cli_authorize',
+      artifactSlug: null,
+      version: null,
+      tab: null,
+      shareToken: null,
+      workspaceParam,
+    };
+  }
+  if (pathname === '/auth/device') {
+    return {
+      mode: 'device_authorize',
+      artifactSlug: null,
+      version: null,
+      tab: null,
+      shareToken: null,
+      workspaceParam,
+    };
+  }
+
+  const shareMatch = pathname.match(/^\/s\/([^/?#]+)/);
+  if (shareMatch) {
+    return {
+      mode: 'studio',
+      artifactSlug: params.get('artifact'),
+      version,
+      tab,
+      shareToken: decodeURIComponent(shareMatch[1]),
+      workspaceParam,
+    };
+  }
 
   const pathMatch = pathname.match(/^\/(?:artifacts|a)\/([^/?#]+)/);
   if (pathMatch) {
@@ -96,6 +148,8 @@ function parseRouteFromLocation(): {
       artifactSlug: decodeURIComponent(pathMatch[1]),
       version,
       tab,
+      shareToken: shareTokenFromQuery,
+      workspaceParam,
     };
   }
 
@@ -108,6 +162,8 @@ function parseRouteFromLocation(): {
       artifactSlug: queryArtifact,
       version,
       tab,
+      shareToken: shareTokenFromQuery,
+      workspaceParam,
     };
   }
 
@@ -116,6 +172,8 @@ function parseRouteFromLocation(): {
     artifactSlug: queryArtifact,
     version,
     tab,
+    shareToken: shareTokenFromQuery,
+    workspaceParam,
   };
 }
 
@@ -185,6 +243,7 @@ const TEMPLATE_ICONS: Record<
 > = {
   blank: FilePlus,
   dashboard: LayoutDashboard,
+  'scene-3d': Box,
   report: FileText,
   diagram: Workflow,
   tool: Calculator,
@@ -318,6 +377,83 @@ export default function App() {
     logFilePath?: string;
   } | null>(null);
 
+  // Cloud auth, RBAC & batch sharing state
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [isCloudMode, setIsCloudMode] = useState<boolean>(false);
+  const [realtimeWsEnabled, setRealtimeWsEnabled] = useState<boolean>(true);
+  const [httpSynced, setHttpSynced] = useState<boolean>(false);
+  const [googleEnabled, setGoogleEnabled] = useState<boolean>(false);
+  const [authUser, setAuthUser] = useState<UserProfile | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
+    initialRoute.workspaceParam
+  );
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [shareToken] = useState<string | null>(initialRoute.shareToken);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
+  const [shareModalTarget, setShareModalTarget] = useState<ShareModalTarget | null>(null);
+
+  const apiFetch = useCallback(
+    (input: string, init: RequestInit = {}) =>
+      cloudFetch(input, init, {
+        workspaceId: activeWorkspaceId,
+        shareToken,
+        csrfToken,
+      }),
+    [activeWorkspaceId, shareToken, csrfToken]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const provRes = await fetch('/api/auth/providers');
+        const prov = provRes.ok ? await provRes.json() : { mode: 'local' };
+        if (cancelled) return;
+        if (prov.mode !== 'cloud') {
+          setIsCloudMode(false);
+          setRealtimeWsEnabled(true);
+          setAuthReady(true);
+          return;
+        }
+        setIsCloudMode(true);
+        setRealtimeWsEnabled(Boolean(prov.realtimeWs));
+        setGoogleEnabled(Boolean(prov.googleEnabled));
+
+        const meRes = await cloudFetch('/api/auth/me', {}, { shareToken });
+        const me = meRes.ok ? await meRes.json() : { authenticated: false };
+        if (cancelled) return;
+
+        if (me.authenticated && me.user) {
+          setAuthUser(me.user);
+          setWorkspaces(me.workspaces || []);
+          setCsrfToken(me.csrfToken || null);
+          setActiveWorkspaceId(
+            (prev) => prev || me.defaultWorkspaceId || me.workspaces?.[0]?.id || null
+          );
+        } else {
+          setAuthUser(null);
+          if (shareToken) {
+            const shareRes = await fetch(`/api/share/${encodeURIComponent(shareToken)}`);
+            if (shareRes.ok) {
+              const bundle = await shareRes.json();
+              if (!cancelled && bundle.workspace?.id) {
+                setActiveWorkspaceId(bundle.workspace.id);
+              }
+            }
+          }
+        }
+      } catch {
+        // Fallback to local mode if providers check fails
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shareToken]);
+
   const openWikiModal = useCallback(
     async (tab: 'index' | 'log' = 'index', projOverride?: string) => {
       setWikiTab(tab);
@@ -325,7 +461,7 @@ export default function App() {
       try {
         const proj = projOverride ?? selectedProject;
         const qs = proj && proj !== 'all' ? `?project=${encodeURIComponent(proj)}` : '';
-        const res = await fetch(`/api/wiki${qs}`);
+        const res = await apiFetch(`/api/wiki${qs}`);
         if (res.ok) {
           const data = await res.json();
           setWikiData(data);
@@ -334,7 +470,7 @@ export default function App() {
         // Ignore fetch errors
       }
     },
-    [selectedProject]
+    [selectedProject, apiFetch]
   );
 
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
@@ -441,7 +577,10 @@ export default function App() {
 
   // Fetch artifacts list
   const fetchList = useCallback(async () => {
-    const res = await fetch('/api/artifacts');
+    if (!authReady) return;
+    if (isCloudMode && !authUser && !shareToken) return;
+    const res = await apiFetch('/api/artifacts');
+    if (!res.ok) return;
     const data = await res.json();
     const list: ArtifactMetadata[] = (data.artifacts || []).sort(
       (a: ArtifactMetadata, b: ArtifactMetadata) =>
@@ -457,30 +596,35 @@ export default function App() {
         ) || list[0];
       setSelectedId(target.id);
     }
-  }, [selectedId, pageMode]);
+  }, [authReady, isCloudMode, authUser, shareToken, apiFetch, selectedId, pageMode]);
 
-  const fetchDetail = useCallback(async (id: string, preserveVersion = false) => {
-    const res = await fetch(`/api/artifacts/${encodeURIComponent(id)}`);
-    if (!res.ok) {
-      setNotFoundSlug(id);
-      return;
-    }
-    setNotFoundSlug(null);
-    const data = await res.json();
-    const art: ArtifactDetail = data.artifact;
-    setDetail(art);
-    setStorageEntries(data.storage || []);
-    if (!preserveVersion) {
-      const route = parseRouteFromLocation();
-      const targetVer =
-        route.version && route.version <= art.currentVersion
-          ? route.version
-          : art.currentVersion;
-      setSelectedVersion(targetVer);
-      setVersionContent(art.content);
-      setDraftCode(art.content);
-    }
-  }, []);
+  const fetchDetail = useCallback(
+    async (id: string, preserveVersion = false) => {
+      if (!authReady) return;
+      if (isCloudMode && !authUser && !shareToken) return;
+      const res = await apiFetch(`/api/artifacts/${encodeURIComponent(id)}`);
+      if (!res.ok) {
+        setNotFoundSlug(id);
+        return;
+      }
+      setNotFoundSlug(null);
+      const data = await res.json();
+      const art: ArtifactDetail = data.artifact;
+      setDetail(art);
+      setStorageEntries(data.storage || []);
+      if (!preserveVersion) {
+        const route = parseRouteFromLocation();
+        const targetVer =
+          route.version && route.version <= art.currentVersion
+            ? route.version
+            : art.currentVersion;
+        setSelectedVersion(targetVer);
+        setVersionContent(art.content);
+        setDraftCode(art.content);
+      }
+    },
+    [authReady, isCloudMode, authUser, shareToken, apiFetch]
+  );
 
   useEffect(() => {
     let link = document.querySelector<HTMLLinkElement>('link#app-favicon');
@@ -527,7 +671,7 @@ export default function App() {
       setDraftCode(detail.content);
       return;
     }
-    fetch(
+    apiFetch(
       `/api/artifacts/${encodeURIComponent(detail.id)}/versions/${selectedVersion}`
     )
       .then((r) => r.json())
@@ -537,12 +681,19 @@ export default function App() {
           setDraftCode(data.content);
         }
       });
-  }, [detail, selectedVersion]);
+  }, [detail, selectedVersion, apiFetch]);
 
-  // WebSocket live reload connection
+  // WebSocket live reload connection (only when enabled; skipped on serverless deployments)
   useEffect(() => {
+    if (!authReady) return;
+    if (isCloudMode && !realtimeWsEnabled) return;
+    if (isCloudMode && !authUser && !shareToken) return;
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+    const wsParams = new URLSearchParams();
+    if (activeWorkspaceId) wsParams.set('workspace', activeWorkspaceId);
+    if (shareToken) wsParams.set('share', shareToken);
+    const wsQs = wsParams.toString();
+    const ws = new WebSocket(`${proto}//${window.location.host}/ws${wsQs ? `?${wsQs}` : ''}`);
     ws.onopen = () => setWsConnected(true);
     ws.onclose = () => setWsConnected(false);
     ws.onmessage = (event) => {
@@ -556,7 +707,7 @@ export default function App() {
           ) {
             fetchDetail(msg.artifact.id);
           }
-        } else if (msg.type === 'artifact:deleted') {
+        } else if (msg.type === 'artifact:deleted' || msg.type === 'acl:updated') {
           fetchList();
         } else if (msg.type === 'storage:updated') {
           if (
@@ -571,7 +722,40 @@ export default function App() {
       }
     };
     return () => ws.close();
-  }, [fetchList, fetchDetail, selectedId, detail]);
+  }, [
+    authReady,
+    isCloudMode,
+    realtimeWsEnabled,
+    authUser,
+    shareToken,
+    activeWorkspaceId,
+    fetchList,
+    fetchDetail,
+    selectedId,
+    detail,
+  ]);
+
+  const activeWorkspace = useMemo(
+    () =>
+      workspaces.find((w) => w.id === activeWorkspaceId || w.slug === activeWorkspaceId) ||
+      workspaces[0] ||
+      null,
+    [workspaces, activeWorkspaceId]
+  );
+
+  const canEdit =
+    !isCloudMode ||
+    Boolean(detail?.effectiveRole && detail.effectiveRole !== 'viewer');
+  const canAdmin =
+    !isCloudMode ||
+    detail?.effectiveRole === 'admin' ||
+    detail?.effectiveRole === 'owner';
+  const canCreateInWorkspace =
+    !isCloudMode ||
+    Boolean(
+      authUser &&
+        (!activeWorkspace?.effectiveRole || activeWorkspace.effectiveRole !== 'viewer')
+    );
 
   const viewVersion = detail
     ? selectedVersion ?? detail.currentVersion
@@ -583,10 +767,130 @@ export default function App() {
     detail && !isHistorical && draftCode !== versionContent
   );
 
+  // Stateless HTTP Sync for serverless deployments (Vercel Hobby) where /ws is disabled
+  const syncStateRef = useRef({
+    selectedId,
+    isDirty,
+    fetchList,
+    fetchDetail,
+  });
+  syncStateRef.current = { selectedId, isDirty, fetchList, fetchDetail };
+
+  useEffect(() => {
+    if (!authReady || !isCloudMode || realtimeWsEnabled) return;
+    if (!authUser && !shareToken) return;
+
+    let cancelled = false;
+    let etag: string | null = null;
+    let lastRevision: string | null = null;
+    let lastArtRev: string | null = null;
+    let lastStorageRev: string | null = null;
+    let lastSelectedKey = '';
+    let lastActivityAt = Date.now();
+    let inFlight = false;
+
+    const markActive = () => {
+      lastActivityAt = Date.now();
+    };
+
+    const checkSync = async (force: boolean) => {
+      if (cancelled || inFlight) return;
+      if (!force) {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        if (Date.now() - lastActivityAt > 180_000) return;
+      }
+
+      const {
+        selectedId: curSelectedId,
+        isDirty: curIsDirty,
+        fetchList: doFetchList,
+        fetchDetail: doFetchDetail,
+      } = syncStateRef.current;
+      const curSelectedKey = curSelectedId || '';
+      const sameSelectedArtifact = curSelectedKey === lastSelectedKey;
+
+      inFlight = true;
+      try {
+        const qs = curSelectedId
+          ? `?artifact=${encodeURIComponent(curSelectedId)}`
+          : '';
+        const res = await apiFetch(`/api/sync${qs}`, {
+          headers:
+            sameSelectedArtifact && etag ? { 'If-None-Match': etag } : undefined,
+        });
+        if (cancelled) return;
+        if (res.status === 304) {
+          setHttpSynced(true);
+          return;
+        }
+        if (!res.ok) return;
+
+        setHttpSynced(true);
+        const nextEtag = res.headers.get('etag');
+        if (nextEtag) etag = nextEtag;
+        const sync = (await res.json()) as {
+          revision?: string;
+          artifactRevision?: string;
+          storageRevision?: string;
+        };
+        if (cancelled || !sync.revision) return;
+
+        if (sameSelectedArtifact && lastRevision !== null && sync.revision !== lastRevision) {
+          void doFetchList();
+          if (
+            curSelectedId &&
+            !curIsDirty &&
+            ((sync.artifactRevision || null) !== lastArtRev ||
+              (sync.storageRevision || null) !== lastStorageRev)
+          ) {
+            void doFetchDetail(curSelectedId, true);
+          }
+        }
+
+        lastSelectedKey = curSelectedKey;
+        lastRevision = sync.revision;
+        lastArtRev = sync.artifactRevision || null;
+        lastStorageRev = sync.storageRevision || null;
+      } catch {
+        // Transient network error; retry on next focus or tick
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const onFocus = () => {
+      markActive();
+      void checkSync(true);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        markActive();
+        void checkSync(true);
+      }
+    };
+
+    window.addEventListener('pointerdown', markActive, { passive: true });
+    window.addEventListener('keydown', markActive, { passive: true });
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    void checkSync(true);
+    const intervalId = setInterval(() => void checkSync(false), 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      window.removeEventListener('pointerdown', markActive);
+      window.removeEventListener('keydown', markActive);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [authReady, isCloudMode, realtimeWsEnabled, authUser, shareToken, activeWorkspaceId, apiFetch]);
+
   const handleSaveIteration = useCallback(async () => {
-    if (!detail || isHistorical || !isDirty) return;
+    if (!detail || isHistorical || !isDirty || !canEdit) return;
     const nextVer = detail.currentVersion + 1;
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/artifacts/${encodeURIComponent(detail.id)}`,
       {
         method: 'PUT',
@@ -604,13 +908,13 @@ export default function App() {
       await fetchList();
       showToast(`Saved v${nextVer}`);
     }
-  }, [detail, isHistorical, isDirty, draftCode, commitSummary, fetchDetail, fetchList, showToast]);
+  }, [detail, isHistorical, isDirty, canEdit, draftCode, commitSummary, apiFetch, fetchDetail, fetchList, showToast]);
 
   const handleRollback = useCallback(
     async (targetVersion: number) => {
-      if (!detail) return;
+      if (!detail || !canEdit) return;
       const nextVer = detail.currentVersion + 1;
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/artifacts/${encodeURIComponent(detail.id)}/rollback`,
         {
           method: 'POST',
@@ -624,12 +928,18 @@ export default function App() {
         showToast(`Restored v${targetVersion} as v${nextVer}`);
       }
     },
-    [detail, fetchDetail, fetchList, showToast]
+    [detail, canEdit, apiFetch, fetchDetail, fetchList, showToast]
   );
 
   const handleExportHtml = useCallback(() => {
     if (!detail) return;
-    const url = `/api/artifacts/${encodeURIComponent(detail.id)}/export?version=${viewVersion}&download=1`;
+    const extraParams = new URLSearchParams({
+      version: String(viewVersion),
+      download: '1',
+      ...(activeWorkspaceId ? { workspace: activeWorkspaceId } : {}),
+      ...(shareToken ? { share: shareToken } : {}),
+    });
+    const url = `/api/artifacts/${encodeURIComponent(detail.id)}/export?${extraParams.toString()}`;
     const link = document.createElement('a');
     link.href = url;
     link.download = `${detail.slug}-v${viewVersion}.html`;
@@ -637,7 +947,7 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
     showToast(`Exported ${detail.slug}-v${viewVersion}.html`);
-  }, [detail, viewVersion, showToast]);
+  }, [detail, viewVersion, activeWorkspaceId, shareToken, showToast]);
 
   const handleCopySource = useCallback(async () => {
     try {
@@ -675,8 +985,8 @@ export default function App() {
   const handleAddStorageEntry = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const key = newStorageKey.trim();
-    if (!detail || !key) return;
-    const res = await fetch(
+    if (!detail || !key || !canEdit) return;
+    const res = await apiFetch(
       `/api/artifacts/${encodeURIComponent(detail.id)}/storage`,
       {
         method: 'PUT',
@@ -693,8 +1003,8 @@ export default function App() {
   };
 
   const handleDeleteStorageKey = async (key: string) => {
-    if (!detail) return;
-    const res = await fetch(
+    if (!detail || !canEdit) return;
+    const res = await apiFetch(
       `/api/artifacts/${encodeURIComponent(detail.id)}/storage?key=${encodeURIComponent(key)}`,
       { method: 'DELETE' }
     );
@@ -721,7 +1031,7 @@ export default function App() {
         ? [`template:${template}`, `theme:${themeId}`]
         : [];
 
-    const res = await fetch('/api/artifacts', {
+    const res = await apiFetch('/api/artifacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -747,10 +1057,10 @@ export default function App() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!detail || confirmDeleteText !== detail.slug) return;
+    if (!detail || confirmDeleteText !== detail.slug || !canAdmin) return;
     const deletedTitle = detail.title;
     const deletedId = detail.id;
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/artifacts/${encodeURIComponent(deletedId)}`,
       { method: 'DELETE' }
     );
@@ -1089,6 +1399,48 @@ export default function App() {
     return artifacts.filter((a) => linkedSlugs.has(a.slug));
   }, [detail, artifacts]);
 
+  const toggleBatchSelect = useCallback((id: string) => {
+    setSelectedBatchIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  if (!authReady) {
+    return (
+      <div className="h-screen w-screen bg-canvas text-ink-2 flex items-center justify-center text-[13px]">
+        Initializing MyArtifact Studio…
+      </div>
+    );
+  }
+
+  if (pageMode === 'cli_authorize' || pageMode === 'device_authorize') {
+    return (
+      <CloudAuthGate
+        mode={pageMode === 'cli_authorize' ? 'cli_authorize' : 'device'}
+        authenticated={Boolean(authUser)}
+        user={authUser}
+        workspaces={workspaces}
+        csrfToken={csrfToken}
+        googleEnabled={googleEnabled}
+      />
+    );
+  }
+
+  if (isCloudMode && !authUser && !shareToken) {
+    return (
+      <CloudAuthGate
+        mode="signin"
+        authenticated={false}
+        user={null}
+        workspaces={[]}
+        googleEnabled={googleEnabled}
+      />
+    );
+  }
+
   // ==========================================================================
   // STANDALONE CLAUDE ARTIFACT DETAIL PAGE (/artifacts/:slug or /?artifact=:slug)
   // ==========================================================================
@@ -1386,6 +1738,28 @@ export default function App() {
                   <span className="hidden md:inline">Export</span>
                 </button>
 
+                {isCloudMode && canAdmin && (
+                  <button
+                    onClick={() =>
+                      setShareModalTarget({
+                        kind: 'artifacts',
+                        artifactIds: [detail.id],
+                        label: detail.title,
+                      })
+                    }
+                    className="h-[30px] px-2.5 rounded-[6px] border border-line-strong bg-raised hover:bg-sunken text-ink text-[12px] font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <Share2 className="w-[13px] h-[13px] text-sage" />
+                    <span>Share</span>
+                  </button>
+                )}
+
+                {isCloudMode && !canEdit && (
+                  <span className="h-[24px] px-2 rounded-[5px] bg-sunken text-ink-3 font-mono text-[11px] flex items-center">
+                    View only
+                  </span>
+                )}
+
                 {/* Theme toggle */}
                 <button
                   onClick={toggleTheme}
@@ -1476,20 +1850,22 @@ export default function App() {
         )}
 
         {/* Historical Version Banner */}
-        {detail && isHistorical && !zenMode && (
+            {detail && isHistorical && !zenMode && (
           <div className="flex items-center gap-[10px] px-5 py-2 bg-brass-soft border-b border-brass-line text-[13px] text-[var(--c-banner-ink)] shrink-0">
             <History className="w-[15px] h-[15px] text-[var(--c-brass-icon)] shrink-0" />
             <span className="flex-1">
               Viewing <strong className="font-semibold">v{viewVersion}</strong> of{' '}
               {detail.currentVersion} · read-only snapshot.
             </span>
-            <button
-              onClick={() => handleRollback(viewVersion)}
-              className="h-[26px] px-2.5 rounded-[6px] bg-brass text-[#2A2110] text-[12px] font-semibold flex items-center gap-1.5 hover:opacity-90"
-            >
-              <RotateCcw className="w-[12px] h-[12px]" />
-              <span>Restore as v{detail.currentVersion + 1}</span>
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => handleRollback(viewVersion)}
+                className="h-[26px] px-2.5 rounded-[6px] bg-brass text-[#2A2110] text-[12px] font-semibold flex items-center gap-1.5 hover:opacity-90"
+              >
+                <RotateCcw className="w-[12px] h-[12px]" />
+                <span>Restore as v{detail.currentVersion + 1}</span>
+              </button>
+            )}
             <button
               onClick={() => setSelectedVersion(detail.currentVersion)}
               className="h-[26px] px-2.5 rounded-[6px] border border-brass-line bg-raised text-brass-ink text-[12px] font-medium hover:bg-canvas"
@@ -1514,6 +1890,9 @@ export default function App() {
                     language={detail.language}
                     content={versionContent}
                     storageEntries={storageEntries}
+                    readOnlyStorage={!canEdit}
+                    workspaceId={activeWorkspaceId}
+                    shareToken={shareToken}
                     onStorageMutated={() => fetchDetail(detail.id, true)}
                   />
                 </div>
@@ -1550,6 +1929,9 @@ export default function App() {
                         language={detail.language}
                         content={versionContent}
                         storageEntries={storageEntries}
+                        readOnlyStorage={!canEdit}
+                        workspaceId={activeWorkspaceId}
+                        shareToken={shareToken}
                         onStorageMutated={() => fetchDetail(detail.id, true)}
                       />
                     </div>
@@ -1578,7 +1960,7 @@ export default function App() {
                   <textarea
                     value={draftCode}
                     onChange={(e) => setDraftCode(e.target.value)}
-                    readOnly={isHistorical}
+                    readOnly={isHistorical || !canEdit}
                     spellCheck={false}
                     rows={lineCount}
                     aria-label="Source editor"
@@ -1627,7 +2009,7 @@ export default function App() {
 
                   <button
                     onClick={handleSaveIteration}
-                    disabled={!isDirty}
+                    disabled={!isDirty || !canEdit}
                     className="h-[32px] px-3.5 rounded-[6px] bg-sage hover:bg-sage-hover text-canvas text-[13px] font-medium flex items-center gap-2 disabled:opacity-40"
                   >
                     <span>Save as v{detail.currentVersion + 1}</span>
@@ -1647,6 +2029,9 @@ export default function App() {
                 versions={detail.versions}
                 currentVersion={detail.currentVersion}
                 hideUnchanged={hideUnchanged}
+                readOnly={!canEdit}
+                workspaceId={activeWorkspaceId}
+                shareToken={shareToken}
                 onRollback={handleRollback}
               />
             )}
@@ -1713,6 +2098,7 @@ export default function App() {
                               {formatBytes(byteLen)}
                             </span>
                             <button
+                              disabled={!canEdit}
                               onClick={() => handleDeleteStorageKey(entry.key)}
                               title="Delete key"
                               className="w-[28px] h-[28px] rounded-[6px] bg-transparent hover:bg-danger-soft text-ink-3 hover:text-danger-ink flex items-center justify-center transition-colors"
@@ -1742,7 +2128,7 @@ export default function App() {
                       />
                       <button
                         type="submit"
-                        disabled={!newStorageKey.trim()}
+                        disabled={!newStorageKey.trim() || !canEdit}
                         className="h-[32px] px-3.5 rounded-[6px] bg-sage hover:bg-sage-hover text-canvas text-[13px] font-medium disabled:opacity-40 transition"
                       >
                         Set key
@@ -1934,6 +2320,17 @@ export default function App() {
             <span>{toast}</span>
           </div>
         )}
+        {isCloudMode && activeWorkspaceId && (
+          <BatchShareModal
+            open={Boolean(shareModalTarget)}
+            workspaceId={activeWorkspaceId}
+            target={shareModalTarget}
+            user={authUser}
+            csrfToken={csrfToken}
+            onClose={() => setShareModalTarget(null)}
+            onShared={(msg) => showToast(msg)}
+          />
+        )}
       </div>
     );
   }
@@ -1956,7 +2353,12 @@ export default function App() {
               {wsConnected ? (
                 <span className="text-[11px] text-[var(--c-live-ink)] flex items-center gap-[5px] whitespace-nowrap">
                   <span className="w-[6px] h-[6px] rounded-full bg-[var(--c-live-dot)] shadow-[0_0_0_2px_var(--color-sage-soft)]" />
-                  Live · :4173
+                  {isCloudMode ? 'Cloud · Live' : 'Live · :4173'}
+                </span>
+              ) : isCloudMode && !realtimeWsEnabled && (httpSynced || authUser || shareToken) ? (
+                <span className="text-[11px] text-[var(--c-live-ink)] flex items-center gap-[5px] whitespace-nowrap">
+                  <span className="w-[6px] h-[6px] rounded-full bg-[var(--c-live-dot)] shadow-[0_0_0_2px_var(--color-sage-soft)]" />
+                  Cloud · Synced
                 </span>
               ) : (
                 <span className="text-[11px] text-ink-3 flex items-center gap-[5px] whitespace-nowrap">
@@ -1990,15 +2392,45 @@ export default function App() {
             </button>
             <button
               onClick={() => openCreateModal('blank')}
+              disabled={!canCreateInWorkspace}
               title="New artifact (N)"
               aria-label="New artifact"
-              className="h-[28px] px-[10px] rounded-[6px] bg-sage hover:bg-sage-hover text-canvas text-[12px] font-medium flex items-center gap-[5px] transition-colors"
+              className="h-[28px] px-[10px] rounded-[6px] bg-sage hover:bg-sage-hover disabled:opacity-40 text-canvas text-[12px] font-medium flex items-center gap-[5px] transition-colors"
             >
               <Plus className="w-[14px] h-[14px]" />
               New
             </button>
           </div>
         </div>
+
+        {isCloudMode && authUser && activeWorkspaceId && (
+          <WorkspaceBar
+            user={authUser}
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            csrfToken={csrfToken}
+            onSelectWorkspace={(wsId) => {
+              setActiveWorkspaceId(wsId);
+              setSelectedId(null);
+              setDetail(null);
+              setSelectedBatchIds(new Set());
+            }}
+            onWorkspaceCreated={(ws) => {
+              setWorkspaces((prev) => [...prev, ws]);
+              setActiveWorkspaceId(ws.id);
+              setSelectedId(null);
+              setDetail(null);
+              setSelectedBatchIds(new Set());
+            }}
+            onLoggedOut={() => {
+              setAuthUser(null);
+              setWorkspaces([]);
+              setActiveWorkspaceId(null);
+              setDetail(null);
+              setArtifacts([]);
+            }}
+          />
+        )}
 
         {/* 2. Search trigger + LLM Wiki controls */}
         <div className="pt-3 px-3 pb-2 flex flex-col gap-2 shrink-0 border-b border-line">
@@ -2107,28 +2539,45 @@ export default function App() {
                     className="flex flex-col gap-0.5 rounded-[8px] border border-line bg-raised/50 p-1"
                   >
                     {/* Project Header */}
-                    <button
-                      onClick={() =>
-                        setCollapsedProjects((prev) => ({
-                          ...prev,
-                          [project]: !prev[project],
-                        }))
-                      }
-                      className="flex items-center justify-between px-2 py-1 rounded-[6px] text-[11.5px] font-mono font-semibold text-ink hover:bg-sunken transition-colors"
-                    >
-                      <span className="flex items-center gap-1.5 truncate">
-                        {projCollapsed ? (
-                          <ChevronRight className="w-3.5 h-3.5 text-ink-3 shrink-0" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-ink-3 shrink-0" />
-                        )}
-                        <Layers className="w-3.5 h-3.5 text-sage shrink-0" />
-                        <span className="truncate">{project}</span>
-                      </span>
-                      <span className="text-[10.5px] text-sage font-semibold px-1.5 rounded bg-sage-soft">
-                        {count}
-                      </span>
-                    </button>
+                    <div className="flex items-center gap-1 pr-1">
+                      <button
+                        onClick={() =>
+                          setCollapsedProjects((prev) => ({
+                            ...prev,
+                            [project]: !prev[project],
+                          }))
+                        }
+                        className="flex-1 min-w-0 flex items-center justify-between px-2 py-1 rounded-[6px] text-[11.5px] font-mono font-semibold text-ink hover:bg-sunken transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5 truncate">
+                          {projCollapsed ? (
+                            <ChevronRight className="w-3.5 h-3.5 text-ink-3 shrink-0" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-ink-3 shrink-0" />
+                          )}
+                          <Layers className="w-3.5 h-3.5 text-sage shrink-0" />
+                          <span className="truncate">{project}</span>
+                        </span>
+                        <span className="text-[10.5px] text-sage font-semibold px-1.5 rounded bg-sage-soft">
+                          {count}
+                        </span>
+                      </button>
+                      {isCloudMode && authUser && (
+                        <button
+                          onClick={() =>
+                            setShareModalTarget({
+                              kind: 'project',
+                              projectSlug: project,
+                              label: `Project: ${project}`,
+                            })
+                          }
+                          title={`Share entire project "${project}"`}
+                          className="w-[22px] h-[22px] rounded-[5px] hover:bg-sage-soft text-ink-3 hover:text-sage flex items-center justify-center shrink-0 transition-colors"
+                        >
+                          <Share2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
 
                     {/* Categories within Project */}
                     {!projCollapsed &&
@@ -2137,79 +2586,108 @@ export default function App() {
                         const isCollapsed = Boolean(collapsedCategories[catKey]);
                         return (
                           <div key={catKey} className="flex flex-col gap-0.5 pl-2">
-                            <button
-                              onClick={() =>
-                                setCollapsedCategories((prev) => ({
-                                  ...prev,
-                                  [catKey]: !prev[catKey],
-                                }))
-                              }
-                              className="flex items-center justify-between px-2 py-1 rounded-[6px] text-[11px] font-mono font-medium text-ink-2 hover:bg-sunken transition-colors"
-                            >
-                              <span className="flex items-center gap-1.5 truncate">
-                                {isCollapsed ? (
-                                  <ChevronRight className="w-3 h-3 text-ink-3 shrink-0" />
-                                ) : (
-                                  <ChevronDown className="w-3 h-3 text-ink-3 shrink-0" />
-                                )}
-                                <FolderOpen className="w-3 h-3 text-sage shrink-0" />
-                                <span className="truncate">{cat}</span>
-                              </span>
-                              <span className="text-[10px] text-ink-3 px-1.5 rounded bg-sunken">
-                                {items.length}
-                              </span>
-                            </button>
+                            <div className="flex items-center gap-1 pr-1">
+                              <button
+                                onClick={() =>
+                                  setCollapsedCategories((prev) => ({
+                                    ...prev,
+                                    [catKey]: !prev[catKey],
+                                  }))
+                                }
+                                className="flex-1 min-w-0 flex items-center justify-between px-2 py-1 rounded-[6px] text-[11px] font-mono font-medium text-ink-2 hover:bg-sunken transition-colors"
+                              >
+                                <span className="flex items-center gap-1.5 truncate">
+                                  {isCollapsed ? (
+                                    <ChevronRight className="w-3 h-3 text-ink-3 shrink-0" />
+                                  ) : (
+                                    <ChevronDown className="w-3 h-3 text-ink-3 shrink-0" />
+                                  )}
+                                  <FolderOpen className="w-3 h-3 text-sage shrink-0" />
+                                  <span className="truncate">{cat}</span>
+                                </span>
+                                <span className="text-[10px] text-ink-3 px-1.5 rounded bg-sunken">
+                                  {items.length}
+                                </span>
+                              </button>
+                              {isCloudMode && authUser && (
+                                <button
+                                  onClick={() =>
+                                    setShareModalTarget({
+                                      kind: 'category',
+                                      projectSlug: project,
+                                      prefix: cat,
+                                      label: `${project} / ${cat}`,
+                                    })
+                                  }
+                                  title={`Share category "${cat}"`}
+                                  className="w-[20px] h-[20px] rounded-[4px] hover:bg-sage-soft text-ink-3 hover:text-sage flex items-center justify-center shrink-0 transition-colors"
+                                >
+                                  <Share2 className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                            </div>
 
                             {!isCollapsed &&
                               items.map((item) => {
                                 const selected =
                                   detail?.id === item.id || selectedId === item.id;
+                                const batchChecked = selectedBatchIds.has(item.id);
                                 const agentInfo = getAgentInfo(item.agent);
                                 const itemIconSvg = resolveArtifactIconSvg(item);
 
                                 return (
-                                  <button
-                                    key={item.id}
-                                    onClick={() => {
-                                      setSelectedId(item.id);
-                                      setVerOpen(false);
-                                      setMenuOpen(false);
-                                    }}
-                                    title={item.description || item.title}
-                                    className={`grid grid-cols-[26px_minmax(0,1fr)_auto] gap-[9px] items-center pl-[14px] pr-[8px] py-1.5 rounded-[8px] text-left w-full transition-colors ${
-                                      selected
-                                        ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
-                                        : 'bg-transparent hover:bg-sunken'
-                                    }`}
-                                  >
-                                    <span
-                                      className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
-                                      dangerouslySetInnerHTML={{ __html: itemIconSvg }}
-                                    />
-
-                                    <span className="min-w-0 flex flex-col gap-[1px]">
-                                      <span className="text-[12.5px] font-medium truncate text-ink">
-                                        {item.title}
-                                      </span>
-                                      <span className="text-[11px] text-ink-3 flex items-center gap-1.5 whitespace-nowrap truncate">
-                                        <span
-                                          className="w-[5px] h-[5px] rounded-full shrink-0"
-                                          style={{ background: agentInfo.dot }}
-                                        />
-                                        {item.slug}
-                                      </span>
-                                    </span>
-
-                                    <span
-                                      className={`font-mono text-[10.5px] rounded-[4px] px-1.5 py-[1px] ${
-                                        item.currentVersion > 1
-                                          ? 'bg-brass-soft text-brass-ink'
-                                          : 'bg-transparent text-ink-3'
+                                  <div key={item.id} className="flex items-center gap-1">
+                                    {isCloudMode && authUser && (
+                                      <input
+                                        type="checkbox"
+                                        checked={batchChecked}
+                                        onChange={() => toggleBatchSelect(item.id)}
+                                        aria-label={`Select ${item.title} for batch sharing`}
+                                        className="w-3.5 h-3.5 ml-1 accent-[var(--color-sage)] shrink-0 cursor-pointer"
+                                      />
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        setSelectedId(item.id);
+                                        setVerOpen(false);
+                                        setMenuOpen(false);
+                                      }}
+                                      title={item.description || item.title}
+                                      className={`grid grid-cols-[26px_minmax(0,1fr)_auto] gap-[9px] items-center pl-[10px] pr-[8px] py-1.5 rounded-[8px] text-left flex-1 min-w-0 transition-colors ${
+                                        selected
+                                          ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
+                                          : 'bg-transparent hover:bg-sunken'
                                       }`}
                                     >
-                                      v{item.currentVersion}
-                                    </span>
-                                  </button>
+                                      <span
+                                        className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
+                                        dangerouslySetInnerHTML={{ __html: itemIconSvg }}
+                                      />
+
+                                      <span className="min-w-0 flex flex-col gap-[1px]">
+                                        <span className="text-[12.5px] font-medium truncate text-ink">
+                                          {item.title}
+                                        </span>
+                                        <span className="text-[11px] text-ink-3 flex items-center gap-1.5 whitespace-nowrap truncate">
+                                          <span
+                                            className="w-[5px] h-[5px] rounded-full shrink-0"
+                                            style={{ background: agentInfo.dot }}
+                                          />
+                                          {item.slug}
+                                        </span>
+                                      </span>
+
+                                      <span
+                                        className={`font-mono text-[10.5px] rounded-[4px] px-1.5 py-[1px] ${
+                                          item.currentVersion > 1
+                                            ? 'bg-brass-soft text-brass-ink'
+                                            : 'bg-transparent text-ink-3'
+                                        }`}
+                                      >
+                                        v{item.currentVersion}
+                                      </span>
+                                    </button>
+                                  </div>
                                 );
                               })}
                           </div>
@@ -2220,54 +2698,94 @@ export default function App() {
               })
             : filteredArtifacts.map((item) => {
                 const selected = detail?.id === item.id || selectedId === item.id;
+                const batchChecked = selectedBatchIds.has(item.id);
                 const agentInfo = getAgentInfo(item.agent);
                 const itemIconSvg = resolveArtifactIconSvg(item);
 
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setSelectedId(item.id);
-                      setVerOpen(false);
-                      setMenuOpen(false);
-                    }}
-                    className={`grid grid-cols-[28px_minmax(0,1fr)_auto] gap-[10px] items-center px-[10px] py-2 rounded-[8px] text-left w-full transition-colors ${
-                      selected
-                        ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
-                        : 'bg-transparent hover:bg-sunken'
-                    }`}
-                  >
-                    <span
-                      className="w-[28px] h-[28px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
-                      dangerouslySetInnerHTML={{ __html: itemIconSvg }}
-                    />
-
-                    <span className="min-w-0 flex flex-col gap-[1px]">
-                      <span className="text-[13px] font-medium truncate text-ink">
-                        {item.title}
-                      </span>
-                      <span className="text-[12px] text-ink-2 flex items-center gap-1.5 whitespace-nowrap truncate">
-                        <span
-                          className="w-[6px] h-[6px] rounded-full shrink-0"
-                          style={{ background: agentInfo.dot }}
-                        />
-                        {item.project} · {formatRelativeTime(item.updatedAt)}
-                      </span>
-                    </span>
-
-                    <span
-                      className={`font-mono text-[11px] rounded-[4px] px-1.5 py-[1px] ${
-                        item.currentVersion > 1
-                          ? 'bg-brass-soft text-brass-ink'
-                          : 'bg-transparent text-ink-3'
+                  <div key={item.id} className="flex items-center gap-1">
+                    {isCloudMode && authUser && (
+                      <input
+                        type="checkbox"
+                        checked={batchChecked}
+                        onChange={() => toggleBatchSelect(item.id)}
+                        aria-label={`Select ${item.title} for batch sharing`}
+                        className="w-3.5 h-3.5 ml-1 accent-[var(--color-sage)] shrink-0 cursor-pointer"
+                      />
+                    )}
+                    <button
+                      onClick={() => {
+                        setSelectedId(item.id);
+                        setVerOpen(false);
+                        setMenuOpen(false);
+                      }}
+                      className={`grid grid-cols-[28px_minmax(0,1fr)_auto] gap-[10px] items-center px-[10px] py-2 rounded-[8px] text-left flex-1 min-w-0 transition-colors ${
+                        selected
+                          ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
+                          : 'bg-transparent hover:bg-sunken'
                       }`}
                     >
-                      v{item.currentVersion}
-                    </span>
-                  </button>
+                      <span
+                        className="w-[28px] h-[28px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
+                        dangerouslySetInnerHTML={{ __html: itemIconSvg }}
+                      />
+
+                      <span className="min-w-0 flex flex-col gap-[1px]">
+                        <span className="text-[13px] font-medium truncate text-ink">
+                          {item.title}
+                        </span>
+                        <span className="text-[12px] text-ink-2 flex items-center gap-1.5 whitespace-nowrap truncate">
+                          <span
+                            className="w-[6px] h-[6px] rounded-full shrink-0"
+                            style={{ background: agentInfo.dot }}
+                          />
+                          {item.project} · {formatRelativeTime(item.updatedAt)}
+                        </span>
+                      </span>
+
+                      <span
+                        className={`font-mono text-[11px] rounded-[4px] px-1.5 py-[1px] ${
+                          item.currentVersion > 1
+                            ? 'bg-brass-soft text-brass-ink'
+                            : 'bg-transparent text-ink-3'
+                        }`}
+                      >
+                        v{item.currentVersion}
+                      </span>
+                    </button>
+                  </div>
                 );
               })}
         </nav>
+
+        {isCloudMode && selectedBatchIds.size > 0 && (
+          <div className="p-2.5 border-t border-line bg-raised flex items-center justify-between gap-2 shrink-0">
+            <span className="text-[12px] font-medium text-ink">
+              {selectedBatchIds.size} selected
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setSelectedBatchIds(new Set())}
+                className="h-[26px] px-2 rounded-[6px] text-[11.5px] text-ink-3 hover:bg-sunken"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() =>
+                  setShareModalTarget({
+                    kind: 'artifacts',
+                    artifactIds: Array.from(selectedBatchIds),
+                    label: `${selectedBatchIds.size} artifacts`,
+                  })
+                }
+                className="h-[26px] px-2.5 rounded-[6px] bg-sage hover:bg-sage-hover text-canvas text-[11.5px] font-medium flex items-center gap-1"
+              >
+                <Share2 className="w-3 h-3" />
+                <span>Share Batch</span>
+              </button>
+            </div>
+          </div>
+        )}
       </aside>
 
       {/* Main Pane */}
@@ -2370,6 +2888,28 @@ export default function App() {
                     <Download className="w-[14px] h-[14px]" />
                     Export
                   </button>
+
+                  {isCloudMode && canAdmin && (
+                    <button
+                      onClick={() =>
+                        setShareModalTarget({
+                          kind: 'artifacts',
+                          artifactIds: [detail.id],
+                          label: detail.title,
+                        })
+                      }
+                      className="h-[32px] px-3 rounded-[6px] border border-line-strong bg-raised hover:bg-sunken text-ink text-[13px] font-medium flex items-center gap-1.5 transition-colors"
+                    >
+                      <Share2 className="w-[14px] h-[14px] text-sage" />
+                      <span>Share</span>
+                    </button>
+                  )}
+
+                  {isCloudMode && !canEdit && (
+                    <span className="h-[26px] px-2 rounded-[5px] bg-sunken text-ink-3 font-mono text-[11px] flex items-center">
+                      View only
+                    </span>
+                  )}
 
                   {/* More button */}
                   <button
@@ -2475,18 +3015,22 @@ export default function App() {
                         <Terminal className="w-[14px] h-[14px] text-ink-2" />
                         Copy CLI command
                       </button>
-                      <div className="h-px bg-line my-1" />
-                      <button
-                        onClick={() => {
-                          setMenuOpen(false);
-                          setConfirmDeleteText('');
-                          setDeleteOpen(true);
-                        }}
-                        className="h-[32px] px-2 rounded-[6px] bg-transparent hover:bg-danger-soft text-danger-ink flex items-center gap-2 text-[13px] text-left"
-                      >
-                        <Trash2 className="w-[14px] h-[14px]" />
-                        Delete…
-                      </button>
+                      {canAdmin && (
+                        <>
+                          <div className="h-px bg-line my-1" />
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setConfirmDeleteText('');
+                              setDeleteOpen(true);
+                            }}
+                            className="h-[32px] px-2 rounded-[6px] bg-transparent hover:bg-danger-soft text-danger-ink flex items-center gap-2 text-[13px] text-left"
+                          >
+                            <Trash2 className="w-[14px] h-[14px]" />
+                            Delete…
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2623,13 +3167,15 @@ export default function App() {
                   of {detail.currentVersion} · read-only. Restoring creates v
                   {detail.currentVersion + 1}; nothing is overwritten.
                 </span>
-                <button
-                  onClick={() => handleRollback(viewVersion)}
-                  className="h-[28px] px-[10px] rounded-[6px] bg-brass text-[#2A2110] text-[12px] font-semibold flex items-center gap-1.5 hover:opacity-90"
-                >
-                  <RotateCcw className="w-[13px] h-[13px]" />
-                  <span>Restore v{viewVersion}</span>
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => handleRollback(viewVersion)}
+                    className="h-[28px] px-[10px] rounded-[6px] bg-brass text-[#2A2110] text-[12px] font-semibold flex items-center gap-1.5 hover:opacity-90"
+                  >
+                    <RotateCcw className="w-[13px] h-[13px]" />
+                    <span>Restore v{viewVersion}</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedVersion(detail.currentVersion)}
                   className="h-[28px] px-[10px] rounded-[6px] border border-brass-line bg-raised text-brass-ink text-[12px] font-medium hover:bg-canvas"
@@ -2676,6 +3222,9 @@ export default function App() {
                         language={detail.language}
                         content={versionContent}
                         storageEntries={storageEntries}
+                        readOnlyStorage={!canEdit}
+                        workspaceId={activeWorkspaceId}
+                        shareToken={shareToken}
                         onStorageMutated={() => fetchDetail(detail.id, true)}
                       />
                     </div>
@@ -2706,7 +3255,7 @@ export default function App() {
                     <textarea
                       value={draftCode}
                       onChange={(e) => setDraftCode(e.target.value)}
-                      readOnly={isHistorical}
+                      readOnly={isHistorical || !canEdit}
                       spellCheck={false}
                       rows={lineCount}
                       aria-label="Source editor"
@@ -2756,7 +3305,7 @@ export default function App() {
 
                     <button
                       onClick={handleSaveIteration}
-                      disabled={!isDirty}
+                      disabled={!isDirty || !canEdit}
                       className="h-[32px] px-3.5 rounded-[6px] bg-sage hover:bg-sage-hover text-canvas text-[13px] font-medium flex items-center gap-2 disabled:opacity-40"
                     >
                       <span>Save as v{detail.currentVersion + 1}</span>
@@ -2776,6 +3325,9 @@ export default function App() {
                   versions={detail.versions}
                   currentVersion={detail.currentVersion}
                   hideUnchanged={hideUnchanged}
+                  readOnly={!canEdit}
+                  workspaceId={activeWorkspaceId}
+                  shareToken={shareToken}
                   onRollback={handleRollback}
                 />
               )}
@@ -2850,7 +3402,8 @@ export default function App() {
                                 {formatBytes(byteLen)}
                               </span>
                               <button
-                                onClick={() => handleDeleteStorageKey(entry.key)}
+                                disabled={!canEdit}
+                              onClick={() => handleDeleteStorageKey(entry.key)}
                                 title="Delete key"
                                 aria-label="Delete key"
                                 className="w-[28px] h-[28px] rounded-[6px] bg-transparent hover:bg-danger-soft text-ink-3 hover:text-danger-ink flex items-center justify-center transition-colors"
@@ -2882,7 +3435,7 @@ export default function App() {
                         />
                         <button
                           type="submit"
-                          disabled={!newStorageKey.trim()}
+                          disabled={!newStorageKey.trim() || !canEdit}
                           className="h-[32px] px-3.5 rounded-[6px] bg-sage hover:bg-sage-hover text-canvas text-[13px] font-medium disabled:opacity-40 transition"
                         >
                           Set key
@@ -3443,6 +3996,21 @@ export default function App() {
           <Check className="w-[15px] h-[15px] text-[#C7D3C0]" />
           <span>{toast}</span>
         </div>
+      )}
+
+      {isCloudMode && activeWorkspaceId && (
+        <BatchShareModal
+          open={Boolean(shareModalTarget)}
+          workspaceId={activeWorkspaceId}
+          target={shareModalTarget}
+          user={authUser}
+          csrfToken={csrfToken}
+          onClose={() => setShareModalTarget(null)}
+          onShared={(msg) => {
+            setSelectedBatchIds(new Set());
+            showToast(msg);
+          }}
+        />
       )}
     </div>
   );
