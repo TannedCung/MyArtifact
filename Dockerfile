@@ -26,7 +26,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/cloud/migrations ./dist/migrations
 
-RUN mkdir -p /data/artifacts /data/dropzone
+RUN mkdir -p /data/artifacts /data/dropzone && chown -R node:node /data /app
+
+USER node
 
 VOLUME ["/data"]
 EXPOSE 4173
