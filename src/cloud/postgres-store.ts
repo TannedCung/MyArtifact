@@ -57,12 +57,19 @@ import { sha256Hex } from './auth/jwt.js';
 import { CLOUD_SCHEMA_SQL } from './migrations/schema-sql.js';
 import {
   CloudPermissionError,
+  assertBatchRequestShape,
+  assertValidCheckpointFinalizeInput,
+  capSessionExpiresAt,
+  clampQueryLimit,
   computeMaxRoleRank,
+  escapeSqlLikePrefix,
   evaluateAccess,
   isBindingActive,
   isShareLinkValidForContext,
+  isValidUuid,
   matchesCategoryPrefix,
   normalizeCategoryKey,
+  parseBatchGrantRole,
   shareLinkCoversArtifact,
 } from './rbac.js';
 import type {
@@ -605,6 +612,12 @@ export class PostgresCloudStore implements CloudStore {
         usedGraceWindow = true;
       }
 
+      const nextExpiresAt = capSessionExpiresAt(
+        String(row.session_kind),
+        this.iso(row.created_at),
+        input.nextExpiresAt,
+        nowMs
+      );
       const upd = await tx.query(
         `UPDATE auth_sessions
          SET prev_refresh_token_hash = refresh_token_hash,
@@ -614,7 +627,7 @@ export class PostgresCloudStore implements CloudStore {
              expires_at = $3
          WHERE id = $4
          RETURNING *`,
-        [input.nextRefreshTokenHash, graceUntil, input.nextExpiresAt, sessionId]
+        [input.nextRefreshTokenHash, graceUntil, nextExpiresAt, sessionId]
       );
       const uRes = await tx.query('SELECT * FROM users WHERE id = $1', [userId]);
       if (!uRes.rows[0]) {
@@ -1249,11 +1262,20 @@ export class PostgresCloudStore implements CloudStore {
     resourceType: ResourceType,
     resourceKey: string
   ): Promise<EffectiveAclDetail> {
+    if (!ctx.authenticated || !ctx.user) {
+      throw new CloudPermissionError(
+        'Authentication required to inspect ACL bindings',
+        401,
+        'unauthenticated'
+      );
+    }
+    const authCtx: AuthPrincipalContext = ctx.shareLink ? { ...ctx, shareLink: undefined } : ctx;
+
     let resolvedKey = resourceKey;
     let projectRow: Record<string, unknown> | null = null;
     if (resourceType === 'workspace') {
       resolvedKey = workspaceId;
-      evaluateAccess(await this.resolveWorkspaceRole(ctx, workspaceId), ctx, 'artifact:read');
+      evaluateAccess(await this.resolveWorkspaceRole(authCtx, workspaceId), authCtx, 'artifact:read');
     } else if (resourceType === 'project') {
       const pRes = await this.pool.query(
         'SELECT * FROM projects WHERE workspace_id = $1 AND (id::text = $2 OR slug = $2)',
@@ -1262,15 +1284,15 @@ export class PostgresCloudStore implements CloudStore {
       if (!pRes.rows[0]) throw new CloudPermissionError('Project not found', 404, 'not_found');
       projectRow = pRes.rows[0];
       resolvedKey = String(projectRow.id);
-      const groups = ctx.user ? await this.getUserGroupIds(workspaceId, ctx.user.email) : new Set<string>();
+      const groups = await this.getUserGroupIds(workspaceId, authCtx.user!.email);
       const rank = await this.resolveProjectRank(
-        ctx,
+        authCtx,
         workspaceId,
         projectRow,
         String(projectRow.slug),
         groups
       );
-      evaluateAccess(rankToRole(rank), ctx, 'artifact:read');
+      evaluateAccess(rankToRole(rank), authCtx, 'artifact:read');
     } else if (resourceType === 'category') {
       const [projRef, ...rest] = resourceKey.split(':');
       const pRes = await this.pool.query(
@@ -1280,21 +1302,23 @@ export class PostgresCloudStore implements CloudStore {
       if (!pRes.rows[0]) throw new CloudPermissionError('Project not found', 404, 'not_found');
       projectRow = pRes.rows[0];
       resolvedKey = normalizeCategoryKey(String(projectRow.id), rest.join(':'));
-      const groups = ctx.user ? await this.getUserGroupIds(workspaceId, ctx.user.email) : new Set<string>();
+      const groups = await this.getUserGroupIds(workspaceId, authCtx.user!.email);
       const rank = await this.resolveProjectRank(
-        ctx,
+        authCtx,
         workspaceId,
         projectRow,
         String(projectRow.slug),
         groups
       );
-      evaluateAccess(rankToRole(rank), ctx, 'artifact:read');
+      evaluateAccess(rankToRole(rank), authCtx, 'artifact:read');
     } else if (resourceType === 'artifact') {
       const art = await this.findArtifactRow(workspaceId, resourceKey);
       if (!art) throw new CloudPermissionError('Artifact not found', 404, 'not_found');
       resolvedKey = String(art.id);
-      const rank = await this.resolveArtifactRank(ctx, workspaceId, art);
-      evaluateAccess(rankToRole(rank), ctx, 'artifact:read');
+      const rank = await this.resolveArtifactRank(authCtx, workspaceId, art);
+      evaluateAccess(rankToRole(rank), authCtx, 'artifact:read');
+    } else {
+      throw new CloudPermissionError('Invalid resourceType', 400, 'insufficient_role');
     }
 
     const directRes = await this.pool.query(
@@ -1315,57 +1339,78 @@ export class PostgresCloudStore implements CloudStore {
     workspaceId: string,
     specs: BatchShareRequest['resources'],
     requireSharePermission: boolean
-  ): Promise<Array<{ resourceType: ResourceType; resourceKey: string }>> {
-    const out: Array<{ resourceType: ResourceType; resourceKey: string }> = [];
+  ): Promise<Array<{ resourceType: ResourceType; resourceKey: string; actorRank: number }>> {
+    const out: Array<{ resourceType: ResourceType; resourceKey: string; actorRank: number }> = [];
     const seen = new Set<string>();
     const groups = ctx.user ? await this.getUserGroupIds(workspaceId, ctx.user.email) : new Set<string>();
-    const push = (rt: ResourceType, rk: string) => {
+    const push = (rt: ResourceType, rk: string, actorRank: number) => {
       const k = `${rt}:${rk}`;
       if (!seen.has(k)) {
         seen.add(k);
-        out.push({ resourceType: rt, resourceKey: rk });
+        out.push({ resourceType: rt, resourceKey: rk, actorRank });
       }
     };
 
     for (const s of specs) {
+      if (!s || typeof s !== 'object') {
+        throw new CloudPermissionError('Invalid resource target specification', 400, 'insufficient_role');
+      }
       if (s.type === 'workspace') {
+        const wsRole = await this.resolveWorkspaceRole(ctx, workspaceId);
         if (requireSharePermission) {
-          evaluateAccess(await this.resolveWorkspaceRole(ctx, workspaceId), ctx, 'iam:share');
+          evaluateAccess(wsRole, ctx, 'iam:share');
         }
-        push('workspace', workspaceId);
+        const actorRank = wsRole ? ROLE_RANK[wsRole] : 0;
+        push('workspace', workspaceId, actorRank);
       } else if (s.type === 'project') {
+        if (typeof s.id !== 'string' || !s.id) {
+          throw new CloudPermissionError('Invalid project target id', 400, 'insufficient_role');
+        }
         const pRes = await this.pool.query(
           'SELECT * FROM projects WHERE workspace_id = $1 AND (id::text = $2 OR slug = $2)',
           [workspaceId, s.id]
         );
         if (!pRes.rows[0]) throw new CloudPermissionError(`Project not found: ${s.id}`, 404, 'not_found');
         const proj = pRes.rows[0];
+        const rank = await this.resolveProjectRank(ctx, workspaceId, proj, String(proj.slug), groups);
         if (requireSharePermission) {
-          const rank = await this.resolveProjectRank(ctx, workspaceId, proj, String(proj.slug), groups);
           evaluateAccess(rankToRole(rank), ctx, 'iam:share');
         }
-        push('project', String(proj.id));
+        push('project', String(proj.id), rank);
       } else if (s.type === 'category') {
+        if (typeof s.projectId !== 'string' || typeof s.prefix !== 'string') {
+          throw new CloudPermissionError('Invalid category target spec', 400, 'insufficient_role');
+        }
         const pRes = await this.pool.query(
           'SELECT * FROM projects WHERE workspace_id = $1 AND (id::text = $2 OR slug = $2)',
           [workspaceId, s.projectId]
         );
         if (!pRes.rows[0]) throw new CloudPermissionError(`Project not found: ${s.projectId}`, 404, 'not_found');
         const proj = pRes.rows[0];
+        const rank = await this.resolveProjectRank(ctx, workspaceId, proj, String(proj.slug), groups);
         if (requireSharePermission) {
-          const rank = await this.resolveProjectRank(ctx, workspaceId, proj, String(proj.slug), groups);
           evaluateAccess(rankToRole(rank), ctx, 'iam:share');
         }
-        push('category', normalizeCategoryKey(String(proj.id), s.prefix));
+        push('category', normalizeCategoryKey(String(proj.id), s.prefix), rank);
       } else if (s.type === 'artifact') {
+        if (typeof s.id !== 'string' || !s.id) {
+          throw new CloudPermissionError('Invalid artifact target id', 400, 'insufficient_role');
+        }
         const art = await this.findArtifactRow(workspaceId, s.id);
         if (!art) throw new CloudPermissionError(`Artifact not found: ${s.id}`, 404, 'not_found');
+        const rank = await this.resolveArtifactRank(ctx, workspaceId, art, groups);
         if (requireSharePermission) {
-          const rank = await this.resolveArtifactRank(ctx, workspaceId, art, groups);
           evaluateAccess(rankToRole(rank), ctx, 'iam:share');
         }
-        push('artifact', String(art.id));
+        push('artifact', String(art.id), rank);
       } else if (s.type === 'filter') {
+        if (requireSharePermission && !ctx.scopes.includes('iam:share')) {
+          throw new CloudPermissionError(
+            `Active session (${ctx.sessionKind || 'delegated'}) lacks scope "iam:share". Run "myartifact login --elevate" or use the Web Studio.`,
+            403,
+            'agent_scope_restricted'
+          );
+        }
         const rows = await this.queryArtifactRows(workspaceId, {
           project: s.project,
           tag: s.tag,
@@ -1375,9 +1420,11 @@ export class PostgresCloudStore implements CloudStore {
         for (const art of rows) {
           const rank = await this.resolveArtifactRank(ctx, workspaceId, art, groups);
           if (rank >= ROLE_RANK.admin && ctx.scopes.includes('iam:share')) {
-            push('artifact', String(art.id));
+            push('artifact', String(art.id), rank);
           }
         }
+      } else {
+        throw new CloudPermissionError('Invalid resource target type', 400, 'insufficient_role');
       }
     }
     return out;
@@ -1395,7 +1442,11 @@ export class PostgresCloudStore implements CloudStore {
     }> = [];
     const seen = new Set<string>();
     for (const p of specs) {
+      if (!p || typeof p !== 'object') {
+        throw new CloudPermissionError('Invalid principal specification', 400, 'insufficient_role');
+      }
       if (p.type === 'email') {
+        if (typeof p.email !== 'string') continue;
         const email = p.email.trim().toLowerCase();
         if (!email || !email.includes('@')) continue;
         const u = await this.getUserByEmail(email);
@@ -1410,6 +1461,9 @@ export class PostgresCloudStore implements CloudStore {
           });
         }
       } else if (p.type === 'group') {
+        if (typeof p.groupId !== 'string' || !p.groupId) {
+          throw new CloudPermissionError('Invalid groupId', 400, 'insufficient_role');
+        }
         const gRes = await this.pool.query(
           'SELECT id FROM groups WHERE workspace_id = $1 AND (id::text = $2 OR slug = $2)',
           [workspaceId, p.groupId]
@@ -1421,14 +1475,41 @@ export class PostgresCloudStore implements CloudStore {
           resolved.push({ principalType: 'group', principalKey: pk });
         }
       } else if (p.type === 'domain') {
+        if (typeof p.domain !== 'string') continue;
         const dom = p.domain.trim().toLowerCase().replace(/^@+/, '');
         if (dom && dom.includes('.') && !seen.has(`domain:${dom}`)) {
           seen.add(`domain:${dom}`);
           resolved.push({ principalType: 'domain', principalKey: dom });
         }
+      } else {
+        throw new CloudPermissionError('Invalid principal type', 400, 'insufficient_role');
       }
     }
     return resolved;
+  }
+
+  private async assertHasOtherActiveWorkspaceOwner(
+    tx: PgClientLike,
+    workspaceId: string,
+    excludeBindingId: string
+  ): Promise<void> {
+    const ownerRes = await tx.query<{ id: string; expires_at: unknown }>(
+      `SELECT id, expires_at FROM role_bindings
+       WHERE workspace_id = $1 AND resource_type = 'workspace' AND resource_key = $2
+         AND principal_type = 'user' AND role_rank >= $3 AND id != $4
+       FOR UPDATE`,
+      [workspaceId, workspaceId, ROLE_RANK.owner, excludeBindingId]
+    );
+    const hasOtherActiveOwner = ownerRes.rows.some((r) =>
+      isBindingActive({ expiresAt: r.expires_at ? this.iso(r.expires_at) : undefined })
+    );
+    if (!hasOtherActiveOwner) {
+      throw new CloudPermissionError(
+        'Cannot remove or downgrade the last workspace owner',
+        400,
+        'insufficient_role'
+      );
+    }
   }
 
   async applyBatchGrants(
@@ -1439,13 +1520,31 @@ export class PostgresCloudStore implements CloudStore {
     if (!ctx.authenticated || !ctx.user) {
       throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
     }
+    assertBatchRequestShape(request);
+    const { rank: targetRank } = parseBatchGrantRole((request as { role?: unknown }).role);
+    if (
+      request.mode !== undefined &&
+      request.mode !== 'upgrade_only' &&
+      request.mode !== 'set_exact'
+    ) {
+      throw new CloudPermissionError('Invalid batch grant mode', 400, 'insufficient_role');
+    }
     const targets = await this.resolveBatchTargets(ctx, workspaceId, request.resources, true);
     if (targets.length === 0) {
       throw new CloudPermissionError('No matching target resources found', 400, 'not_found');
     }
+    for (const t of targets) {
+      if (targetRank > t.actorRank) {
+        throw new CloudPermissionError(
+          'Cannot grant a role higher than your own effective role',
+          403,
+          'insufficient_role'
+        );
+      }
+    }
     const principals = await this.resolveBatchPrincipals(workspaceId, request.principals);
-    const targetRank = ROLE_RANK[request.role];
     const mode = request.mode || 'upgrade_only';
+    const nextExpiresAt = request.expiresAt || null;
 
     let applied = 0;
     let upgraded = 0;
@@ -1455,6 +1554,9 @@ export class PostgresCloudStore implements CloudStore {
     const bindingRows: Record<string, unknown>[] = [];
 
     await this.withTx(async (tx) => {
+      if (targets.some((t) => t.resourceType === 'workspace')) {
+        await tx.query('SELECT id FROM workspaces WHERE id = $1 FOR UPDATE', [workspaceId]);
+      }
       for (const t of targets) {
         for (const p of principals) {
           if (p.pendingEmail) pendingEmailInvites.add(p.pendingEmail);
@@ -1463,18 +1565,40 @@ export class PostgresCloudStore implements CloudStore {
           const ex = await tx.query(
             `SELECT * FROM role_bindings
              WHERE workspace_id = $1 AND principal_type = $2 AND principal_key = $3
-               AND resource_type = $4 AND resource_key = $5`,
+               AND resource_type = $4 AND resource_key = $5
+             FOR UPDATE`,
             [workspaceId, p.principalType, p.principalKey, t.resourceType, t.resourceKey]
           );
           if (ex.rows[0]) {
             const curRank = Number(ex.rows[0].role_rank);
+            if (curRank > t.actorRank) {
+              throw new CloudPermissionError(
+                'Cannot modify a binding higher than your own effective role',
+                403,
+                'insufficient_role'
+              );
+            }
+            const curExpiresAt = ex.rows[0].expires_at ? this.iso(ex.rows[0].expires_at) : null;
             if (mode === 'upgrade_only' && curRank >= targetRank) {
               unchanged++;
               bindingRows.push(ex.rows[0]);
-            } else if (curRank !== targetRank) {
+            } else if (curRank !== targetRank || nextExpiresAt !== curExpiresAt) {
+              const isDowngradingWorkspaceOwner =
+                t.resourceType === 'workspace' &&
+                curRank >= ROLE_RANK.owner &&
+                p.principalType === 'user' &&
+                (targetRank < ROLE_RANK.owner ||
+                  (nextExpiresAt !== null && !isBindingActive({ expiresAt: nextExpiresAt })));
+              if (isDowngradingWorkspaceOwner) {
+                await this.assertHasOtherActiveWorkspaceOwner(
+                  tx,
+                  workspaceId,
+                  String(ex.rows[0].id)
+                );
+              }
               const upd = await tx.query(
                 'UPDATE role_bindings SET role_rank = $1, granted_by = $2, expires_at = $3 WHERE id = $4 RETURNING *',
-                [targetRank, ctx.user!.id, request.expiresAt || null, ex.rows[0].id]
+                [targetRank, ctx.user!.id, nextExpiresAt, ex.rows[0].id]
               );
               upgraded++;
               bindingRows.push(upd.rows[0]);
@@ -1495,7 +1619,7 @@ export class PostgresCloudStore implements CloudStore {
                 t.resourceKey,
                 targetRank,
                 ctx.user!.id,
-                request.expiresAt || null,
+                nextExpiresAt,
               ]
             );
             applied++;
@@ -1538,22 +1662,67 @@ export class PostgresCloudStore implements CloudStore {
     if (!ctx.authenticated || !ctx.user) {
       throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
     }
+    assertBatchRequestShape(request);
     const targets = await this.resolveBatchTargets(ctx, workspaceId, request.resources, true);
     const principals = await this.resolveBatchPrincipals(workspaceId, request.principals);
     let revokedCount = 0;
 
     await this.withTx(async (tx) => {
+      if (targets.some((t) => t.resourceType === 'workspace')) {
+        await tx.query('SELECT id FROM workspaces WHERE id = $1 FOR UPDATE', [workspaceId]);
+      }
       for (const t of targets) {
         for (const p of principals) {
-          const res = await tx.query(
-            `DELETE FROM role_bindings
+          const ex = await tx.query(
+            `SELECT * FROM role_bindings
              WHERE workspace_id = $1 AND principal_type = $2 AND principal_key = $3
-               AND resource_type = $4 AND resource_key = $5`,
+               AND resource_type = $4 AND resource_key = $5
+             FOR UPDATE`,
             [workspaceId, p.principalType, p.principalKey, t.resourceType, t.resourceKey]
           );
+          if (!ex.rows[0]) continue;
+
+          const existingRank = Number(ex.rows[0].role_rank);
+          if (existingRank > t.actorRank) {
+            throw new CloudPermissionError(
+              'Cannot revoke a binding higher than your own effective role',
+              403,
+              'insufficient_role'
+            );
+          }
+
+          if (
+            t.resourceType === 'workspace' &&
+            existingRank >= ROLE_RANK.owner &&
+            p.principalType === 'user'
+          ) {
+            await this.assertHasOtherActiveWorkspaceOwner(
+              tx,
+              workspaceId,
+              String(ex.rows[0].id)
+            );
+          }
+
+          const res = await tx.query('DELETE FROM role_bindings WHERE id = $1', [
+            ex.rows[0].id,
+          ]);
           revokedCount += res.rowCount || 0;
         }
       }
+      await this.recordAudit(tx, {
+        workspaceId,
+        ctx,
+        action: 'BATCH_REVOKE',
+        resourceType: 'workspace',
+        resourceId: workspaceId,
+        details: { revokedCount, targetCount: targets.length },
+      });
+    });
+
+    await this.publish({
+      type: 'acl:updated',
+      workspaceId,
+      payload: { type: 'acl:updated', workspaceId },
     });
     return { revokedCount };
   }
@@ -1572,6 +1741,9 @@ export class PostgresCloudStore implements CloudStore {
   ): Promise<{ link: ShareLink; token: string }> {
     if (!ctx.authenticated || !ctx.user) {
       throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
+    }
+    if (input.role !== 'viewer' && input.role !== 'editor') {
+      throw new CloudPermissionError('Invalid share link role', 400, 'insufficient_role');
     }
     const specs: BatchShareRequest['resources'] = [];
     if (input.targetSpec.kind === 'project' && input.targetSpec.projectSlug) {
@@ -1894,6 +2066,23 @@ export class PostgresCloudStore implements CloudStore {
       project: input.project ?? meta.project,
       tags,
     });
+    if (projectSlug.toLowerCase() !== meta.project.toLowerCase()) {
+      const pRes = await this.pool.query(
+        'SELECT * FROM projects WHERE workspace_id = $1 AND LOWER(slug) = LOWER($2)',
+        [workspaceId, projectSlug]
+      );
+      const targetProj = pRes.rows[0] || null;
+      const groups = ctx.user
+        ? await this.getUserGroupIds(workspaceId, ctx.user.email)
+        : new Set<string>();
+      const targetWsRole = targetProj ? null : await this.resolveWorkspaceRole(ctx, workspaceId);
+      const targetRank = targetProj
+        ? await this.resolveProjectRank(ctx, workspaceId, targetProj, projectSlug, groups)
+        : targetWsRole
+        ? ROLE_RANK[targetWsRole]
+        : 0;
+      evaluateAccess(rankToRole(targetRank), ctx, 'artifact:write', `target project ${projectSlug}`);
+    }
     const projRow = await this.ensureProjectRecord(
       workspaceId,
       projectSlug,
@@ -2065,7 +2254,7 @@ export class PostgresCloudStore implements CloudStore {
       params.push(filter.type);
       conds.push(`type = $${params.length}`);
     }
-    params.push(filter.limit || 200);
+    params.push(clampQueryLimit(filter.limit, 200));
     const res = await this.pool.query(
       `SELECT * FROM artifacts WHERE ${conds.join(' AND ')} ORDER BY updated_at DESC LIMIT $${params.length}`,
       params
@@ -2205,11 +2394,13 @@ export class PostgresCloudStore implements CloudStore {
     const row = await this.findArtifactRow(workspaceId, idOrSlug);
     if (!row) throw new CloudPermissionError('Artifact not found', 404, 'not_found');
     evaluateAccess(rankToRole(await this.resolveArtifactRank(ctx, workspaceId, row)), ctx, 'artifact:read');
+    const safePrefix = typeof prefix === 'string' ? prefix : '';
+    const escapedPrefix = escapeSqlLikePrefix(safePrefix);
     const res = await this.pool.query<{ key: string }>(
-      'SELECT key FROM artifact_kv_store WHERE artifact_id = $1 AND key LIKE $2 ORDER BY key ASC',
-      [String(row.id), `${prefix}%`]
+      "SELECT key FROM artifact_kv_store WHERE artifact_id = $1 AND key LIKE $2 ESCAPE '\\' ORDER BY key ASC",
+      [String(row.id), `${escapedPrefix}%`]
     );
-    return { keys: res.rows.map((r) => r.key), prefix };
+    return { keys: res.rows.map((r) => r.key), prefix: safePrefix };
   }
 
   async getAllStorageEntries(
@@ -2320,18 +2511,49 @@ export class PostgresCloudStore implements CloudStore {
       logDir: `cloud://${workspaceId}/runs/${cleanSlug}`,
       updatedAt: new Date().toISOString(),
     };
-    const artifact = existing
-      ? await this.getArtifact(ctx, workspaceId, cleanSlug)
-      : await this.createArtifact(ctx, workspaceId, {
-          slug: cleanSlug,
-          title: base.title,
-          type: 'tensorboard',
-          language: 'tensorboard',
-          agent: input.agent || ctx.viaAgent,
-          project: input.project || base.experiment,
-          content: JSON.stringify(base, null, 2),
-        });
-    if (!artifact) throw new CloudPermissionError('Run not found', 404, 'not_found');
+    let artifact: ArtifactDetail;
+    if (existing) {
+      const rank = await this.resolveArtifactRank(ctx, workspaceId, existing);
+      const role = rankToRole(rank);
+      evaluateAccess(role, ctx, 'tb:write', `run ${cleanSlug}`);
+      artifact = await this.hydrateArtifactDetail(existing, role || undefined);
+      try {
+        const parsed = JSON.parse(artifact.content) as Partial<TensorBoardRunManifest>;
+        base = {
+          ...base,
+          ...parsed,
+          title: input.title || parsed.title || artifact.title,
+          experiment: input.experiment || parsed.experiment || base.experiment,
+          modelName: input.modelName || parsed.modelName || base.modelName,
+          framework: input.framework || parsed.framework || base.framework,
+          status: input.status || parsed.status || base.status,
+          hparams: { ...(parsed.hparams || {}), ...(input.hparams || {}) },
+          updatedAt: new Date().toISOString(),
+        };
+      } catch {
+        // Keep base manifest
+      }
+    } else {
+      if (!ctx.authenticated || !ctx.user) {
+        throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
+      }
+      if (!ctx.scopes.includes('tb:write')) {
+        throw new CloudPermissionError(
+          `Active session (${ctx.sessionKind || 'delegated'}) lacks scope "tb:write". Run "myartifact login --elevate" or use the Web Studio.`,
+          403,
+          'agent_scope_restricted'
+        );
+      }
+      artifact = await this.createArtifact(ctx, workspaceId, {
+        slug: cleanSlug,
+        title: base.title,
+        type: 'tensorboard',
+        language: 'tensorboard',
+        agent: input.agent || ctx.viaAgent,
+        project: input.project || base.experiment,
+        content: JSON.stringify(base, null, 2),
+      });
+    }
 
     const nowSec = input.wallTime ?? Date.now() / 1000;
     const pts: TensorBoardScalarPoint[] = [...(input.scalars || [])];
@@ -2461,12 +2683,31 @@ export class PostgresCloudStore implements CloudStore {
     }
   ): Promise<{ artifact: ArtifactDetail; checkpoint: ModelCheckpoint }> {
     const cleanSlug = slugify(runSlug);
-    let art = await this.getArtifact(ctx, workspaceId, cleanSlug);
-    if (!art) {
-      art = await this.logTensorBoardScalars(ctx, workspaceId, { slug: cleanSlug, agent: input.agent });
+    const existing = await this.findArtifactRow(workspaceId, cleanSlug);
+    if (existing) {
+      evaluateAccess(
+        rankToRole(await this.resolveArtifactRank(ctx, workspaceId, existing)),
+        ctx,
+        'tb:write',
+        `run ${cleanSlug}`
+      );
+    } else {
+      evaluateAccess(
+        await this.resolveWorkspaceRole(ctx, workspaceId),
+        ctx,
+        'tb:write',
+        `workspace ${workspaceId}`
+      );
     }
+
+    assertValidCheckpointFinalizeInput(workspaceId, cleanSlug, input.checkpointId, input.objectKey);
+
     const buf = await this.blobStore.getObjectBuffer(input.objectKey);
     if (!buf) throw new CloudPermissionError('Checkpoint object missing', 404, 'not_found');
+
+    const art = existing
+      ? await this.hydrateArtifactDetail(existing)
+      : await this.logTensorBoardScalars(ctx, workspaceId, { slug: cleanSlug, agent: input.agent });
     const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
     const format = (input.format || path.extname(input.name).replace(/^\./, '') || 'safetensors').toLowerCase();
     if (input.isBest) {
@@ -2550,6 +2791,7 @@ export class PostgresCloudStore implements CloudStore {
     workspaceId: string,
     checkpointId: string
   ): Promise<{ checkpoint: ModelCheckpoint; url: string } | null> {
+    if (!isValidUuid(checkpointId)) return null;
     const res = await this.pool.query('SELECT * FROM tb_checkpoints WHERE id = $1', [checkpointId]);
     if (!res.rows[0]) return null;
     const ck = res.rows[0];
@@ -2593,9 +2835,10 @@ export class PostgresCloudStore implements CloudStore {
     limit = 100
   ): Promise<AuditEvent[]> {
     evaluateAccess(await this.resolveWorkspaceRole(ctx, workspaceId), ctx, 'iam:share');
+    const clampedLimit = clampQueryLimit(limit, 100);
     const res = await this.pool.query(
       'SELECT * FROM audit_events WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT $2',
-      [workspaceId, limit]
+      [workspaceId, clampedLimit]
     );
     return res.rows.map((r) => ({
       id: String(r.id),

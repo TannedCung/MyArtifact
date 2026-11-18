@@ -57,12 +57,18 @@ import { LocalDiskBlobStore, type BlobStore } from './blob-store.js';
 import { sha256Hex } from './auth/jwt.js';
 import {
   CloudPermissionError,
+  assertBatchRequestShape,
+  assertValidCheckpointFinalizeInput,
+  capSessionExpiresAt,
+  clampQueryLimit,
   computeMaxRoleRank,
+  escapeSqlLikePrefix,
   evaluateAccess,
   isBindingActive,
   isShareLinkValidForContext,
   matchesCategoryPrefix,
   normalizeCategoryKey,
+  parseBatchGrantRole,
   shareLinkCoversArtifact,
 } from './rbac.js';
 import type {
@@ -778,6 +784,12 @@ export class SqliteCloudStore implements CloudStore {
         usedGraceWindow = true;
       }
 
+      const nextExpiresAt = capSessionExpiresAt(
+        String(row.session_kind),
+        String(row.created_at),
+        input.nextExpiresAt,
+        nowMs
+      );
       this.db
         .prepare(
           `UPDATE auth_sessions
@@ -788,7 +800,7 @@ export class SqliteCloudStore implements CloudStore {
                expires_at = ?
            WHERE id = ?`
         )
-        .run(input.nextRefreshTokenHash, graceUntilIso, nowIso, input.nextExpiresAt, sessionId);
+        .run(input.nextRefreshTokenHash, graceUntilIso, nowIso, nextExpiresAt, sessionId);
 
       const updatedRow = this.db
         .prepare('SELECT * FROM auth_sessions WHERE id = ?')
@@ -1503,14 +1515,23 @@ export class SqliteCloudStore implements CloudStore {
     resourceType: ResourceType,
     resourceKey: string
   ): Promise<EffectiveAclDetail> {
+    if (!ctx.authenticated || !ctx.user) {
+      throw new CloudPermissionError(
+        'Authentication required to inspect ACL bindings',
+        401,
+        'unauthenticated'
+      );
+    }
+    const authCtx: AuthPrincipalContext = ctx.shareLink ? { ...ctx, shareLink: undefined } : ctx;
+
     let resolvedKey = resourceKey;
     let projectRow: Record<string, unknown> | null = null;
     let artRow: Record<string, unknown> | null = null;
 
     if (resourceType === 'workspace') {
       resolvedKey = workspaceId;
-      const role = await this.resolveWorkspaceRole(ctx, workspaceId);
-      evaluateAccess(role, ctx, 'artifact:read', `workspace ${workspaceId}`);
+      const role = await this.resolveWorkspaceRole(authCtx, workspaceId);
+      evaluateAccess(role, authCtx, 'artifact:read', `workspace ${workspaceId}`);
     } else if (resourceType === 'project') {
       projectRow =
         (this.db
@@ -1518,9 +1539,9 @@ export class SqliteCloudStore implements CloudStore {
           .get(workspaceId, resourceKey, resourceKey) as Record<string, unknown> | undefined) || null;
       if (!projectRow) throw new CloudPermissionError('Project not found', 404, 'not_found');
       resolvedKey = String(projectRow.id);
-      const groupIds = ctx.user ? this.getUserGroupIds(workspaceId, ctx.user.email) : new Set<string>();
-      const rank = this.resolveProjectRank(ctx, workspaceId, projectRow, String(projectRow.slug), groupIds);
-      evaluateAccess(rankToRole(rank), ctx, 'artifact:read', `project ${projectRow.slug}`);
+      const groupIds = this.getUserGroupIds(workspaceId, authCtx.user!.email);
+      const rank = this.resolveProjectRank(authCtx, workspaceId, projectRow, String(projectRow.slug), groupIds);
+      evaluateAccess(rankToRole(rank), authCtx, 'artifact:read', `project ${projectRow.slug}`);
     } else if (resourceType === 'category') {
       const [projRef, ...rest] = resourceKey.split(':');
       const prefix = rest.join(':');
@@ -1530,15 +1551,17 @@ export class SqliteCloudStore implements CloudStore {
           .get(workspaceId, projRef, projRef) as Record<string, unknown> | undefined) || null;
       if (!projectRow) throw new CloudPermissionError('Project not found for category', 404, 'not_found');
       resolvedKey = normalizeCategoryKey(String(projectRow.id), prefix);
-      const groupIds = ctx.user ? this.getUserGroupIds(workspaceId, ctx.user.email) : new Set<string>();
-      const rank = this.resolveProjectRank(ctx, workspaceId, projectRow, String(projectRow.slug), groupIds);
-      evaluateAccess(rankToRole(rank), ctx, 'artifact:read', `category ${resolvedKey}`);
+      const groupIds = this.getUserGroupIds(workspaceId, authCtx.user!.email);
+      const rank = this.resolveProjectRank(authCtx, workspaceId, projectRow, String(projectRow.slug), groupIds);
+      evaluateAccess(rankToRole(rank), authCtx, 'artifact:read', `category ${resolvedKey}`);
     } else if (resourceType === 'artifact') {
       artRow = this.findArtifactRow(workspaceId, resourceKey);
       if (!artRow) throw new CloudPermissionError('Artifact not found', 404, 'not_found');
       resolvedKey = String(artRow.id);
-      const rank = this.resolveArtifactRank(ctx, workspaceId, artRow);
-      evaluateAccess(rankToRole(rank), ctx, 'artifact:read', `artifact ${artRow.slug}`);
+      const rank = this.resolveArtifactRank(authCtx, workspaceId, artRow);
+      evaluateAccess(rankToRole(rank), authCtx, 'artifact:read', `artifact ${artRow.slug}`);
+    } else {
+      throw new CloudPermissionError('Invalid resourceType', 400, 'insufficient_role');
     }
 
     const directRows = this.db
@@ -1628,27 +1651,34 @@ export class SqliteCloudStore implements CloudStore {
     workspaceId: string,
     specs: BatchShareRequest['resources'],
     requireSharePermission: boolean
-  ): Array<{ resourceType: ResourceType; resourceKey: string }> {
-    const out: Array<{ resourceType: ResourceType; resourceKey: string }> = [];
+  ): Array<{ resourceType: ResourceType; resourceKey: string; actorRank: number }> {
+    const out: Array<{ resourceType: ResourceType; resourceKey: string; actorRank: number }> = [];
     const seen = new Set<string>();
     const groupIds = ctx.user ? this.getUserGroupIds(workspaceId, ctx.user.email) : new Set<string>();
 
-    const pushTarget = (resourceType: ResourceType, resourceKey: string) => {
+    const pushTarget = (resourceType: ResourceType, resourceKey: string, actorRank: number) => {
       const k = `${resourceType}:${resourceKey}`;
       if (!seen.has(k)) {
         seen.add(k);
-        out.push({ resourceType, resourceKey });
+        out.push({ resourceType, resourceKey, actorRank });
       }
     };
 
     for (const spec of specs) {
+      if (!spec || typeof spec !== 'object') {
+        throw new CloudPermissionError('Invalid resource target specification', 400, 'insufficient_role');
+      }
       if (spec.type === 'workspace') {
         const wsRole = this.syncResolveWorkspaceRole(ctx, workspaceId, groupIds);
         if (requireSharePermission) {
           evaluateAccess(wsRole, ctx, 'iam:share', `workspace ${workspaceId}`);
         }
-        pushTarget('workspace', workspaceId);
+        const actorRank = wsRole ? ROLE_RANK[wsRole] : 0;
+        pushTarget('workspace', workspaceId, actorRank);
       } else if (spec.type === 'project') {
+        if (typeof spec.id !== 'string' || !spec.id) {
+          throw new CloudPermissionError('Invalid project target id', 400, 'insufficient_role');
+        }
         const proj = this.db
           .prepare('SELECT * FROM projects WHERE workspace_id = ? AND (id = ? OR LOWER(slug) = LOWER(?))')
           .get(workspaceId, spec.id, spec.id) as Record<string, unknown> | undefined;
@@ -1659,8 +1689,11 @@ export class SqliteCloudStore implements CloudStore {
         if (requireSharePermission) {
           evaluateAccess(rankToRole(rank), ctx, 'iam:share', `project ${proj.slug}`);
         }
-        pushTarget('project', String(proj.id));
+        pushTarget('project', String(proj.id), rank);
       } else if (spec.type === 'category') {
+        if (typeof spec.projectId !== 'string' || typeof spec.prefix !== 'string') {
+          throw new CloudPermissionError('Invalid category target spec', 400, 'insufficient_role');
+        }
         const proj = this.db
           .prepare('SELECT * FROM projects WHERE workspace_id = ? AND (id = ? OR LOWER(slug) = LOWER(?))')
           .get(workspaceId, spec.projectId, spec.projectId) as Record<string, unknown> | undefined;
@@ -1671,8 +1704,11 @@ export class SqliteCloudStore implements CloudStore {
         if (requireSharePermission) {
           evaluateAccess(rankToRole(rank), ctx, 'iam:share', `category ${spec.prefix}`);
         }
-        pushTarget('category', normalizeCategoryKey(String(proj.id), spec.prefix));
+        pushTarget('category', normalizeCategoryKey(String(proj.id), spec.prefix), rank);
       } else if (spec.type === 'artifact') {
+        if (typeof spec.id !== 'string' || !spec.id) {
+          throw new CloudPermissionError('Invalid artifact target id', 400, 'insufficient_role');
+        }
         const art = this.findArtifactRow(workspaceId, spec.id);
         if (!art) {
           throw new CloudPermissionError(`Artifact not found: ${spec.id}`, 404, 'not_found');
@@ -1681,8 +1717,15 @@ export class SqliteCloudStore implements CloudStore {
         if (requireSharePermission) {
           evaluateAccess(rankToRole(rank), ctx, 'iam:share', `artifact ${art.slug}`);
         }
-        pushTarget('artifact', String(art.id));
+        pushTarget('artifact', String(art.id), rank);
       } else if (spec.type === 'filter') {
+        if (requireSharePermission && !ctx.scopes.includes('iam:share')) {
+          throw new CloudPermissionError(
+            `Active session (${ctx.sessionKind || 'delegated'}) lacks scope "iam:share". Run "myartifact login --elevate" or use the Web Studio.`,
+            403,
+            'agent_scope_restricted'
+          );
+        }
         const rows = this.queryArtifactRows(workspaceId, {
           project: spec.project,
           tag: spec.tag,
@@ -1692,9 +1735,11 @@ export class SqliteCloudStore implements CloudStore {
         for (const art of rows) {
           const rank = this.resolveArtifactRank(ctx, workspaceId, art, groupIds);
           if (rank >= ROLE_RANK.admin && ctx.scopes.includes('iam:share')) {
-            pushTarget('artifact', String(art.id));
+            pushTarget('artifact', String(art.id), rank);
           }
         }
+      } else {
+        throw new CloudPermissionError('Invalid resource target type', 400, 'insufficient_role');
       }
     }
     return out;
@@ -1733,7 +1778,11 @@ export class SqliteCloudStore implements CloudStore {
     const seen = new Set<string>();
 
     for (const p of specs) {
+      if (!p || typeof p !== 'object') {
+        throw new CloudPermissionError('Invalid principal specification', 400, 'insufficient_role');
+      }
       if (p.type === 'email') {
+        if (typeof p.email !== 'string') continue;
         const email = p.email.trim().toLowerCase();
         if (!email || !email.includes('@')) continue;
         const userRow = this.db
@@ -1751,6 +1800,9 @@ export class SqliteCloudStore implements CloudStore {
           });
         }
       } else if (p.type === 'group') {
+        if (typeof p.groupId !== 'string' || !p.groupId) {
+          throw new CloudPermissionError('Invalid groupId', 400, 'insufficient_role');
+        }
         const groupRow = this.db
           .prepare('SELECT id FROM groups WHERE workspace_id = ? AND (id = ? OR LOWER(slug) = LOWER(?))')
           .get(workspaceId, p.groupId, p.groupId) as { id: string } | undefined;
@@ -1763,6 +1815,7 @@ export class SqliteCloudStore implements CloudStore {
           resolved.push({ principalType: 'group', principalKey: groupRow.id });
         }
       } else if (p.type === 'domain') {
+        if (typeof p.domain !== 'string') continue;
         const dom = p.domain.trim().toLowerCase().replace(/^@+/, '');
         if (!dom || !dom.includes('.')) continue;
         const dedupKey = `domain:${dom}`;
@@ -1770,9 +1823,34 @@ export class SqliteCloudStore implements CloudStore {
           seen.add(dedupKey);
           resolved.push({ principalType: 'domain', principalKey: dom });
         }
+      } else {
+        throw new CloudPermissionError('Invalid principal type', 400, 'insufficient_role');
       }
     }
     return resolved;
+  }
+
+  private assertHasOtherActiveWorkspaceOwner(workspaceId: string, excludeBindingId: string): void {
+    const ownerRows = this.db
+      .prepare(
+        `SELECT id, expires_at FROM role_bindings
+         WHERE workspace_id = ? AND resource_type = 'workspace' AND resource_key = ?
+           AND principal_type = 'user' AND role_rank >= ? AND id != ?`
+      )
+      .all(workspaceId, workspaceId, ROLE_RANK.owner, excludeBindingId) as Array<{
+      id: string;
+      expires_at: string | null;
+    }>;
+    const hasOtherActiveOwner = ownerRows.some((r) =>
+      isBindingActive({ expiresAt: r.expires_at ? String(r.expires_at) : undefined })
+    );
+    if (!hasOtherActiveOwner) {
+      throw new CloudPermissionError(
+        'Cannot remove or downgrade the last workspace owner',
+        400,
+        'insufficient_role'
+      );
+    }
   }
 
   async applyBatchGrants(
@@ -1783,13 +1861,31 @@ export class SqliteCloudStore implements CloudStore {
     if (!ctx.authenticated || !ctx.user) {
       throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
     }
+    assertBatchRequestShape(request);
+    const { rank: targetRank } = parseBatchGrantRole((request as { role?: unknown }).role);
+    if (
+      request.mode !== undefined &&
+      request.mode !== 'upgrade_only' &&
+      request.mode !== 'set_exact'
+    ) {
+      throw new CloudPermissionError('Invalid batch grant mode', 400, 'insufficient_role');
+    }
     const targets = this.resolveBatchTargets(ctx, workspaceId, request.resources, true);
     if (targets.length === 0) {
       throw new CloudPermissionError('No matching target resources found', 400, 'not_found');
     }
+    for (const target of targets) {
+      if (targetRank > target.actorRank) {
+        throw new CloudPermissionError(
+          'Cannot grant a role higher than your own effective role',
+          403,
+          'insufficient_role'
+        );
+      }
+    }
     const principals = this.resolveBatchPrincipals(workspaceId, request.principals);
-    const targetRank = ROLE_RANK[request.role];
     const mode = request.mode || 'upgrade_only';
+    const nextExpiresAt = request.expiresAt || null;
     const now = new Date().toISOString();
 
     let applied = 0;
@@ -1822,15 +1918,32 @@ export class SqliteCloudStore implements CloudStore {
 
           if (existing) {
             const existingRank = Number(existing.role_rank);
+            if (existingRank > target.actorRank) {
+              throw new CloudPermissionError(
+                'Cannot modify a binding higher than your own effective role',
+                403,
+                'insufficient_role'
+              );
+            }
+            const existingExpiresAt = existing.expires_at ? String(existing.expires_at) : null;
             if (mode === 'upgrade_only' && existingRank >= targetRank) {
               unchanged++;
               bindings.push(this.mapBinding(existing));
-            } else if (existingRank !== targetRank || (request.expiresAt ?? null) !== (existing.expires_at ?? null)) {
+            } else if (existingRank !== targetRank || nextExpiresAt !== existingExpiresAt) {
+              const isDowngradingWorkspaceOwner =
+                target.resourceType === 'workspace' &&
+                existingRank >= ROLE_RANK.owner &&
+                principal.principalType === 'user' &&
+                (targetRank < ROLE_RANK.owner ||
+                  (nextExpiresAt !== null && !isBindingActive({ expiresAt: nextExpiresAt })));
+              if (isDowngradingWorkspaceOwner) {
+                this.assertHasOtherActiveWorkspaceOwner(workspaceId, String(existing.id));
+              }
               this.db
                 .prepare(
                   'UPDATE role_bindings SET role_rank = ?, granted_by = ?, expires_at = ? WHERE id = ?'
                 )
-                .run(targetRank, ctx.user.id, request.expiresAt || null, String(existing.id));
+                .run(targetRank, ctx.user.id, nextExpiresAt, String(existing.id));
               upgraded++;
               const updatedRow = this.db
                 .prepare('SELECT * FROM role_bindings WHERE id = ?')
@@ -1857,7 +1970,7 @@ export class SqliteCloudStore implements CloudStore {
                 target.resourceKey,
                 targetRank,
                 ctx.user.id,
-                request.expiresAt || null,
+                nextExpiresAt,
                 now
               );
             applied++;
@@ -1916,6 +2029,7 @@ export class SqliteCloudStore implements CloudStore {
     if (!ctx.authenticated || !ctx.user) {
       throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
     }
+    assertBatchRequestShape(request);
     const targets = this.resolveBatchTargets(ctx, workspaceId, request.resources, true);
     const principals = this.resolveBatchPrincipals(workspaceId, request.principals);
     let revokedCount = 0;
@@ -1924,13 +2038,42 @@ export class SqliteCloudStore implements CloudStore {
     try {
       for (const target of targets) {
         for (const p of principals) {
-          const info = this.db
+          const existing = this.db
             .prepare(
-              `DELETE FROM role_bindings
+              `SELECT * FROM role_bindings
                WHERE workspace_id = ? AND principal_type = ? AND principal_key = ?
                  AND resource_type = ? AND resource_key = ?`
             )
-            .run(workspaceId, p.principalType, p.principalKey, target.resourceType, target.resourceKey);
+            .get(
+              workspaceId,
+              p.principalType,
+              p.principalKey,
+              target.resourceType,
+              target.resourceKey
+            ) as Record<string, unknown> | undefined;
+
+          if (!existing) continue;
+
+          const existingRank = Number(existing.role_rank);
+          if (existingRank > target.actorRank) {
+            throw new CloudPermissionError(
+              'Cannot revoke a binding higher than your own effective role',
+              403,
+              'insufficient_role'
+            );
+          }
+
+          if (
+            target.resourceType === 'workspace' &&
+            existingRank >= ROLE_RANK.owner &&
+            p.principalType === 'user'
+          ) {
+            this.assertHasOtherActiveWorkspaceOwner(workspaceId, String(existing.id));
+          }
+
+          const info = this.db
+            .prepare('DELETE FROM role_bindings WHERE id = ?')
+            .run(String(existing.id));
           revokedCount += Number(info.changes);
         }
       }
@@ -1970,6 +2113,9 @@ export class SqliteCloudStore implements CloudStore {
   ): Promise<{ link: ShareLink; token: string }> {
     if (!ctx.authenticated || !ctx.user) {
       throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
+    }
+    if (input.role !== 'viewer' && input.role !== 'editor') {
+      throw new CloudPermissionError('Invalid share link role', 400, 'insufficient_role');
     }
     // Verify caller has iam:share on the targeted resources
     const specs: BatchShareRequest['resources'] = [];
@@ -2613,7 +2759,7 @@ export class SqliteCloudStore implements CloudStore {
       params.push(filter.type);
     }
 
-    const limit = filter.limit || 200;
+    const limit = clampQueryLimit(filter.limit, 200);
     const rows = this.db
       .prepare(
         `SELECT * FROM artifacts WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC LIMIT ?`
@@ -2803,12 +2949,14 @@ export class SqliteCloudStore implements CloudStore {
     const rank = this.resolveArtifactRank(ctx, workspaceId, row);
     evaluateAccess(rankToRole(rank), ctx, 'artifact:read', `artifact ${row.slug}`);
 
+    const safePrefix = typeof prefix === 'string' ? prefix : '';
+    const escapedPrefix = escapeSqlLikePrefix(safePrefix);
     const rows = this.db
       .prepare(
-        'SELECT key FROM artifact_kv_store WHERE artifact_id = ? AND key LIKE ? ORDER BY key ASC'
+        "SELECT key FROM artifact_kv_store WHERE artifact_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key ASC"
       )
-      .all(String(row.id), `${prefix}%`) as Array<{ key: string }>;
-    return { keys: rows.map((r) => r.key), prefix };
+      .all(String(row.id), `${escapedPrefix}%`) as Array<{ key: string }>;
+    return { keys: rows.map((r) => r.key), prefix: safePrefix };
   }
 
   async getAllStorageEntries(
@@ -3011,6 +3159,17 @@ export class SqliteCloudStore implements CloudStore {
         // Keep baseManifest
       }
       return { artifact: detail, manifest: baseManifest };
+    }
+
+    if (!ctx.authenticated || !ctx.user) {
+      throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
+    }
+    if (!ctx.scopes.includes('tb:write')) {
+      throw new CloudPermissionError(
+        `Active session (${ctx.sessionKind || 'delegated'}) lacks scope "tb:write". Run "myartifact login --elevate" or use the Web Studio.`,
+        403,
+        'agent_scope_restricted'
+      );
     }
 
     const created = await this.createArtifact(ctx, workspaceId, {
@@ -3318,18 +3477,26 @@ export class SqliteCloudStore implements CloudStore {
       summary?: string;
     }
   ): Promise<{ artifact: ArtifactDetail; checkpoint: ModelCheckpoint }> {
-    const { artifact, manifest } = await this.ensureRunArtifact(ctx, workspaceId, {
-      slug: runSlug,
-      agent: input.agent,
-    });
-    const expectedPrefix = `workspaces/${workspaceId}/runs/${manifest.runSlug}/checkpoints/`;
-    if (!input.objectKey.startsWith(expectedPrefix)) {
-      throw new CloudPermissionError('Invalid checkpoint objectKey', 403, 'insufficient_role');
+    const cleanSlug = slugify(runSlug);
+    const existing = this.findArtifactRow(workspaceId, cleanSlug);
+    if (existing) {
+      const rank = this.resolveArtifactRank(ctx, workspaceId, existing);
+      evaluateAccess(rankToRole(rank), ctx, 'tb:write', `run ${cleanSlug}`);
+    } else {
+      const wsRole = await this.resolveWorkspaceRole(ctx, workspaceId);
+      evaluateAccess(wsRole, ctx, 'tb:write', `workspace ${workspaceId}`);
     }
+
+    assertValidCheckpointFinalizeInput(workspaceId, cleanSlug, input.checkpointId, input.objectKey);
+
     const buf = await this.blobStore.getObjectBuffer(input.objectKey);
     if (!buf) {
       throw new CloudPermissionError('Uploaded checkpoint object not found in blob store', 404, 'not_found');
     }
+    const { artifact, manifest } = await this.ensureRunArtifact(ctx, workspaceId, {
+      slug: cleanSlug,
+      agent: input.agent,
+    });
     const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
     const format = (input.format || path.extname(input.name).replace(/^\./, '') || 'safetensors').toLowerCase();
     return this.finalizeCheckpointWithMeta(ctx, workspaceId, artifact, manifest, {
@@ -3405,9 +3572,10 @@ export class SqliteCloudStore implements CloudStore {
   ): Promise<AuditEvent[]> {
     const wsRole = await this.resolveWorkspaceRole(ctx, workspaceId);
     evaluateAccess(wsRole, ctx, 'iam:share', `workspace ${workspaceId} audit`);
+    const clampedLimit = clampQueryLimit(limit, 100);
     const rows = this.db
       .prepare('SELECT * FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?')
-      .all(workspaceId, limit) as Record<string, unknown>[];
+      .all(workspaceId, clampedLimit) as Record<string, unknown>[];
     return rows.map((r) => {
       let details: Record<string, unknown> = {};
       try {

@@ -161,3 +161,83 @@ export function computeMaxRoleRank(ranks: number[]): Role | null {
   }
   return rankToRole(max);
 }
+
+export const CLI_ELEVATED_MAX_TTL_MS = 24 * 3600 * 1000;
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_REGEX.test(value);
+}
+
+export function assertBatchRequestShape(
+  request: { resources?: unknown; principals?: unknown } | null | undefined
+): void {
+  if (!request || !Array.isArray(request.resources) || !Array.isArray(request.principals)) {
+    throw new CloudPermissionError(
+      'Batch request requires resources and principals arrays',
+      400,
+      'insufficient_role'
+    );
+  }
+}
+
+export function parseBatchGrantRole(role: unknown): { role: Role; rank: number } {
+  if (typeof role !== 'string' || !Object.prototype.hasOwnProperty.call(ROLE_RANK, role)) {
+    throw new CloudPermissionError('Invalid role', 400, 'insufficient_role');
+  }
+  const typedRole = role as Role;
+  return { role: typedRole, rank: ROLE_RANK[typedRole] };
+}
+
+export function assertValidCheckpointFinalizeInput(
+  workspaceId: string,
+  cleanSlug: string,
+  checkpointId: unknown,
+  objectKey: unknown
+): void {
+  if (!isValidUuid(checkpointId)) {
+    throw new CloudPermissionError('Invalid checkpointId', 400, 'insufficient_role');
+  }
+  const expectedPrefix = `workspaces/${workspaceId}/runs/${cleanSlug}/checkpoints/${checkpointId}/`;
+  if (
+    typeof objectKey !== 'string' ||
+    objectKey.includes('..') ||
+    objectKey.includes('\\') ||
+    objectKey.includes('\0') ||
+    !objectKey.startsWith(expectedPrefix) ||
+    objectKey.length <= expectedPrefix.length
+  ) {
+    throw new CloudPermissionError('Invalid checkpoint objectKey', 403, 'insufficient_role');
+  }
+}
+
+export function capSessionExpiresAt(
+  sessionKind: string,
+  createdAt: string,
+  requestedExpiresAt: string,
+  nowMs = Date.now()
+): string {
+  if (sessionKind !== 'cli_elevated') {
+    return requestedExpiresAt;
+  }
+  const fallbackCapMs = nowMs + CLI_ELEVATED_MAX_TTL_MS;
+  const createdMs = Date.parse(createdAt);
+  const createdCapMs = Number.isFinite(createdMs)
+    ? createdMs + CLI_ELEVATED_MAX_TTL_MS
+    : fallbackCapMs;
+  const maxAllowedMs = Math.min(createdCapMs, fallbackCapMs);
+  const requestedMs = Date.parse(requestedExpiresAt);
+  const effectiveMs = Number.isFinite(requestedMs)
+    ? Math.min(requestedMs, maxAllowedMs)
+    : maxAllowedMs;
+  return new Date(effectiveMs).toISOString();
+}
+
+export function clampQueryLimit(limit: unknown, defaultLimit = 200): number {
+  return Math.max(1, Math.min(1000, Math.floor(Number(limit) || defaultLimit)));
+}
+
+export function escapeSqlLikePrefix(prefix: string): string {
+  return prefix.replace(/[\\%_]/g, '\\$&');
+}
