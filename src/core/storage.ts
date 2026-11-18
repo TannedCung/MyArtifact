@@ -1001,7 +1001,10 @@ export class ArtifactStore {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const limit = filter.limit || 200;
+    const rawLimit = filter.limit !== undefined ? Number(filter.limit) : 200;
+    const limit = Number.isFinite(rawLimit)
+      ? Math.max(1, Math.min(1000, Math.floor(rawLimit)))
+      : 200;
 
     const rows = this.db
       .prepare(`SELECT * FROM artifacts ${whereClause} ORDER BY updated_at DESC LIMIT ?`)
@@ -1033,12 +1036,20 @@ export class ArtifactStore {
     this.db.prepare('DELETE FROM artifacts WHERE id = ?').run(existing.id);
     this.db.prepare('DELETE FROM artifacts_fts WHERE artifact_id = ?').run(existing.id);
 
-    const artifactFolder = path.join(this.artifactsDir, existing.slug);
-    if (fs.existsSync(artifactFolder)) {
+    const resolvedArtifactsDir = path.resolve(this.artifactsDir);
+    const artifactFolder = path.resolve(resolvedArtifactsDir, existing.slug);
+    if (
+      artifactFolder.startsWith(resolvedArtifactsDir + path.sep) &&
+      fs.existsSync(artifactFolder)
+    ) {
       fs.rmSync(artifactFolder, { recursive: true, force: true });
     }
-    const runFolder = path.join(this.runsDir, existing.slug);
-    if (fs.existsSync(runFolder)) {
+    const resolvedRunsDir = path.resolve(this.runsDir);
+    const runFolder = path.resolve(resolvedRunsDir, existing.slug);
+    if (
+      runFolder.startsWith(resolvedRunsDir + path.sep) &&
+      fs.existsSync(runFolder)
+    ) {
       fs.rmSync(runFolder, { recursive: true, force: true });
     }
     this.syncWikiIndexFile();
@@ -1126,11 +1137,12 @@ export class ArtifactStore {
     const existing = this.getArtifact(idOrSlug);
     if (!existing) throw new Error(`Artifact not found: ${idOrSlug}`);
 
+    const escapedPrefix = prefix.replace(/[\\%_]/g, '\\$&');
     const rows = this.db
       .prepare(
-        'SELECT key FROM artifact_kv_store WHERE artifact_id = ? AND key LIKE ? ORDER BY key ASC'
+        "SELECT key FROM artifact_kv_store WHERE artifact_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key ASC"
       )
-      .all(existing.id, `${prefix}%`) as { key: string }[];
+      .all(existing.id, `${escapedPrefix}%`) as { key: string }[];
 
     return {
       keys: rows.map((r) => r.key),
@@ -1654,7 +1666,35 @@ export class ArtifactStore {
   }
 
   private resolveStoredFilePath(storedPath: string): string {
-    if (!storedPath || fs.existsSync(storedPath)) return storedPath;
+    if (!storedPath || storedPath.includes('\0')) return '';
+
+    const resolvedArtifacts = path.resolve(this.artifactsDir);
+    const resolvedRuns = path.resolve(this.runsDir);
+    const resolvedStored = path.resolve(storedPath);
+    const isWithinBase = (candidate: string, base: string): boolean =>
+      candidate.startsWith(base + path.sep);
+
+    if (
+      isWithinBase(resolvedStored, resolvedArtifacts) ||
+      isWithinBase(resolvedStored, resolvedRuns)
+    ) {
+      if (fs.existsSync(resolvedStored)) {
+        try {
+          const realStored = fs.realpathSync(resolvedStored);
+          const realBase = isWithinBase(resolvedStored, resolvedArtifacts)
+            ? fs.realpathSync(resolvedArtifacts)
+            : fs.realpathSync(resolvedRuns);
+          if (isWithinBase(realStored, realBase)) {
+            return storedPath;
+          }
+        } catch {
+          return '';
+        }
+        return '';
+      }
+      return storedPath;
+    }
+
     const normalized = storedPath.replace(/\\/g, '/');
     for (const [marker, baseDir] of [
       ['/artifacts/', this.artifactsDir],
@@ -1663,11 +1703,26 @@ export class ArtifactStore {
       const idx = normalized.lastIndexOf(marker);
       if (idx >= 0) {
         const rel = normalized.slice(idx + marker.length);
-        const candidate = path.join(baseDir, ...rel.split('/'));
-        if (fs.existsSync(candidate)) return candidate;
+        if (!rel || rel.includes('\0')) continue;
+        const segments = rel.split('/');
+        if (segments.some((seg) => seg === '..')) continue;
+        const resolvedBase = path.resolve(baseDir);
+        const candidate = path.resolve(resolvedBase, ...segments);
+        if (!isWithinBase(candidate, resolvedBase)) continue;
+        if (fs.existsSync(candidate)) {
+          try {
+            const realBase = fs.realpathSync(resolvedBase);
+            const realCandidate = fs.realpathSync(candidate);
+            if (isWithinBase(realCandidate, realBase)) {
+              return candidate;
+            }
+          } catch {
+            continue;
+          }
+        }
       }
     }
-    return storedPath;
+    return '';
   }
 
   public close(): void {

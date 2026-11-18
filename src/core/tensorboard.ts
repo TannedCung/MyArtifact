@@ -128,11 +128,19 @@ function decodeTensorProtoFloat(buf: Buffer): number | null {
       if (!v) break;
       offset = v.nextOffset;
     } else if (wireType === 1) {
+      if (offset + 8 > buf.length) break;
       offset += 8;
     } else if (wireType === 2) {
       const lenInfo = readVarint(buf, offset);
       if (!lenInfo) break;
       offset = lenInfo.nextOffset;
+      if (
+        !Number.isSafeInteger(lenInfo.value) ||
+        lenInfo.value < 0 ||
+        offset + lenInfo.value > buf.length
+      ) {
+        break;
+      }
       const sub = buf.subarray(offset, offset + lenInfo.value);
       offset += lenInfo.value;
       // field 4 = tensor_content (raw float32 bytes), field 5 = packed float_val
@@ -171,11 +179,19 @@ function decodeSummaryValue(
       if (!v) break;
       offset = v.nextOffset;
     } else if (wireType === 1) {
+      if (offset + 8 > buf.length) break;
       offset += 8;
     } else if (wireType === 2) {
       const lenInfo = readVarint(buf, offset);
       if (!lenInfo) break;
       offset = lenInfo.nextOffset;
+      if (
+        !Number.isSafeInteger(lenInfo.value) ||
+        lenInfo.value < 0 ||
+        offset + lenInfo.value > buf.length
+      ) {
+        break;
+      }
       const sub = buf.subarray(offset, offset + lenInfo.value);
       offset += lenInfo.value;
       if (fieldNum === 1) {
@@ -215,6 +231,13 @@ function decodeSummary(buf: Buffer): Array<{ tag: string; value: number }> {
       const lenInfo = readVarint(buf, offset);
       if (!lenInfo) break;
       offset = lenInfo.nextOffset;
+      if (
+        !Number.isSafeInteger(lenInfo.value) ||
+        lenInfo.value < 0 ||
+        offset + lenInfo.value > buf.length
+      ) {
+        break;
+      }
       const sub = buf.subarray(offset, offset + lenInfo.value);
       offset += lenInfo.value;
       if (fieldNum === 1) {
@@ -226,8 +249,10 @@ function decodeSummary(buf: Buffer): Array<{ tag: string; value: number }> {
       if (!v) break;
       offset = v.nextOffset;
     } else if (wireType === 1) {
+      if (offset + 8 > buf.length) break;
       offset += 8;
     } else if (wireType === 5) {
+      if (offset + 4 > buf.length) break;
       offset += 4;
     } else {
       break;
@@ -266,12 +291,20 @@ function decodeEventRecord(buf: Buffer): TensorBoardScalarPoint[] {
       const lenInfo = readVarint(buf, offset);
       if (!lenInfo) break;
       offset = lenInfo.nextOffset;
+      if (
+        !Number.isSafeInteger(lenInfo.value) ||
+        lenInfo.value < 0 ||
+        offset + lenInfo.value > buf.length
+      ) {
+        break;
+      }
       const sub = buf.subarray(offset, offset + lenInfo.value);
       offset += lenInfo.value;
       if (fieldNum === 5) {
         scalars.push(...decodeSummary(sub));
       }
     } else if (wireType === 5) {
+      if (offset + 4 > buf.length) break;
       offset += 4;
     } else {
       break;
@@ -291,7 +324,11 @@ export function parseTfEventsBuffer(buf: Buffer): TensorBoardScalarPoint[] {
   let offset = 0;
 
   while (offset + 16 <= buf.length) {
-    const len = Number(buf.readBigUInt64LE(offset));
+    const rawLen = buf.readBigUInt64LE(offset);
+    if (rawLen > BigInt(buf.length - offset - 16)) {
+      break;
+    }
+    const len = Number(rawLen);
     if (len < 0 || offset + 12 + len + 4 > buf.length) {
       break;
     }

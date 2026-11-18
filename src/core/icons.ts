@@ -197,6 +197,213 @@ const SLUG_ICON_MAP: Record<string, string> = {
   'threejs-kinematic-workbench': 'scene-3d',
 };
 
+const DANGEROUS_SVG_URL_RE =
+  /^(?:javascript|vbscript|data|https?|file|blob):|^[\\/]{2}|^[a-z][a-z0-9+.-]*:/i;
+
+const PRESENTATION_URL_ATTRS = new Set([
+  'fill',
+  'stroke',
+  'clip-path',
+  'mask',
+  'filter',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+  'cursor',
+]);
+
+function decodeEntitiesForValidation(raw: string): string {
+  return raw
+    .replace(/&#x([0-9a-f]+);?/gi, (_, hex) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : '';
+    })
+    .replace(/&#([0-9]+);?/g, (_, dec) => {
+      const code = Number.parseInt(dec, 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : '';
+    })
+    .replace(/&colon;/gi, ':')
+    .replace(/&tab;/gi, '\t')
+    .replace(/&newline;/gi, '\n')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, '&');
+}
+
+function decodeCssHexEscapes(raw: string): string {
+  return raw.replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, hex) => {
+    const code = Number.parseInt(hex, 16);
+    return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+      ? String.fromCodePoint(code)
+      : '';
+  });
+}
+
+function isDangerousUrlValue(rawValue: string): boolean {
+  const decoded = decodeCssHexEscapes(decodeEntitiesForValidation(rawValue)).replace(
+    /[\s\x00-\x1f\x7f]/g,
+    ''
+  );
+  if (!decoded) return false;
+  if (decoded.startsWith('#')) return false;
+  return DANGEROUS_SVG_URL_RE.test(decoded);
+}
+
+function sanitizeCssText(cssText: string, decodeHtmlEntities: boolean): string {
+  let out = decodeHtmlEntities ? decodeEntitiesForValidation(cssText) : cssText;
+  out = decodeCssHexEscapes(out).replace(/\/\*[\s\S]*?\*\//g, '');
+  out = out.replace(/@import[^;]*(?:;|$)/gi, '');
+  out = out.replace(/expression\s*\([^)]*\)/gi, '');
+  out = out.replace(/expression\s*\(/gi, '');
+  out = out.replace(/(?:-moz-binding|behavior)\s*:[^;]*(?:;|$)/gi, '');
+  out = out.replace(/url\s*\(([^)]*)\)/gi, (full, inner: string) => {
+    const trimmed = inner.trim().replace(/^['"]|['"]$/g, '');
+    if (isDangerousUrlValue(trimmed)) {
+      return 'none';
+    }
+    return full;
+  });
+  out = out.replace(
+    /url\s*\(\s*['"]?(?:javascript:|vbscript:|data:|https?:|\/\/)/gi,
+    'url('
+  );
+  return out;
+}
+
+function sanitizeSvgTagAttributes(rawAttrs: string): { attrs: string; selfClosing: boolean } {
+  let working = rawAttrs.trim();
+  let selfClosing = false;
+  if (working.endsWith('/')) {
+    selfClosing = true;
+    working = working.slice(0, -1).trimEnd();
+  }
+  while (working.startsWith('/')) {
+    working = working.slice(1).trimStart();
+  }
+  if (!working) {
+    return { attrs: '', selfClosing };
+  }
+
+  const kept: string[] = [];
+  const attrRe =
+    /([a-zA-Z_:][a-zA-Z0-9_.:-]*)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match: RegExpExecArray | null;
+  while ((match = attrRe.exec(working)) !== null) {
+    const attrName = match[1];
+    const lowerName = attrName.toLowerCase();
+    const hasEquals = match[0].includes('=');
+    const dqVal = match[2];
+    const sqVal = match[3];
+    const uqVal = match[4];
+    const rawVal = dqVal ?? sqVal ?? uqVal ?? '';
+
+    if (/^on[a-z]+$/i.test(lowerName)) {
+      continue;
+    }
+
+    if (
+      lowerName === 'href' ||
+      lowerName === 'xlink:href' ||
+      lowerName === 'src' ||
+      lowerName === 'action' ||
+      lowerName === 'formaction' ||
+      lowerName === 'poster'
+    ) {
+      if (isDangerousUrlValue(rawVal)) {
+        continue;
+      }
+    }
+
+    if (lowerName === 'style' && hasEquals) {
+      const cleanedStyle = sanitizeCssText(rawVal, true)
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      kept.push(`${attrName}="${cleanedStyle}"`);
+      continue;
+    }
+
+    if (hasEquals && PRESENTATION_URL_ATTRS.has(lowerName)) {
+      const cleanedPres = sanitizeCssText(rawVal, true).replace(/"/g, '&quot;');
+      kept.push(`${attrName}="${cleanedPres}"`);
+      continue;
+    }
+
+    if (!hasEquals) {
+      kept.push(attrName);
+    } else if (dqVal !== undefined) {
+      kept.push(`${attrName}="${dqVal}"`);
+    } else if (sqVal !== undefined) {
+      kept.push(`${attrName}='${sqVal}'`);
+    } else {
+      kept.push(`${attrName}="${uqVal}"`);
+    }
+  }
+
+  return {
+    attrs: kept.length ? ' ' + kept.join(' ') : '',
+    selfClosing,
+  };
+}
+
+/**
+ * Sanitize untrusted custom or extracted SVG markup to block script execution,
+ * event handlers, external/scriptable URLs, and unsafe CSS constructs.
+ */
+export function sanitizeSvgMarkup(rawSvg: string): string | null {
+  if (!rawSvg || typeof rawSvg !== 'string') return null;
+  let cleaned = rawSvg.replace(/\0/g, '').trim();
+  if (!cleaned) return null;
+
+  for (let pass = 0; pass < 8; pass++) {
+    const prev = cleaned;
+    cleaned = cleaned
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, '$1')
+      .replace(/<!DOCTYPE[\s\S]*?>/gi, '')
+      .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+      .replace(/<script\b[^>]*\/?>/gi, '')
+      .replace(/<foreignObject\b[\s\S]*?<\/foreignObject\s*>/gi, '')
+      .replace(/<iframe\b[\s\S]*?<\/iframe\s*>/gi, '')
+      .replace(/<object\b[\s\S]*?<\/object\s*>/gi, '')
+      .replace(
+        /<\/?(?:script|foreignObject|iframe|object|embed|meta|link|base|animate|animateTransform|animateMotion|set|handler|listener)\b(?:"[^"]*"|'[^']*'|[^>"'])*>/gi,
+        ''
+      );
+    if (cleaned === prev) break;
+  }
+
+  cleaned = cleaned.replace(
+    /<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi,
+    (_full, rawAttrs: string, cssBody: string) => {
+      const { attrs } = sanitizeSvgTagAttributes(rawAttrs);
+      const safeCss = sanitizeCssText(cssBody, false).replace(/</g, '');
+      return `<style${attrs}>${safeCss}</style>`;
+    }
+  );
+
+  cleaned = cleaned.replace(
+    /<(\/?[a-zA-Z][a-zA-Z0-9:_-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g,
+    (_full, tagName: string, rawAttrs: string) => {
+      if (tagName.startsWith('/')) {
+        return `</${tagName.slice(1)}>`;
+      }
+      const { attrs, selfClosing } = sanitizeSvgTagAttributes(rawAttrs);
+      return `<${tagName}${attrs}${selfClosing ? '/>' : '>'}`;
+    }
+  );
+
+  cleaned = cleaned.trim();
+  if (!/^<svg(?:\s|>)/i.test(cleaned) || !/<\/svg\s*>$/i.test(cleaned)) {
+    return null;
+  }
+  return cleaned;
+}
+
 /**
  * Extract an inline /* icon:start * / ... /* icon:end * / or <!-- icon: ... --> SVG from artifact content if present.
  */
@@ -206,14 +413,14 @@ export function extractIconFromContent(content: string): string | null {
   );
   if (blockMatch) {
     const svgMatch = blockMatch[1].match(/<svg[\s\S]*?<\/svg>/i);
-    if (svgMatch) return svgMatch[0].trim();
+    if (svgMatch) return sanitizeSvgMarkup(svgMatch[0]);
   }
   const htmlCommentMatch = content.match(
     /<!--\s*icon:start\s*-->([\s\S]*?)<!--\s*icon:end\s*-->/i
   );
   if (htmlCommentMatch) {
     const svgMatch = htmlCommentMatch[1].match(/<svg[\s\S]*?<\/svg>/i);
-    if (svgMatch) return svgMatch[0].trim();
+    if (svgMatch) return sanitizeSvgMarkup(svgMatch[0]);
   }
   return null;
 }
@@ -317,8 +524,9 @@ export function resolveArtifactIconSvg(artifact: {
   content?: string;
 }): string {
   const raw = (artifact.icon || '').trim();
-  if (raw.startsWith('<svg') && raw.includes('</svg>')) {
-    return raw;
+  if (/<svg/i.test(raw) && /<\/svg>/i.test(raw)) {
+    const sanitized = sanitizeSvgMarkup(raw);
+    if (sanitized) return sanitized;
   }
   if (raw && ARTIFACT_ICON_PRESETS[raw]) {
     return ARTIFACT_ICON_PRESETS[raw];

@@ -86,9 +86,8 @@ export function startArtifactWatcher(
 
   const handleFileEvent = (filePath: string) => {
     try {
-      if (!fs.existsSync(filePath)) return;
-      const stat = fs.statSync(filePath);
-      if (!stat.isFile()) return;
+      const stat = fs.lstatSync(filePath);
+      if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 25 * 1024 * 1024) return;
 
       const baseName = path.basename(filePath);
       if (

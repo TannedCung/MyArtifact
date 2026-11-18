@@ -24,8 +24,24 @@ const REACT_SANDBOX_IMPORTS: Record<string, string> = {
     'https://esm.sh/@react-three/drei@9.117.3?external=react,react-dom,three,@react-three/fiber',
 };
 
+/**
+ * Serialize a value for safe embedding inside an inline HTML <script> block.
+ */
+export function serializeForInlineScript(value: unknown): string {
+  const json = JSON.stringify(value) ?? 'null';
+  return json
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 function buildImportMapScript(imports: Record<string, string>): string {
-  return `<script type="importmap">\n  ${JSON.stringify({ imports }, null, 2).replace(/\n/g, '\n  ')}\n  </script>`;
+  const serialized = JSON.stringify({ imports }, null, 2)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\n/g, '\n  ');
+  return `<script type="importmap">\n  ${serialized}\n  </script>`;
 }
 
 export interface SandboxRenderOptions {
@@ -51,13 +67,16 @@ export function buildSandboxHtml(options: SandboxRenderOptions): string {
     theme = 'dark',
   } = options;
 
+  const safeTheme = theme === 'light' ? 'light' : 'dark';
   const escapedTitle = title
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const serializedContent = JSON.stringify(content);
-  const serializedStorage = JSON.stringify(initialStorage);
-  const serializedArtifactId = JSON.stringify(artifactId);
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  const serializedContent = serializeForInlineScript(content);
+  const serializedStorage = serializeForInlineScript(initialStorage);
+  const serializedArtifactId = serializeForInlineScript(artifactId);
 
   const storageBridgeScript = `
     (function() {
@@ -175,7 +194,7 @@ export function buildSandboxHtml(options: SandboxRenderOptions): string {
       return `${importMapTag}<script>${storageBridgeScript}</script>\n${content}`;
     }
     return `<!DOCTYPE html>
-<html lang="en" class="${theme}">
+<html lang="en" class="${safeTheme}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -192,7 +211,7 @@ ${content}
 
   if (type === 'react') {
     return `<!DOCTYPE html>
-<html lang="en" class="${theme}">
+<html lang="en" class="${safeTheme}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -278,8 +297,8 @@ ${content}
       display: flex;
       align-items: center;
       justify-content: center;
-      background: ${theme === 'dark' ? '#0f172a' : '#f8fafc'};
-      background-image: radial-gradient(${theme === 'dark' ? '#334155' : '#cbd5e1'} 1px, transparent 1px);
+      background: ${safeTheme === 'dark' ? '#0f172a' : '#f8fafc'};
+      background-image: radial-gradient(${safeTheme === 'dark' ? '#334155' : '#cbd5e1'} 1px, transparent 1px);
       background-size: 20px 20px;
       overflow: auto;
       padding: 24px;
@@ -302,14 +321,17 @@ ${content}
   <title>${escapedTitle}</title>
   <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({ startOnLoad: false, theme: '${theme === 'dark' ? 'dark' : 'default'}' });
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: '${safeTheme === 'dark' ? 'dark' : 'default'}' });
     window.addEventListener('DOMContentLoaded', async () => {
       const container = document.getElementById('diagram');
       try {
         const { svg } = await mermaid.render('mermaid-svg', ${serializedContent});
         container.innerHTML = svg;
       } catch (err) {
-        container.innerHTML = '<pre style="color:#f87171;padding:16px;">' + String(err) + '</pre>';
+        const pre = document.createElement('pre');
+        pre.style.cssText = 'color:#f87171;padding:16px;';
+        pre.textContent = String(err);
+        container.replaceChildren(pre);
       }
     });
   </script>
@@ -320,8 +342,8 @@ ${content}
       display: flex;
       align-items: center;
       justify-content: center;
-      background: ${theme === 'dark' ? '#0f172a' : '#ffffff'};
-      color: ${theme === 'dark' ? '#f8fafc' : '#0f172a'};
+      background: ${safeTheme === 'dark' ? '#0f172a' : '#ffffff'};
+      color: ${safeTheme === 'dark' ? '#f8fafc' : '#0f172a'};
       padding: 24px;
       box-sizing: border-box;
       font-family: system-ui, sans-serif;
@@ -347,7 +369,7 @@ ${content}
     import { marked } from 'https://cdn.jsdelivr.net/npm/marked@15/lib/marked.esm.js';
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
-    mermaid.initialize({ startOnLoad: false, theme: '${theme === 'dark' ? 'dark' : 'default'}' });
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: '${safeTheme === 'dark' ? 'dark' : 'default'}' });
 
     window.addEventListener('DOMContentLoaded', async () => {
       const raw = ${serializedContent};
@@ -372,8 +394,8 @@ ${content}
     });
   </script>
 </head>
-<body class="${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'} min-h-screen p-8">
-  <article id="md-root" class="prose ${theme === 'dark' ? 'prose-invert' : ''} max-w-4xl mx-auto"></article>
+<body class="${safeTheme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'} min-h-screen p-8">
+  <article id="md-root" class="prose ${safeTheme === 'dark' ? 'prose-invert' : ''} max-w-4xl mx-auto"></article>
 </body>
 </html>`;
   }
@@ -463,6 +485,15 @@ ${content}
     let smoothing = 0.6;
     let xAxis = 'step';
 
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function fmtBytes(n) {
       if (!n) return '0 B';
       if (n < 1024) return n + ' B';
@@ -535,30 +566,30 @@ ${content}
       root.innerHTML = \`
         <header class="hdr">
           <div>
-            <p class="eyebrow">TensorBoard Run · \${data.framework || 'pytorch'} · \${data.experiment || 'default'}</p>
-            <h1>\${data.title || data.runSlug || 'Training Run'}</h1>
+            <p class="eyebrow">TensorBoard Run · \${esc(data.framework || 'pytorch')} · \${esc(data.experiment || 'default')}</p>
+            <h1>\${esc(data.title || data.runSlug || 'Training Run')}</h1>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span class="pill pill-sage">● \${data.status || 'running'}</span>
-            \${bestCkpt ? \`<span class="pill pill-brass">★ Best: \${bestCkpt.name} (step \${bestCkpt.step})</span>\` : ''}
+            <span class="pill pill-sage">● \${esc(data.status || 'running')}</span>
+            \${bestCkpt ? \`<span class="pill pill-brass">★ Best: \${esc(bestCkpt.name)} (step \${esc(bestCkpt.step)})</span>\` : ''}
           </div>
         </header>
 
         <section class="kpis">
           <div class="kpi">
             <div class="kpi-label">Model architecture</div>
-            <div class="kpi-val" style="font-size:16px">\${data.modelName || data.runSlug || 'model'}</div>
-            <div class="kpi-sub">logdir: ~/.myartifact/runs/\${data.runSlug || ''}</div>
+            <div class="kpi-val" style="font-size:16px">\${esc(data.modelName || data.runSlug || 'model')}</div>
+            <div class="kpi-sub">logdir: ~/.myartifact/runs/\${esc(data.runSlug || '')}</div>
           </div>
           <div class="kpi">
             <div class="kpi-label">Training steps logged</div>
-            <div class="kpi-val">\${maxStep.toLocaleString()}</div>
+            <div class="kpi-val">\${esc(maxStep.toLocaleString())}</div>
             <div class="kpi-sub">\${tags.length} scalar series in .tfevents</div>
           </div>
           <div class="kpi">
             <div class="kpi-label">Saved model checkpoints</div>
             <div class="kpi-val">\${ckpts.length}</div>
-            <div class="kpi-sub">\${bestCkpt ? 'Latest: ' + bestCkpt.name : 'No checkpoints saved yet'}</div>
+            <div class="kpi-sub">\${bestCkpt ? 'Latest: ' + esc(bestCkpt.name) : 'No checkpoints saved yet'}</div>
           </div>
         </section>
 
@@ -598,7 +629,7 @@ ${content}
               return \`
                 <div class="card">
                   <div class="card-top">
-                    <span class="tag-name">\${tag}</span>
+                    <span class="tag-name">\${esc(tag)}</span>
                     <span class="tag-val" style="color:\${color}">\${fmtNum(last)}</span>
                   </div>
                   \${buildChartSvg(pts, color)}
@@ -632,19 +663,19 @@ ${content}
                   <tr>
                     <td>
                       <div style="display:flex;align-items:center;gap:8px;font-weight:600">
-                        <span class="mono">\${c.name}</span>
+                        <span class="mono">\${esc(c.name)}</span>
                         \${c.isBest ? '<span class="pill pill-brass" style="padding:1px 7px;font-size:10px">BEST</span>' : ''}
                       </div>
-                      <div class="mono" style="font-size:11px;color:#656C62;margin-top:2px">\${c.filePath}</div>
+                      <div class="mono" style="font-size:11px;color:#656C62;margin-top:2px">\${esc(c.filePath)}</div>
                     </td>
-                    <td class="mono">step \${c.step}\${c.epoch != null ? ' · ep ' + c.epoch : ''}</td>
+                    <td class="mono">step \${esc(c.step)}\${c.epoch != null ? ' · ep ' + esc(c.epoch) : ''}</td>
                     <td>
-                      \${Object.entries(c.metrics || {}).map(([k, v]) => \`<span class="chip">\${k}: \${fmtNum(v)}</span>\`).join('') || '<span style="color:#9A9F94">–</span>'}
+                      \${Object.entries(c.metrics || {}).map(([k, v]) => \`<span class="chip">\${esc(k)}: \${esc(fmtNum(v))}</span>\`).join('') || '<span style="color:#9A9F94">–</span>'}
                     </td>
-                    <td class="mono">.\${c.format} · \${fmtBytes(c.byteSize)}</td>
-                    <td class="mono" style="color:#656C62">\${(c.sha256 || '').slice(0, 10)}…</td>
+                    <td class="mono">.\${esc(c.format)} · \${esc(fmtBytes(c.byteSize))}</td>
+                    <td class="mono" style="color:#656C62">\${esc((c.sha256 || '').slice(0, 10))}…</td>
                     <td style="text-align:right">
-                      <a class="btn-dl" href="/api/tensorboard/runs/\${encodeURIComponent(data.runSlug)}/checkpoints/\${encodeURIComponent(c.id)}/download" download="\${c.name}">Download</a>
+                      <a class="btn-dl" href="/api/tensorboard/runs/\${esc(encodeURIComponent(data.runSlug))}/checkpoints/\${esc(encodeURIComponent(c.id))}/download" download="\${esc(c.name)}">Download</a>
                     </td>
                   </tr>
                 \`).join('')}
@@ -662,17 +693,17 @@ ${content}
               <tbody>
                 \${Object.entries(hparams).map(([k, v]) => \`
                   <tr>
-                    <td class="mono" style="font-weight:500">\${k}</td>
-                    <td class="mono">\${String(v)}</td>
+                    <td class="mono" style="font-weight:500">\${esc(k)}</td>
+                    <td class="mono">\${esc(v)}</td>
                   </tr>
                 \`).join('')}
                 <tr>
                   <td class="mono" style="font-weight:500">tensorboard_logdir</td>
-                  <td class="mono">\${data.logDir || ''}</td>
+                  <td class="mono">\${esc(data.logDir || '')}</td>
                 </tr>
                 <tr>
                   <td class="mono" style="font-weight:500">tfevents_file</td>
-                  <td class="mono">\${data.eventFilePath || ''}</td>
+                  <td class="mono">\${esc(data.eventFilePath || '')}</td>
                 </tr>
               </tbody>
             </table>
