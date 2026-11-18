@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["sin1"],
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 60,
+      "includeFiles": "dist/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api?__ma_path=/api/$1" },
+    { "source": "/favicon.svg", "destination": "/api?__ma_path=/favicon.svg" },
+    { "source": "/((?!assets/|api/|favicon\\.svg).*)", "destination": "/index.html" }
+  ]
+}

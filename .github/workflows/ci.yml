@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   build-and-test:
@@ -31,3 +31,34 @@ jobs:
 
       - name: Run test suite
         run: npm test
+
+  migrate:
+    name: Migrate Neon Postgres
+    needs: build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure psql is available
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Apply idempotent cloud schema migration
+        env:
+          PROD_DIRECT_DATABASE_URL: ${{ secrets.PROD_DIRECT_DATABASE_URL }}
+          DEV_DIRECT_DATABASE_URL: ${{ secrets.DEV_DIRECT_DATABASE_URL }}
+        run: |
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            DIRECT_DB_URL="${PROD_DIRECT_DATABASE_URL}"
+          else
+            DIRECT_DB_URL="${DEV_DIRECT_DATABASE_URL}"
+          fi
+          if [ -z "${DIRECT_DB_URL}" ]; then
+            echo "Skipping migration: direct DB secret not configured for ${GITHUB_REF}."
+            exit 0
+          fi
+          psql "${DIRECT_DB_URL}" -v ON_ERROR_STOP=1 -f src/cloud/migrations/001_cloud_schema.sql
