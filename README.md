@@ -63,8 +63,9 @@ Every artifact renders inside an isolated browser sandbox with zero build-step f
   - `react`, `react-dom/client`
   - `lucide-react` (Icons)
   - `recharts` (Charts & data visualization)
-  - `d3`, `three`, `lodash`, `papaparse`, `mathjs`, `canvas-confetti`
-- **HTML / CSS / JS (`.html`)**: Single-file web applications with Tailwind CSS and `window.storage` automatically injected.
+  - `three`, `three/addons/*` (`OrbitControls`, `GLTFLoader`, post-processing), `three/examples/jsm/*`, `@react-three/fiber`, `@react-three/drei` (3D WebGL/WebGPU visualization)
+  - `d3`, `lodash`, `papaparse`, `mathjs`, `canvas-confetti`
+- **HTML / CSS / JS (`.html`)**: Single-file web applications with Tailwind CSS, `window.storage`, and pre-mapped ESM imports (`three`, `three/addons/*`, `three/examples/jsm/*`, `d3`, `lodash`, `papaparse`, `mathjs`, `canvas-confetti`) automatically injected (unless a custom `<script type="importmap">` is provided).
 - **Mermaid Diagrams (`.mmd`)**: Flowcharts, sequence diagrams, architecture graphs, ER & state diagrams.
 - **SVG Graphics (`.svg`)**: Responsive vector rendering on a studio grid canvas.
 - **Markdown (`.md`)**: GitHub Flavored Markdown with embedded `mermaid` diagram rendering and **KaTeX** math support.
@@ -257,6 +258,33 @@ The local server (`http://127.0.0.1:4173`) exposes a clean JSON API and WebSocke
 - `POST /api/artifacts/:idOrSlug/rollback` — Roll back to a historical version as a new checkpoint
 - `GET /api/artifacts/:idOrSlug/export?version=1&download=1` — Export standalone single-file HTML
 - `GET | PUT | DELETE /api/artifacts/:idOrSlug/storage` — Inspect or mutate `window.storage` state
+
+---
+
+## Deploy to Cloud on Vercel Hobby ($0/mo)
+
+MyArtifact includes a stateless serverless cloud mode (`Google OIDC + RBAC + Batch Sharing + Local CLI Login`) designed to run at `$0/month` on **Vercel Hobby** paired with Serverless PostgreSQL (e.g., **Neon Free Tier**):
+
+- **Stateless Compute (`api/index.js`)**: No permanent WebSockets or Postgres `LISTEN` connections are kept open — Web Studio automatically uses conditional HTTP **Stateless Sync** (`GET /api/sync` with `ETag` / `304 Not Modified`) when focused or active, while static SPA assets serve from Vercel's CDN.
+- **Single Master Secret**: Set one `MYARTIFACT_SECRET` to deterministically derive ES256 JWT keys, cookie HMAC keys, and signed blob URLs across cold starts.
+- **Zero-Config Blobs (`cloud_blobs`) + Optional R2/S3**: Artifact contents fall back to PostgreSQL `cloud_blobs` when S3 env vars are omitted, or set `MYARTIFACT_S3_*` for direct-to-R2/S3 pre-signed binary uploads (>4.5 MB model checkpoints).
+
+### Quick Deploy
+
+1. Copy `.env.example` and provision:
+   - `DATABASE_URL` — Neon Postgres pooled (`-pooler`) connection string
+   - `MYARTIFACT_SECRET` — generate with `openssl rand -hex 32`
+   - `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET` — set Authorized Redirect URI to `https://<your-app>.vercel.app/api/auth/google/callback`
+2. Add those variables in **Vercel Project Settings -> Environment Variables** and deploy:
+   ```bash
+   npx vercel --prod
+   ```
+3. Log in once from your terminal so local coding agents (**Claude Code**, **Codex**, **Antigravity**) share your cloud identity under the default safe scope ceiling:
+   ```bash
+   myartifact login --cloud https://<your-app>.vercel.app
+   ```
+
+See [docs/cloud-deployment.md](docs/cloud-deployment.md) for the full serverless + Postgres + R2/S3 + DNS deployment methodology.
 
 ---
 
