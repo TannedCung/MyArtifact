@@ -133,12 +133,12 @@ export function evaluateVisualOpportunity(input: {
   }
 
   if (
-    /(architecture|fsm|state-machine|pinout|wiring|bring-up|physical-build|roadmap|tracker)/i.test(
+    /(architecture|fsm|state-machine|pinout|wiring|bring-up|physical-build|roadmap|tracker|3d|spatial|kinematic|mesh|scene)/i.test(
       catOrTitle
     ) ||
     (input.content || '').length >= 4500
   ) {
-    return 'Visual-first recommendation: Technical guides, architectures, hardware pinouts, and trackers communicate faster as an interactive "react" or "html" workbench (inline SVG spatial/pinout diagrams, clickable state steppers, and window.storage checklists) rather than long Markdown prose.';
+    return 'Visual-first recommendation: Technical guides, architectures, hardware pinouts, 3D spatial layouts, and trackers communicate faster as an interactive "react" or "html" workbench (Three.js (`three` + `three/addons/`) 3D viewports, inline SVG spatial/pinout diagrams, clickable state steppers, and window.storage checklists) rather than long Markdown prose.';
   }
 
   return undefined;
@@ -184,7 +184,7 @@ export function inferTypeFromPathOrContent(filePath?: string, content?: string):
     return { type: 'mermaid', language: 'mermaid' };
   }
   if (
-    /export\s+default\s+function|import\s+.*from\s+['"]react['"]|from\s+['"]lucide-react['"]/.test(
+    /export\s+default\s+function|import\s+.*from\s+['"]react['"]|from\s+['"]lucide-react['"]|from\s+['"](?:three|three\/addons\/[^'"]+|@react-three\/fiber)['"]/.test(
       trimmed
     )
   ) {
@@ -293,7 +293,18 @@ export function inferWikiCategory(input: {
   if (hay.includes('roadmap') || hay.includes('tracker') || hay.includes('telemetry') || hay.includes('milestone')) {
     return 'roadmaps/platform';
   }
-  if (input.type === 'mermaid' || hay.includes('architecture') || hay.includes('engine') || hay.includes('blog') || hay.includes('design')) {
+  if (
+    input.type === 'mermaid' ||
+    hay.includes('architecture') ||
+    hay.includes('engine') ||
+    hay.includes('blog') ||
+    hay.includes('design') ||
+    hay.includes('three') ||
+    hay.includes('3d') ||
+    hay.includes('webgl') ||
+    hay.includes('kinematic') ||
+    hay.includes('scene')
+  ) {
     return 'concepts/architecture';
   }
   return 'concepts/general';
@@ -448,7 +459,7 @@ export class ArtifactStore {
       '',
       '> **Agent Governance (Visual-First + Andrej Karpathy `llm-wiki.md` Pattern):**',
       '> 1. **Orient First:** Read this `index.md` (`myartifact index` or `myartifact index --project <project>`) before creating a new artifact or answering look-back questions.',
-      '> 2. **Visual-First Default (`react` / `html` > `markdown`):** Build interactive `react` (`.tsx` with Recharts, Lucide, Tailwind, inline SVG) or `html` visualizers whenever explaining benchmarks, >5-row metric tables, architectures, state machines, hardware pinouts/layouts, or checklists. Reserve plain `markdown` ONLY for short narrative notes where charts, diagrams, or interactive controls add zero clarity.',
+      '> 2. **Visual-First Default (`react` / `html` > `markdown`):** Build interactive `react` (`.tsx` with Recharts, Three.js, Lucide, Tailwind, inline SVG) or `html` visualizers whenever explaining benchmarks, >5-row metric tables, architectures, state machines, 3D kinematics/scenes, hardware pinouts/layouts, or checklists. Reserve plain `markdown` ONLY for short narrative notes where charts, diagrams, or interactive controls add zero clarity.',
       '> 3. **Group by Project (`--project`) & Category (`--category`):** Always assign the active project slug (e.g., `argos-01`, `reasoning-lab`, `myartifact`, or the current repo name) and place the artifact into a structured category (`overview`, `roadmaps`, `concepts`, `architecture`, `experiments`, `benchmarks`, `comparisons`, `papers`).',
       '> 4. **Write a Crisp Summary & Cross-Links:** Provide a 1-line `--description` with key metrics/conclusions, link related slugs via `--links`, and upgrade living trackers/reports (`v1 -> v2`, including `markdown -> react` visual upgrades) when new results arrive.',
       '',
@@ -1572,7 +1583,7 @@ export class ArtifactStore {
       ...(row.epoch !== null && row.epoch !== undefined
         ? { epoch: Number(row.epoch) }
         : {}),
-      filePath: String(row.file_path),
+      filePath: this.resolveStoredFilePath(String(row.file_path)),
       format: String(row.format || 'pt'),
       byteSize: Number(row.byte_size || 0),
       sha256: String(row.sha256 || ''),
@@ -1645,12 +1656,16 @@ export class ArtifactStore {
   private resolveStoredFilePath(storedPath: string): string {
     if (!storedPath || fs.existsSync(storedPath)) return storedPath;
     const normalized = storedPath.replace(/\\/g, '/');
-    const marker = '/artifacts/';
-    const idx = normalized.lastIndexOf(marker);
-    if (idx >= 0) {
-      const rel = normalized.slice(idx + marker.length);
-      const candidate = path.join(this.artifactsDir, ...rel.split('/'));
-      if (fs.existsSync(candidate)) return candidate;
+    for (const [marker, baseDir] of [
+      ['/artifacts/', this.artifactsDir],
+      ['/runs/', this.runsDir],
+    ] as const) {
+      const idx = normalized.lastIndexOf(marker);
+      if (idx >= 0) {
+        const rel = normalized.slice(idx + marker.length);
+        const candidate = path.join(baseDir, ...rel.split('/'));
+        if (fs.existsSync(candidate)) return candidate;
+      }
     }
     return storedPath;
   }

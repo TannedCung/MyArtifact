@@ -21,13 +21,17 @@ const { DatabaseSync } = require('node:sqlite') as {
   DatabaseSync: typeof DatabaseSyncType;
 };
 
-export function initDatabase(dbPath: string): DatabaseSyncType {
+export function openSqliteDatabase(dbPath: string): DatabaseSyncType {
   const dir = path.dirname(dbPath);
   fs.mkdirSync(dir, { recursive: true });
-
   const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
+  return db;
+}
+
+export function initDatabase(dbPath: string): DatabaseSyncType {
+  const db = openSqliteDatabase(dbPath);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS artifacts (

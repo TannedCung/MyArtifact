@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { ArtifactStore } from '../src/core/storage.js';
+import { openSqliteDatabase } from '../src/core/db.js';
 import { parseTfEventsBuffer } from '../src/core/tensorboard.js';
 
 function createTempDir(): string {
@@ -191,6 +192,53 @@ describe('ArtifactStore Hybrid Storage, Versioning & window.storage', () => {
     assert.equal(decodedPoints[0].tag, 'train/loss');
     assert.equal(decodedPoints[0].step, 100);
     assert.ok(Math.abs(decodedPoints[0].value - 1.25) < 1e-5);
+
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('resolves foreign host/container file_path prefixes for artifacts and TensorBoard checkpoints', () => {
+    const tmpDir = createTempDir();
+    const store = new ArtifactStore(tmpDir);
+
+    const art = store.createArtifact({
+      slug: 'cross-mount-demo',
+      title: 'Cross Mount Demo',
+      type: 'react',
+      content: 'export default function Demo() { return <div>Mounted</div>; }',
+    });
+
+    const { checkpoint } = store.saveModelCheckpoint({
+      slug: 'cross-mount-tb',
+      name: 'weights.safetensors',
+      step: 10,
+      content: Buffer.from('WEIGHTS_BYTES'),
+    });
+
+    const rawDb = openSqliteDatabase(path.join(tmpDir, 'index.sqlite'));
+    rawDb
+      .prepare('UPDATE artifacts SET file_path = ? WHERE id = ?')
+      .run('/host/other/home/.myartifact/artifacts/cross-mount-demo/current.tsx', art.id);
+    rawDb
+      .prepare('UPDATE artifact_versions SET file_path = ? WHERE artifact_id = ?')
+      .run('/host/other/home/.myartifact/artifacts/cross-mount-demo/versions/v1.tsx', art.id);
+    rawDb
+      .prepare('UPDATE tb_checkpoints SET file_path = ? WHERE id = ?')
+      .run('/host/other/home/.myartifact/runs/cross-mount-tb/checkpoints/weights.safetensors', checkpoint.id);
+    rawDb.close();
+
+    const loaded = store.getArtifact('cross-mount-demo');
+    assert.ok(loaded);
+    assert.equal(loaded.content, 'export default function Demo() { return <div>Mounted</div>; }');
+    assert.equal(
+      store.getVersionContent('cross-mount-demo', 1),
+      'export default function Demo() { return <div>Mounted</div>; }'
+    );
+
+    const loadedCkpt = store.getModelCheckpointById(checkpoint.id);
+    assert.ok(loadedCkpt);
+    assert.ok(fs.existsSync(loadedCkpt.filePath));
+    assert.equal(fs.readFileSync(loadedCkpt.filePath, 'utf8'), 'WEIGHTS_BYTES');
 
     store.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
