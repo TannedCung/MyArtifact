@@ -4,10 +4,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createTwoFilesPatch } from 'diff';
-import { ArtifactStore } from '../core/storage.js';
+import { ArtifactStore, getDefaultDataDir } from '../core/storage.js';
 import { MYARTIFACT_LOGO_SVG, resolveArtifactIconSvg } from '../core/icons.js';
 import { buildSandboxHtml } from '../core/sandbox-template.js';
 import { startArtifactWatcher } from './watcher.js';
+import { createBlobStoreFromEnv, hasS3EnvConfig } from '../cloud/blob-store.js';
+import { CloudTokenService } from '../cloud/auth/jwt.js';
+import type { GoogleOidcVerifier } from '../cloud/auth/google-oidc.js';
+import { CloudHttpRuntime } from '../cloud/cloud-server.js';
+import { SqliteCloudStore } from '../cloud/sqlite-cloud-store.js';
+import { PostgresCloudStore } from '../cloud/postgres-store.js';
+import type { CloudStore } from '../cloud/store-interface.js';
 import type {
   ArtifactType,
   CreateArtifactInput,
@@ -18,17 +25,30 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export interface CloudServerConfig {
+  cloudStore?: CloudStore;
+  tokenService?: CloudTokenService;
+  oidcVerifier?: GoogleOidcVerifier | null;
+  publicBaseUrl?: string;
+  dataDir?: string;
+  allowedOrigins?: string[];
+}
+
 export interface ServerOptions {
   port?: number;
   host?: string;
+  mode?: 'local' | 'cloud';
   store?: ArtifactStore;
   watchDirs?: string[];
   enableWatcher?: boolean;
+  cloud?: CloudServerConfig;
 }
 
 export interface RunningArtifactServer {
   server: http.Server;
   store: ArtifactStore;
+  cloudStore?: CloudStore;
+  mode: 'local' | 'cloud';
   port: number;
   host: string;
   broadcast: (event: Record<string, unknown>) => void;
@@ -74,9 +94,86 @@ const MIME_TYPES: Record<string, string> = {
 export async function startArtifactServer(
   options: ServerOptions = {}
 ): Promise<RunningArtifactServer> {
-  const store = options.store || new ArtifactStore();
   const host = options.host || process.env.MYARTIFACT_HOST || '127.0.0.1';
   const requestedPort = options.port ?? Number(process.env.MYARTIFACT_PORT || 4173);
+  const mode: 'local' | 'cloud' =
+    options.mode ||
+    (options.cloud ? 'cloud' : undefined) ||
+    (process.env.MYARTIFACT_MODE === 'cloud' ? 'cloud' : 'local');
+
+  // Locate static web build directory
+  const candidatePublicDirs = [
+    path.resolve(__dirname, '../dist/public'),
+    path.resolve(__dirname, './public'),
+    path.resolve(process.cwd(), 'dist/public'),
+  ];
+  const publicDir = candidatePublicDirs.find((d) => fs.existsSync(d));
+
+  if (mode === 'cloud') {
+    const dataDir = path.resolve(options.cloud?.dataDir || getDefaultDataDir());
+    let cloudStore = options.cloud?.cloudStore;
+    let ownsCloudStore = false;
+    if (!cloudStore) {
+      ownsCloudStore = true;
+      const dbUrl = process.env.DATABASE_URL;
+      const isPostgres = Boolean(
+        dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))
+      );
+      cloudStore = isPostgres
+        ? await PostgresCloudStore.connect(
+            dbUrl!,
+            hasS3EnvConfig() ? createBlobStoreFromEnv(dataDir) : undefined
+          )
+        : new SqliteCloudStore(dataDir, createBlobStoreFromEnv(dataDir));
+    }
+
+    const tokenService = options.cloud?.tokenService || new CloudTokenService({ dataDir });
+    const runtime = new CloudHttpRuntime({
+      store: cloudStore,
+      tokenService,
+      oidcVerifier: options.cloud?.oidcVerifier,
+      publicBaseUrl: options.cloud?.publicBaseUrl || process.env.MYARTIFACT_PUBLIC_URL,
+      publicDir,
+      allowedOrigins: options.cloud?.allowedOrigins,
+    });
+
+    const server = http.createServer((req, res) => {
+      void runtime.handleRequest(req, res);
+    });
+    const wss = runtime.attachWebSocketServer(server);
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(requestedPort, host, () => resolve());
+    });
+
+    const addr = server.address();
+    const actualPort = typeof addr === 'object' && addr ? addr.port : requestedPort;
+    if (!options.cloud?.publicBaseUrl && !process.env.MYARTIFACT_PUBLIC_URL) {
+      runtime.setPublicBaseUrl(`http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${actualPort}`);
+    }
+
+    const placeholderStore = options.store as ArtifactStore;
+    return {
+      server,
+      store: placeholderStore,
+      cloudStore,
+      mode: 'cloud',
+      port: actualPort,
+      host,
+      broadcast: () => {},
+      close: async () => {
+        runtime.close();
+        wss.close();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        if (ownsCloudStore) {
+          await cloudStore!.close();
+        }
+      },
+    };
+  }
+
+  const store = options.store || new ArtifactStore();
 
   const clients = new Set<WebSocket>();
   const broadcast = (payload: Record<string, unknown>) => {
@@ -100,14 +197,6 @@ export async function startArtifactServer(
           },
         })
       : null;
-
-  // Locate static web build directory
-  const candidatePublicDirs = [
-    path.resolve(__dirname, '../dist/public'),
-    path.resolve(__dirname, './public'),
-    path.resolve(process.cwd(), 'dist/public'),
-  ];
-  const publicDir = candidatePublicDirs.find((d) => fs.existsSync(d));
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -144,10 +233,21 @@ export async function startArtifactServer(
       if (pathname === '/api/health' && req.method === 'GET') {
         sendJson(res, 200, {
           ok: true,
+          mode: 'local',
           dataDir: store.dataDir,
           dropzoneDir: store.dropzoneDir,
           artifactsDir: store.artifactsDir,
           runsDir: store.runsDir,
+        });
+        return;
+      }
+
+      if (pathname === '/api/auth/providers' && req.method === 'GET') {
+        sendJson(res, 200, {
+          mode: 'local',
+          googleEnabled: false,
+          allowDeviceFlow: false,
+          realtimeWs: true,
         });
         return;
       }
@@ -645,6 +745,7 @@ export async function startArtifactServer(
   return {
     server,
     store,
+    mode: 'local',
     port: actualPort,
     host,
     broadcast,

@@ -61,13 +61,26 @@ export function startArtifactWatcher(
     ...extraWatchDirs.map((d) => path.resolve(d)),
   ];
 
+  // Fallback to polling when Linux inotify user instances/watches are exhausted
+  let usePolling = process.env.CHOKIDAR_USEPOLLING === '1';
+  if (!usePolling) {
+    try {
+      const probe = fs.watch(store.dropzoneDir);
+      probe.close();
+    } catch {
+      usePolling = true;
+    }
+  }
+
   const watcher = chokidar.watch(watchTargets, {
     ignoreInitial: true,
     persistent: true,
     depth: 3,
+    usePolling,
+    interval: 50,
     awaitWriteFinish: {
-      stabilityThreshold: 120,
-      pollInterval: 40,
+      stabilityThreshold: usePolling ? 80 : 120,
+      pollInterval: usePolling ? 30 : 40,
     },
   });
 
@@ -155,6 +168,9 @@ export function startArtifactWatcher(
 
   watcher.on('add', handleFileEvent);
   watcher.on('change', handleFileEvent);
+  watcher.on('error', () => {
+    // Prevent unhandled watcher errors (e.g. transient EMFILE) from crashing the daemon
+  });
 
   return watcher;
 }

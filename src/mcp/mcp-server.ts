@@ -5,7 +5,22 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { ArtifactStore, evaluateVisualOpportunity } from '../core/storage.js';
+import { LocalSqliteRepository, type ArtifactRepository } from '../core/repository.js';
+import { resolveRepository } from '../core/resolve-repository.js';
+import type { CloudHttpRepository } from '../client/cloud-repository.js';
 import type { ArtifactType } from '../core/types.js';
+
+function asRepository(storeOrRepo: ArtifactStore | ArtifactRepository): ArtifactRepository {
+  return 'mode' in storeOrRepo ? storeOrRepo : new LocalSqliteRepository(storeOrRepo);
+}
+
+function getBaseOriginForRepo(repo: ArtifactRepository): string {
+  if (repo.mode === 'cloud' && 'cloudUrl' in repo) {
+    return (repo as CloudHttpRepository).cloudUrl;
+  }
+  const port = process.env.MYARTIFACT_PORT || 4173;
+  return `http://127.0.0.1:${port}`;
+}
 
 export async function notifyRunningDaemon(payload: Record<string, unknown>): Promise<void> {
   const port = Number(process.env.MYARTIFACT_PORT || 4173);
@@ -25,7 +40,7 @@ export const MCP_TOOLS = [
   {
     name: 'artifact_create',
     description:
-      'Create (or upsert by slug) a local interactive visual artifact. VISUAL-FIRST POLICY: Prefer interactive "react" (.tsx/.jsx with Tailwind, Recharts, Lucide, and inline SVG) or "html" whenever explaining benchmarks, multi-row metric comparisons, system architectures, state machines, hardware pinouts/layouts, or checklists. Reserve plain "markdown" strictly for short narrative notes where charts, diagrams, or interactive controls do not improve clarity.',
+      'Create (or upsert by slug) a local interactive visual artifact. VISUAL-FIRST POLICY: Prefer interactive "react" (.tsx/.jsx with Tailwind, Recharts, Three.js / three/addons / @react-three/fiber, Lucide, and inline SVG) or "html" whenever explaining benchmarks, multi-row metric comparisons, 3D kinematics/scenes, system architectures, state machines, hardware pinouts/layouts, or checklists. Reserve plain "markdown" strictly for short narrative notes where charts, 3D viewports, diagrams, or interactive controls do not improve clarity.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -38,7 +53,7 @@ export const MCP_TOOLS = [
           type: 'string',
           enum: ['react', 'html', 'markdown', 'mermaid', 'svg', 'tensorboard', 'code'],
           description:
-            'Artifact format. Prefer "react" or "html" for visual dashboards, benchmarks, hardware/architecture workbenches, and interactive tools; "mermaid"/"svg" for standalone diagrams; reserve "markdown" only for brief narrative notes.',
+            'Artifact format. Prefer "react" or "html" for visual dashboards, benchmarks, Three.js 3D viewports, hardware/architecture workbenches, and interactive tools; "mermaid"/"svg" for standalone diagrams; reserve "markdown" only for brief narrative notes.',
         },
         language: { type: 'string', description: 'Optional code language (e.g., tsx, python)' },
         content: { type: 'string', description: 'Complete source code or document content' },
@@ -71,7 +86,7 @@ export const MCP_TOOLS = [
         icon: {
           type: 'string',
           description:
-            'Custom 32x32 SVG logo markup (<svg viewBox="0 0 32 32">...</svg>) or preset id (e.g. "latex-paper", "multi-approach", "grpo-rl", "roadmap-tracker", "coder-eval", "engine-blog", "dashboard", "report", "diagram", "tool", "training") used as the browser tab favicon and header logo when opening this artifact page',
+            'Custom 32x32 SVG logo markup (<svg viewBox="0 0 32 32">...</svg>) or preset id (e.g. "scene-3d", "latex-paper", "multi-approach", "grpo-rl", "roadmap-tracker", "coder-eval", "engine-blog", "dashboard", "report", "diagram", "tool", "training") used as the browser tab favicon and header logo when opening this artifact page',
         },
         upsert: {
           type: 'boolean',
@@ -273,10 +288,13 @@ export const MCP_TOOLS = [
 ] as const;
 
 export async function executeMcpTool(
-  store: ArtifactStore,
+  storeOrRepo: ArtifactStore | ArtifactRepository,
   name: string,
   args: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>> {
+  const repo = asRepository(storeOrRepo);
+  const baseOrigin = getBaseOriginForRepo(repo);
+
   switch (name) {
     case 'artifact_create': {
       const title = String(args.title || 'Untitled Artifact');
@@ -299,19 +317,20 @@ export async function executeMcpTool(
       };
 
       const artifact =
-        upsert && slug ? store.upsertBySlug(slug, input) : store.createArtifact(input);
+        upsert && slug ? await repo.upsertBySlug(slug, input) : await repo.createArtifact(input);
 
-      const port = process.env.MYARTIFACT_PORT || 4173;
-      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
-      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
-      const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
+      const artifactPageUrl = `${baseOrigin}/artifacts/${artifact.slug}`;
+      const studioUrl = `${baseOrigin}/?view=studio&artifact=${artifact.slug}`;
+      const iconUrl = `${baseOrigin}/api/artifacts/${artifact.slug}/icon.svg`;
       const visualRecommendation = evaluateVisualOpportunity({
         type: artifact.type,
         category: artifact.category,
         content: artifact.content,
         title: artifact.title,
       });
-      await notifyRunningDaemon({ type: 'artifact:created', artifact });
+      if (repo.mode === 'local') {
+        await notifyRunningDaemon({ type: 'artifact:created', artifact });
+      }
       return {
         report: `Published "${artifact.title}" (v${artifact.currentVersion}, ${artifact.type}) in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}${visualRecommendation ? ` | ${visualRecommendation}` : ''}`,
         ...(visualRecommendation ? { visualRecommendation } : {}),
@@ -337,7 +356,7 @@ export async function executeMcpTool(
     case 'artifact_update': {
       const id = String(args.id || '');
       const content = String(args.content || '');
-      const artifact = store.updateArtifact(id, {
+      const artifact = await repo.updateArtifact(id, {
         content,
         title: typeof args.title === 'string' ? args.title : undefined,
         type: typeof args.type === 'string' ? (args.type as ArtifactType) : undefined,
@@ -352,17 +371,18 @@ export async function executeMcpTool(
         agent: typeof args.agent === 'string' ? args.agent : undefined,
       });
 
-      const port = process.env.MYARTIFACT_PORT || 4173;
-      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
-      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
-      const iconUrl = `http://127.0.0.1:${port}/api/artifacts/${artifact.slug}/icon.svg`;
+      const artifactPageUrl = `${baseOrigin}/artifacts/${artifact.slug}`;
+      const studioUrl = `${baseOrigin}/?view=studio&artifact=${artifact.slug}`;
+      const iconUrl = `${baseOrigin}/api/artifacts/${artifact.slug}/icon.svg`;
       const visualRecommendation = evaluateVisualOpportunity({
         type: artifact.type,
         category: artifact.category,
         content: artifact.content,
         title: artifact.title,
       });
-      await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      if (repo.mode === 'local') {
+        await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      }
       return {
         report: `Updated "${artifact.title}" to v${artifact.currentVersion} (${artifact.type}) in [${artifact.project} / ${artifact.category}]. Open artifact page: ${artifactPageUrl}${visualRecommendation ? ` | ${visualRecommendation}` : ''}`,
         ...(visualRecommendation ? { visualRecommendation } : {}),
@@ -386,9 +406,9 @@ export async function executeMcpTool(
 
     case 'artifact_wiki_index': {
       const projFilter = typeof args.project === 'string' ? args.project : undefined;
-      const indexMarkdown = store.getWikiIndexMarkdown(projFilter);
-      const taxonomy = store.getWikiTaxonomy(projFilter);
-      const logMarkdown = args.includeLog ? store.getWikiLogMarkdown() : undefined;
+      const indexMarkdown = await repo.getWikiIndexMarkdown(projFilter);
+      const taxonomy = await repo.getWikiTaxonomy(projFilter);
+      const logMarkdown = args.includeLog ? await repo.getWikiLogMarkdown() : undefined;
       return {
         ...taxonomy,
         indexMarkdown,
@@ -398,16 +418,16 @@ export async function executeMcpTool(
 
     case 'artifact_get': {
       const id = String(args.id || '');
-      const artifact = store.getArtifact(id);
+      const artifact = await repo.getArtifact(id);
       if (!artifact) {
         throw new Error(`Artifact not found: ${id}`);
       }
       const versionNum = typeof args.version === 'number' ? args.version : undefined;
       const content = versionNum
-        ? store.getVersionContent(artifact.id, versionNum) ?? artifact.content
+        ? (await repo.getVersionContent(artifact.id, versionNum)) ?? artifact.content
         : artifact.content;
       const storage =
-        args.includeStorage !== false ? store.getAllStorageEntries(artifact.id) : undefined;
+        args.includeStorage !== false ? await repo.getAllStorageEntries(artifact.id) : undefined;
 
       return {
         artifact: {
@@ -420,7 +440,7 @@ export async function executeMcpTool(
     }
 
     case 'artifact_list': {
-      const artifacts = store.listArtifacts({
+      const artifacts = await repo.listArtifacts({
         query: typeof args.query === 'string' ? args.query : undefined,
         agent: typeof args.agent === 'string' ? args.agent : undefined,
         type: typeof args.type === 'string' ? (args.type as ArtifactType) : undefined,
@@ -435,18 +455,20 @@ export async function executeMcpTool(
       const id = String(args.id || '');
       const key = String(args.key || '');
       const value = String(args.value ?? '');
-      const result = store.setStorageValue(id, key, value);
-      await notifyRunningDaemon({
-        type: 'storage:updated',
-        artifactId: id,
-        entries: store.getAllStorageEntries(id),
-      });
+      const result = await repo.setStorageValue(id, key, value);
+      if (repo.mode === 'local') {
+        await notifyRunningDaemon({
+          type: 'storage:updated',
+          artifactId: id,
+          entries: await repo.getAllStorageEntries(id),
+        });
+      }
       return { result };
     }
 
     case 'tb_log_scalars': {
       const slug = String(args.run || 'training-run');
-      const artifact = store.logTensorBoardScalars({
+      const artifact = await repo.logTensorBoardScalars({
         slug,
         title: typeof args.title === 'string' ? args.title : undefined,
         step: typeof args.step === 'number' ? args.step : 0,
@@ -467,10 +489,11 @@ export async function executeMcpTool(
             : undefined,
         agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
       });
-      const port = process.env.MYARTIFACT_PORT || 4173;
-      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
-      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
-      await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      const artifactPageUrl = `${baseOrigin}/artifacts/${artifact.slug}`;
+      const studioUrl = `${baseOrigin}/?view=studio&artifact=${artifact.slug}`;
+      if (repo.mode === 'local') {
+        await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      }
       return {
         report: `Logged scalars to "${artifact.title}" (v${artifact.currentVersion}). Open artifact page: ${artifactPageUrl}`,
         artifact: {
@@ -488,7 +511,7 @@ export async function executeMcpTool(
 
     case 'tb_save_checkpoint': {
       const slug = String(args.run || 'training-run');
-      const { artifact, checkpoint } = store.saveModelCheckpoint({
+      const { artifact, checkpoint } = await repo.saveModelCheckpoint({
         slug,
         name: typeof args.name === 'string' ? args.name : undefined,
         step: typeof args.step === 'number' ? args.step : 0,
@@ -504,10 +527,11 @@ export async function executeMcpTool(
         agent: typeof args.agent === 'string' ? args.agent : 'mcp-agent',
         summary: typeof args.summary === 'string' ? args.summary : undefined,
       });
-      const port = process.env.MYARTIFACT_PORT || 4173;
-      const artifactPageUrl = `http://127.0.0.1:${port}/artifacts/${artifact.slug}`;
-      const studioUrl = `http://127.0.0.1:${port}/?view=studio&artifact=${artifact.slug}`;
-      await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      const artifactPageUrl = `${baseOrigin}/artifacts/${artifact.slug}`;
+      const studioUrl = `${baseOrigin}/?view=studio&artifact=${artifact.slug}`;
+      if (repo.mode === 'local') {
+        await notifyRunningDaemon({ type: 'artifact:updated', artifact });
+      }
       return {
         report: `Saved checkpoint "${checkpoint.name}" under "${artifact.title}" (v${artifact.currentVersion}). Open artifact page: ${artifactPageUrl}`,
         artifact: {
@@ -529,7 +553,10 @@ export async function executeMcpTool(
 }
 
 export async function runMcpServer(dataDir?: string): Promise<void> {
-  const store = new ArtifactStore(dataDir);
+  const repo = resolveRepository({
+    dataDir,
+    agent: process.env.MYARTIFACT_AGENT || 'mcp-agent',
+  });
   const server = new Server(
     {
       name: 'myartifact',
@@ -549,7 +576,7 @@ export async function runMcpServer(dataDir?: string): Promise<void> {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       const result = await executeMcpTool(
-        store,
+        repo,
         request.params.name,
         (request.params.arguments as Record<string, unknown>) || {}
       );
