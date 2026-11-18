@@ -28,7 +28,20 @@ export function resolveDefaultCliEntryPath(): string {
   return candidates[2];
 }
 
+function assertSafeCliPath(cliPath: string): string {
+  if (typeof cliPath !== 'string' || !cliPath.trim()) {
+    throw new Error('CLI entry path must be a non-empty string');
+  }
+  if (/[\x00-\x1f\x7f"`]|\$\(/.test(cliPath)) {
+    throw new Error('CLI entry path contains unsafe shell or control characters');
+  }
+  return cliPath;
+}
+
 export function buildUniversalSkillMarkdown(cliCommand = 'npx myartifact'): string {
+  if (/[\x00-\x1f\x7f`]|\$\(/.test(cliCommand)) {
+    throw new Error('CLI command contains unsafe shell or control characters');
+  }
   return `---
 name: myartifact
 description: >-
@@ -176,12 +189,16 @@ await window.storage?.set('checklist:steps', JSON.stringify(nextSteps));
 
 export function installAgentIntegrations(options: SetupOptions = {}): SetupResult {
   const targetDir = path.resolve(options.targetDir || process.cwd());
-  const resolvedCliPath = options.cliEntryPath || resolveDefaultCliEntryPath();
+  const resolvedCliPath = assertSafeCliPath(
+    options.cliEntryPath || resolveDefaultCliEntryPath()
+  );
   const isSelfWorkspace =
     !options.cliEntryPath &&
     path.resolve(targetDir, 'dist/cli/cli.js') === path.resolve(resolvedCliPath);
 
-  const workspaceCliPath = isSelfWorkspace ? './dist/cli/cli.js' : resolvedCliPath;
+  const workspaceCliPath = assertSafeCliPath(
+    isSelfWorkspace ? './dist/cli/cli.js' : resolvedCliPath
+  );
   const workspaceSkillMd = buildUniversalSkillMarkdown(`node "${workspaceCliPath}"`);
   const globalSkillMd = buildUniversalSkillMarkdown(`node "${resolvedCliPath}"`);
   const writtenFiles: string[] = [];

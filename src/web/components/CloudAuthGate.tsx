@@ -4,6 +4,21 @@ import { MYARTIFACT_LOGO_SVG } from '../../core/icons.js';
 import { cloudFetch } from '../cloud-api.js';
 import type { UserProfile, Workspace } from '../../core/types.js';
 
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+function parseLoopbackRedirectUrl(rawUrl: unknown): URL | null {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'http:' || !LOOPBACK_HOSTNAMES.has(parsed.hostname)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export interface CloudAuthGateProps {
   mode: 'signin' | 'cli_authorize' | 'device';
   authenticated: boolean;
@@ -29,6 +44,12 @@ export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
   const state = params.get('state') || '';
   const elevate = params.get('elevate') === '1';
   const deviceLabel = params.get('device_label') || 'Local CLI & Agents';
+  const parsedLoopbackUri = parseLoopbackRedirectUrl(redirectUri);
+  const loopbackHostPort = parsedLoopbackUri
+    ? parsedLoopbackUri.port
+      ? `${parsedLoopbackUri.hostname}:${parsedLoopbackUri.port}`
+      : parsedLoopbackUri.hostname
+    : null;
   const initialWs = params.get('workspace') || workspaces[0]?.id || '';
 
   const [selectedWs, setSelectedWs] = useState<string>(initialWs);
@@ -82,8 +103,14 @@ export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
         setBusy(false);
         return;
       }
+      const safeRedirect = parseLoopbackRedirectUrl(data.redirectUrl);
+      if (!safeRedirect) {
+        setError('Invalid loopback redirect URL returned by server');
+        setBusy(false);
+        return;
+      }
       setDoneMsg('Authorized! Redirecting back to CLI…');
-      window.location.href = data.redirectUrl;
+      window.location.href = safeRedirect.toString();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -177,6 +204,19 @@ export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
               <span className="truncate">
                 Signed in as <strong className="text-ink">{user?.email}</strong>
               </span>
+            </div>
+
+            <div className="rounded-[8px] border border-line bg-canvas px-3 py-2 text-[12px] text-ink-2 flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ink-3">Device</span>
+                <span className="font-medium text-ink truncate">{deviceLabel}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ink-3">Callback listener</span>
+                <span className="font-mono text-[11.5px] text-ink truncate">
+                  {loopbackHostPort || 'Invalid or missing loopback URI'}
+                </span>
+              </div>
             </div>
 
             {workspaces.length > 0 && (

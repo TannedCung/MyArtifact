@@ -11,6 +11,21 @@ import {
 import { cloudFetch } from '../cloud-api.js';
 import type { AuthSessionInfo, UserProfile, Workspace } from '../../core/types.js';
 
+function getSafeAvatarUrl(rawUrl?: string): string | null {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || /[\x00-\x1f\x7f\s]/.test(trimmed)) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      return parsed.toString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export interface WorkspaceBarProps {
   user: UserProfile;
   workspaces: Workspace[];
@@ -35,6 +50,8 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
   const [newWsName, setNewWsName] = useState('');
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessions, setSessions] = useState<AuthSessionInfo[]>([]);
+
+  const safeAvatarUrl = getSafeAvatarUrl(user.avatarUrl);
 
   const activeWs =
     workspaces.find((w) => w.id === activeWorkspaceId || w.slug === activeWorkspaceId) ||
@@ -112,8 +129,8 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
           title={`${user.email} — Manage CLI & Web Sessions`}
           className="h-[30px] px-2 rounded-[7px] border border-line bg-canvas hover:bg-sunken flex items-center gap-1.5 shrink-0 transition-colors"
         >
-          {user.avatarUrl ? (
-            <img src={user.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
+          {safeAvatarUrl ? (
+            <img src={safeAvatarUrl} referrerPolicy="no-referrer" alt="" className="w-4 h-4 rounded-full" />
           ) : (
             <span className="w-4 h-4 rounded-full bg-sage text-canvas text-[10px] font-semibold flex items-center justify-center">
               {(user.displayName || user.email)[0]?.toUpperCase()}

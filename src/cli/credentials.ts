@@ -61,11 +61,23 @@ export class CredentialVault {
     }
   }
 
-  public writeConfig(config: MyArtifactCliConfig): void {
+  private writePrivateJson(targetPath: string, data: unknown): void {
     fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
-    const tmp = `${this.configPath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmp, this.configPath);
+    const tmp = `${targetPath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    fs.renameSync(tmp, targetPath);
+    try {
+      fs.chmodSync(targetPath, 0o600);
+    } catch {
+      // Ignore on unsupported FS
+    }
+  }
+
+  public writeConfig(config: MyArtifactCliConfig): void {
+    this.writePrivateJson(this.configPath, config);
   }
 
   public readCredentials(): StoredCloudCredentials | null {
@@ -78,18 +90,7 @@ export class CredentialVault {
   }
 
   public writeCredentials(creds: StoredCloudCredentials): void {
-    fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
-    const tmp = `${this.credentialsPath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(creds, null, 2) + '\n', {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    fs.renameSync(tmp, this.credentialsPath);
-    try {
-      fs.chmodSync(this.credentialsPath, 0o600);
-    } catch {
-      // Ignore on unsupported FS
-    }
+    this.writePrivateJson(this.credentialsPath, creds);
   }
 
   public clearCredentials(): void {
@@ -111,9 +112,13 @@ export class CredentialVault {
         const code = (err as NodeJS.ErrnoException)?.code;
         if (code !== 'EEXIST') throw err;
 
-        // Check for stale lock
+        // Check for stale or symlinked lock
         try {
-          const stat = fs.statSync(this.lockPath);
+          const stat = fs.lstatSync(this.lockPath);
+          if (stat.isSymbolicLink()) {
+            fs.unlinkSync(this.lockPath);
+            continue;
+          }
           const lockData = JSON.parse(fs.readFileSync(this.lockPath, 'utf8')) as {
             pid?: number;
             at?: number;
