@@ -13,6 +13,10 @@ export class VercelConfigError extends Error {
   public readonly code = 'misconfigured_serverless_env';
 }
 
+class VercelBadRequestError extends Error {
+  public readonly statusCode = 400;
+}
+
 interface GlobalVercelCache {
   __myartifactVercelRuntimePromise?: Promise<CloudHttpRuntime>;
 }
@@ -22,11 +26,19 @@ interface GlobalVercelCache {
  */
 export function normalizeVercelRequestUrl(req: http.IncomingMessage): void {
   const rawUrl = req.url || '/';
-  const parsed = new URL(rawUrl, 'http://localhost');
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl, 'http://localhost');
+  } catch {
+    throw new VercelBadRequestError('Invalid request URL');
+  }
   const rewrittenPath = parsed.searchParams.get('__ma_path');
   if (rewrittenPath !== null) {
     parsed.searchParams.delete('__ma_path');
-    const normalizedPath = rewrittenPath.startsWith('/') ? rewrittenPath : `/${rewrittenPath}`;
+    if (/[\x00-\x1f\x7f]/.test(rewrittenPath)) {
+      throw new VercelBadRequestError('Invalid request path');
+    }
+    const normalizedPath = '/' + rewrittenPath.replace(/^[/\\]+/, '');
     const qs = parsed.searchParams.toString();
     req.url = `${normalizedPath}${qs ? `?${qs}` : ''}`;
   }
@@ -95,8 +107,8 @@ export async function handleVercelRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse
 ): Promise<void> {
-  normalizeVercelRequestUrl(req);
   try {
+    normalizeVercelRequestUrl(req);
     const runtime = await createVercelRuntime();
     await runtime.handleRequest(req, res);
   } catch (err) {
@@ -107,7 +119,19 @@ export async function handleVercelRequest(
       res.end(JSON.stringify({ error: err.message, code: err.code }));
       return;
     }
-    const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof VercelBadRequestError) {
+      if (!res.headersSent) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      }
+      res.end(JSON.stringify({ error: err.message }));
+      return;
+    }
+    const message =
+      process.env.NODE_ENV === 'production'
+        ? 'Internal server error'
+        : err instanceof Error
+          ? err.message
+          : String(err);
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
     }

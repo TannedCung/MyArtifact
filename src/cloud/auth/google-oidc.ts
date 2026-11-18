@@ -102,6 +102,7 @@ export class GoogleOidcVerifier {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!tokenRes.ok) {
       const errText = await tokenRes.text().catch(() => '');
@@ -120,7 +121,9 @@ export class GoogleOidcVerifier {
     if (!forceRefresh && this.cachedJwks && now - this.cachedJwks.fetchedAt < 300_000) {
       return this.cachedJwks.keys;
     }
-    const res = await fetch(this.jwksUri);
+    const res = await fetch(this.jwksUri, {
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!res.ok) {
       throw new Error(`Failed to fetch OIDC JWKS (${res.status})`);
     }
@@ -131,16 +134,16 @@ export class GoogleOidcVerifier {
   }
 
   public async verifyIdToken(idToken: string, expectedNonce: string): Promise<UpsertGoogleUserInput> {
+    if (!idToken || typeof idToken !== 'string') {
+      throw new Error('Malformed OIDC id_token');
+    }
     const parts = idToken.split('.');
-    if (parts.length !== 3) {
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
       throw new Error('Malformed OIDC id_token');
     }
     const [hB64, pB64, sigB64] = parts;
-    const header = JSON.parse(Buffer.from(hB64, 'base64url').toString('utf8')) as {
-      alg?: string;
-      kid?: string;
-    };
-    const payload = JSON.parse(Buffer.from(pB64, 'base64url').toString('utf8')) as {
+    let header: { alg?: string; kid?: string };
+    let payload: {
       iss?: string;
       aud?: string | string[];
       sub?: string;
@@ -152,6 +155,18 @@ export class GoogleOidcVerifier {
       nonce?: string;
       exp?: number;
     };
+    try {
+      header = JSON.parse(Buffer.from(hB64, 'base64url').toString('utf8')) as {
+        alg?: string;
+        kid?: string;
+      };
+      payload = JSON.parse(Buffer.from(pB64, 'base64url').toString('utf8')) as typeof payload;
+    } catch {
+      throw new Error('Malformed OIDC id_token encoding or JSON');
+    }
+    if (!header || typeof header !== 'object' || !payload || typeof payload !== 'object') {
+      throw new Error('Malformed OIDC id_token structure');
+    }
 
     let keys = await this.getJwks(false);
     let jwk = header.kid ? keys.find((k) => k.kid === header.kid) : keys[0];
@@ -195,17 +210,25 @@ export class GoogleOidcVerifier {
     if (!audMatch) {
       throw new Error('OIDC audience mismatch');
     }
-    if (!payload.exp || payload.exp <= nowSec - 60) {
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp <= nowSec - 60) {
       throw new Error('OIDC id_token expired');
     }
-    if (expectedNonce && payload.nonce !== expectedNonce) {
+    if (!expectedNonce || typeof payload.nonce !== 'string' || !payload.nonce) {
+      throw new Error('OIDC nonce mismatch');
+    }
+    const expectedNonceBuf = Buffer.from(expectedNonce, 'utf8');
+    const actualNonceBuf = Buffer.from(payload.nonce, 'utf8');
+    if (
+      expectedNonceBuf.length !== actualNonceBuf.length ||
+      !crypto.timingSafeEqual(expectedNonceBuf, actualNonceBuf)
+    ) {
       throw new Error('OIDC nonce mismatch');
     }
     const emailVerified = payload.email_verified === true || payload.email_verified === 'true';
     if (!emailVerified) {
       throw new Error('Google email_verified must be true');
     }
-    if (!payload.sub || !payload.email) {
+    if (typeof payload.sub !== 'string' || !payload.sub || typeof payload.email !== 'string' || !payload.email) {
       throw new Error('OIDC id_token missing sub or email');
     }
 

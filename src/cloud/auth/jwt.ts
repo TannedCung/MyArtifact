@@ -232,11 +232,12 @@ export class CloudTokenService {
 
   public verifyAccessJwt(token: string): AccessJwtClaims | null {
     try {
+      if (!token || typeof token !== 'string') return null;
       const parts = token.split('.');
-      if (parts.length !== 3) return null;
+      if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
       const [hB64, pB64, sigB64] = parts;
       const header = JSON.parse(base64UrlDecode(hB64).toString('utf8')) as { alg?: string };
-      if (header.alg !== 'ES256') return null;
+      if (!header || typeof header !== 'object' || header.alg !== 'ES256') return null;
 
       const ok = crypto.verify(
         'sha256',
@@ -247,10 +248,20 @@ export class CloudTokenService {
       if (!ok) return null;
 
       const claims = JSON.parse(base64UrlDecode(pB64).toString('utf8')) as AccessJwtClaims;
+      if (!claims || typeof claims !== 'object') return null;
       const now = Math.floor(Date.now() / 1000);
       if (claims.iss !== this.issuer) return null;
-      if (!claims.exp || claims.exp <= now) return null;
-      if (!claims.sub || !claims.sid) return null;
+      if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp) || claims.exp <= now) {
+        return null;
+      }
+      if (
+        typeof claims.sub !== 'string' ||
+        !claims.sub ||
+        typeof claims.sid !== 'string' ||
+        !claims.sid
+      ) {
+        return null;
+      }
       return claims;
     } catch {
       return null;
@@ -283,6 +294,7 @@ export class CloudTokenService {
 
   public verifySessionCookie(cookieValue: string): CookieSessionPayload | null {
     try {
+      if (!cookieValue || typeof cookieValue !== 'string') return null;
       const dot = cookieValue.indexOf('.');
       if (dot <= 0) return null;
       const payloadB64 = cookieValue.slice(0, dot);
@@ -295,8 +307,21 @@ export class CloudTokenService {
       const b = Buffer.from(sigB64, 'utf8');
       if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
       const parsed = JSON.parse(base64UrlDecode(payloadB64).toString('utf8')) as CookieSessionPayload;
+      if (!parsed || typeof parsed !== 'object') return null;
       const now = Math.floor(Date.now() / 1000);
-      if (!parsed.exp || parsed.exp <= now || !parsed.sid || !parsed.sub) return null;
+      if (
+        typeof parsed.exp !== 'number' ||
+        !Number.isFinite(parsed.exp) ||
+        parsed.exp <= now ||
+        typeof parsed.sid !== 'string' ||
+        !parsed.sid ||
+        typeof parsed.sub !== 'string' ||
+        !parsed.sub ||
+        typeof parsed.csrf !== 'string' ||
+        !parsed.csrf
+      ) {
+        return null;
+      }
       return parsed;
     } catch {
       return null;

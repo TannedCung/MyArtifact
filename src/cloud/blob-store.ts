@@ -53,9 +53,21 @@ interface PostgresBlobPoolLike {
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>;
 }
 
+function sanitizeContentDispositionFilename(raw: string): string {
+  return raw.replace(/[\r\n"\\/\x00-\x1f\x7f]/g, '').trim() || 'download';
+}
+
 function normalizeObjectKey(rawKey: string): string {
-  const cleaned = rawKey.replace(/\\/g, '/').replace(/^\/+/, '');
-  const segments = cleaned.split('/').filter((s) => s && s !== '.' && s !== '..');
+  if (typeof rawKey !== 'string' || !rawKey || rawKey.includes('\0')) {
+    throw new Error('Invalid object key');
+  }
+  const rawSegments = rawKey.split(/[\\/]/);
+  for (const seg of rawSegments) {
+    if (seg === '..') {
+      throw new Error('Invalid object key');
+    }
+  }
+  const segments = rawSegments.filter((s) => s && s !== '.');
   if (segments.length === 0) {
     throw new Error('Invalid object key');
   }
@@ -73,7 +85,7 @@ export function casKeyForSha256(sha256: string): string {
 abstract class BaseSignedLocalBlobStore implements SignedLocalTransferStore {
   public abstract readonly kind: 'local' | 'postgres';
   private readonly signingSecret: string;
-  private baseUrl: string;
+  private baseUrl = 'http://127.0.0.1:4173';
 
   constructor(options: { signingSecret?: string; baseUrl?: string } = {}) {
     this.signingSecret =
@@ -82,11 +94,18 @@ abstract class BaseSignedLocalBlobStore implements SignedLocalTransferStore {
       process.env.MYARTIFACT_SECRET ||
       process.env.MYARTIFACT_COOKIE_SECRET ||
       crypto.randomBytes(32).toString('hex');
-    this.baseUrl = (options.baseUrl || 'http://127.0.0.1:4173').replace(/\/+$/, '');
+    if (options.baseUrl) {
+      this.setBaseUrl(options.baseUrl);
+    }
   }
 
   public setBaseUrl(baseUrl: string): void {
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+    const trimmed = baseUrl.trim().replace(/\/+$/, '');
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Invalid blob store baseUrl protocol');
+    }
+    this.baseUrl = `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
   }
 
   private signLocalUrl(action: 'upload' | 'download', key: string, expMs: number): string {
@@ -135,7 +154,8 @@ abstract class BaseSignedLocalBlobStore implements SignedLocalTransferStore {
     const safeKey = normalizeObjectKey(key);
     const expMs = Date.now() + expiresInSeconds * 1000;
     const sig = this.signLocalUrl('download', safeKey, expMs);
-    const fnPart = filename ? `&fn=${encodeURIComponent(filename)}` : '';
+    const safeFn = filename ? sanitizeContentDispositionFilename(filename) : '';
+    const fnPart = safeFn ? `&fn=${encodeURIComponent(safeFn)}` : '';
     const url = `${this.baseUrl}/api/blobs/download?key=${encodeURIComponent(safeKey)}&exp=${expMs}&sig=${encodeURIComponent(sig)}${fnPart}`;
     return {
       url,
@@ -575,7 +595,7 @@ export class S3CompatibleBlobStore implements BlobStore {
   ): Promise<PresignedTransfer> {
     const extra: Record<string, string> = {};
     if (filename) {
-      extra['response-content-disposition'] = `attachment; filename="${filename.replace(/"/g, '')}"`;
+      extra['response-content-disposition'] = `attachment; filename="${sanitizeContentDispositionFilename(filename)}"`;
     }
     const { url, expiresAt } = this.presignUrl('GET', key, expiresInSeconds, extra);
     return {

@@ -96,11 +96,68 @@ function parseBodyRaw(req: http.IncomingMessage, maxBytes = 64 * 1024 * 1024): P
   });
 }
 
+class HttpBadRequestError extends Error {
+  public readonly statusCode = 400;
+}
+
+const HOST_HEADER_RE = /^(?:[a-zA-Z0-9.-]+|\[[0-9a-fA-F:]+\])(?::\d{1,5})?$/;
+
+function parseValidatedHost(raw: string | string[] | undefined): string | null {
+  const rawStr = Array.isArray(raw) ? raw[0] : raw;
+  if (!rawStr) return null;
+  const first = rawStr.split(',')[0].trim();
+  if (!first || !HOST_HEADER_RE.test(first) || first.includes('..')) return null;
+  try {
+    const u = new URL(`http://${first}`);
+    if (!u.hostname) return null;
+    return first;
+  } catch {
+    return null;
+  }
+}
+
+function safeDecodeURIComponent(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    throw new HttpBadRequestError('Invalid URL encoding');
+  }
+}
+
+function sanitizeContentDispositionFilename(raw: string): string {
+  return raw.replace(/[\r\n"\\/\x00-\x1f\x7f]/g, '').trim() || 'download';
+}
+
+export function sanitizeRelativeRedirectPath(raw: string): string {
+  if (typeof raw !== 'string' || !raw.startsWith('/')) return '/';
+  if (raw.startsWith('//') || raw.startsWith('/\\')) return '/';
+  if (/[\x00-\x1f\x7f]/.test(raw)) return '/';
+  try {
+    const parsed = new URL(raw, 'http://localhost');
+    if (parsed.origin !== 'http://localhost') return '/';
+    return raw;
+  } catch {
+    return '/';
+  }
+}
+
 async function parseJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   const buf = await parseBodyRaw(req, 25 * 1024 * 1024);
   const raw = buf.toString('utf8').trim();
   if (!raw) return {};
-  return JSON.parse(raw) as Record<string, unknown>;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      throw new HttpBadRequestError('Invalid JSON request body');
+    }
+    throw err;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new HttpBadRequestError('JSON request body must be an object');
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function sanitizeAgentHeader(raw: unknown): string {
@@ -110,9 +167,10 @@ function sanitizeAgentHeader(raw: unknown): string {
 }
 
 function isLoopbackRedirectUri(rawUri: string): boolean {
+  if (!rawUri || /[\x00-\x1f\x7f]/.test(rawUri)) return false;
   try {
     const u = new URL(rawUri);
-    if (u.protocol !== 'http:') return false;
+    if (u.protocol !== 'http:' || u.username || u.password) return false;
     return u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]';
   } catch {
     return false;
@@ -126,6 +184,7 @@ export class CloudHttpRuntime {
   private readonly publicDir?: string;
   private readonly allowedOrigins: Set<string>;
   private readonly wsClients = new Set<WsClientRecord>();
+  private readonly authRateBuckets = new Map<string, number[]>();
   private publicBaseUrl: string;
   private realtimeWsEnabled: boolean;
   private unsubscribePubSub: (() => void) | null = null;
@@ -139,6 +198,10 @@ export class CloudHttpRuntime {
     this.allowedOrigins = new Set(options.allowedOrigins || []);
     this.realtimeWsEnabled = options.enableRealtimeWs ?? false;
 
+    if (this.publicBaseUrl && isSignedLocalTransferStore(this.store.blobStore)) {
+      this.store.blobStore.setBaseUrl(this.publicBaseUrl);
+    }
+
     this.unsubscribePubSub = this.store.subscribe((ev) => {
       void this.fanoutWsEvent(ev);
     });
@@ -146,27 +209,110 @@ export class CloudHttpRuntime {
 
   public setPublicBaseUrl(baseUrl: string): void {
     this.publicBaseUrl = baseUrl.replace(/\/+$/, '');
-    if (isSignedLocalTransferStore(this.store.blobStore)) {
+    if (this.publicBaseUrl && isSignedLocalTransferStore(this.store.blobStore)) {
       this.store.blobStore.setBaseUrl(this.publicBaseUrl);
     }
   }
 
+  private isProxyTrusted(): boolean {
+    return Boolean(process.env.VERCEL || process.env.MYARTIFACT_TRUST_PROXY === 'true');
+  }
+
+  private getRequestProto(req: http.IncomingMessage): 'http' | 'https' {
+    if (Boolean((req.socket as { encrypted?: boolean }).encrypted)) {
+      return 'https';
+    }
+    if (this.isProxyTrusted()) {
+      const raw = req.headers['x-forwarded-proto'];
+      const str = Array.isArray(raw) ? raw[0] : raw;
+      const first = str ? str.split(',')[0].trim().toLowerCase() : '';
+      if (first === 'https') return 'https';
+      if (first === 'http') return 'http';
+    }
+    return 'http';
+  }
+
+  private getValidatedRequestHost(req: http.IncomingMessage): string | null {
+    if (this.isProxyTrusted()) {
+      const fwdHost = parseValidatedHost(req.headers['x-forwarded-host']);
+      if (fwdHost) return fwdHost;
+    }
+    return parseValidatedHost(req.headers.host);
+  }
+
   private getBaseUrl(req: http.IncomingMessage): string {
     if (this.publicBaseUrl) return this.publicBaseUrl;
-    const proto =
-      req.headers['x-forwarded-proto'] === 'https' ||
-      (req.socket as { encrypted?: boolean }).encrypted
-        ? 'https'
-        : 'http';
-    const host = req.headers['x-forwarded-host'] || req.headers.host || '127.0.0.1:4173';
+    const proto = this.getRequestProto(req);
+    const host = this.getValidatedRequestHost(req) || '127.0.0.1:4173';
     return `${proto}://${host}`;
   }
 
   private isSecureRequest(req: http.IncomingMessage): boolean {
-    return (
-      req.headers['x-forwarded-proto'] === 'https' ||
-      Boolean((req.socket as { encrypted?: boolean }).encrypted)
-    );
+    return this.getRequestProto(req) === 'https';
+  }
+
+  private getConfiguredPublicOrigin(): string | null {
+    if (!this.publicBaseUrl) return null;
+    try {
+      return new URL(this.publicBaseUrl).origin;
+    } catch {
+      return this.publicBaseUrl;
+    }
+  }
+
+  private isAllowedOrigin(req: http.IncomingMessage, origin: string): boolean {
+    if (!origin) return false;
+    if (this.allowedOrigins.has(origin)) return true;
+    const publicOrigin = this.getConfiguredPublicOrigin();
+    if (publicOrigin && origin === publicOrigin) return true;
+    const validatedHost = this.getValidatedRequestHost(req);
+    if (validatedHost) {
+      const proto = this.getRequestProto(req);
+      if (origin === `${proto}://${validatedHost}`) return true;
+    }
+    return false;
+  }
+
+  private getClientIp(req: http.IncomingMessage): string {
+    if (this.isProxyTrusted()) {
+      const xff = req.headers['x-forwarded-for'];
+      const rawXff = Array.isArray(xff) ? xff[0] : xff;
+      if (rawXff) {
+        const first = rawXff.split(',')[0].trim();
+        if (first) return first;
+      }
+      const realIp = req.headers['x-real-ip'];
+      const rawReal = Array.isArray(realIp) ? realIp[0] : realIp;
+      if (rawReal && rawReal.trim()) return rawReal.trim();
+    }
+    return req.socket.remoteAddress || 'unknown';
+  }
+
+  private checkAuthRateLimit(
+    req: http.IncomingMessage,
+    routeKey: string,
+    maxPerMin = 60
+  ): boolean {
+    const now = Date.now();
+    const cutoff = now - 60_000;
+    const ip = this.getClientIp(req);
+    const bucketKey = `${routeKey}:${ip}`;
+    const existing = this.authRateBuckets.get(bucketKey) || [];
+    const recent = existing.filter((ts) => ts > cutoff);
+    if (recent.length >= maxPerMin) {
+      this.authRateBuckets.set(bucketKey, recent);
+      return false;
+    }
+    recent.push(now);
+    this.authRateBuckets.set(bucketKey, recent);
+    if (this.authRateBuckets.size > 1000) {
+      for (const [k, list] of this.authRateBuckets) {
+        if (list.length === 0 || list[list.length - 1] <= cutoff) {
+          this.authRateBuckets.delete(k);
+        }
+      }
+    }
+    return true;
   }
 
   private corsHeaders(req: http.IncomingMessage): Record<string, string> {
@@ -174,17 +320,18 @@ export class CloudHttpRuntime {
     const headers: Record<string, string> = {
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'X-Frame-Options': 'SAMEORIGIN',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers':
         'Authorization, Content-Type, X-CSRF-Token, X-MyArtifact-Workspace, X-MyArtifact-Agent, X-Share-Token',
       Vary: 'Origin',
     };
-    if (origin) {
-      const selfOrigin = this.getBaseUrl(req);
-      if (origin === selfOrigin || this.allowedOrigins.has(origin)) {
-        headers['Access-Control-Allow-Origin'] = origin;
-        headers['Access-Control-Allow-Credentials'] = 'true';
-      }
+    if (this.isSecureRequest(req)) {
+      headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+    }
+    if (origin && this.isAllowedOrigin(req, origin)) {
+      headers['Access-Control-Allow-Origin'] = origin;
+      headers['Access-Control-Allow-Credentials'] = 'true';
     }
     return headers;
   }
@@ -305,8 +452,14 @@ export class CloudHttpRuntime {
       req.method &&
       ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
     ) {
-      const headerCsrf = String(req.headers['x-csrf-token'] || '');
-      if (!csrfToken || headerCsrf !== csrfToken) {
+      const headerCsrf =
+        typeof req.headers['x-csrf-token'] === 'string' ? req.headers['x-csrf-token'] : '';
+      if (!csrfToken || !headerCsrf) {
+        throw new CloudPermissionError('Invalid or missing CSRF token', 403, 'insufficient_role');
+      }
+      const a = Buffer.from(headerCsrf, 'utf8');
+      const b = Buffer.from(csrfToken, 'utf8');
+      if (a.length === 0 || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         throw new CloudPermissionError('Invalid or missing CSRF token', 403, 'insufficient_role');
       }
     }
@@ -372,6 +525,32 @@ export class CloudHttpRuntime {
     throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
   }
 
+  private async resolveApprovedWorkspaceId(
+    ctx: AuthPrincipalContext,
+    workspaceRef: string | undefined
+  ): Promise<string | undefined> {
+    const trimmed = workspaceRef?.trim();
+    if (!trimmed) {
+      return ctx.defaultWorkspaceId;
+    }
+    if (!ctx.authenticated || !ctx.user) {
+      throw new CloudPermissionError('Authentication required', 401, 'unauthenticated');
+    }
+    const ws = await this.store.getWorkspace(trimmed);
+    if (!ws) {
+      throw new CloudPermissionError(`Workspace not found: ${trimmed}`, 404, 'not_found');
+    }
+    const workspaces = await this.store.listWorkspacesForUser(ctx.user.id, ctx.user.googleHd);
+    if (!workspaces.some((w) => w.id === ws.id)) {
+      throw new CloudPermissionError(
+        `You do not have access to workspace ${trimmed}`,
+        403,
+        'insufficient_role'
+      );
+    }
+    return ws.id;
+  }
+
   private async issueTokenBundle(params: {
     userId: string;
     sessionKind: 'cli_delegated' | 'cli_elevated';
@@ -392,9 +571,14 @@ export class CloudHttpRuntime {
         ? [...ELEVATED_CLI_SCOPES]
         : [...DEFAULT_AGENT_SCOPE_CEILING];
 
-    const refreshToken = generateOpaqueToken('ma_rt_', 36);
+    const nowMs = Date.now();
     const refreshTtlDays = params.sessionKind === 'cli_elevated' ? 1 : 90;
-    const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 3600 * 1000).toISOString();
+    const expiresAtMs = nowMs + refreshTtlDays * 24 * 3600 * 1000;
+    const refreshToken =
+      params.sessionKind === 'cli_elevated'
+        ? `ma_rt_elev.${expiresAtMs.toString(36)}.${crypto.randomBytes(36).toString('base64url')}`
+        : generateOpaqueToken('ma_rt_', 36);
+    const expiresAt = new Date(expiresAtMs).toISOString();
 
     const session = await this.store.createAuthSession({
       userId: user.id,
@@ -439,9 +623,17 @@ export class CloudHttpRuntime {
     const wss = new WebSocketServer({ noServer: true });
 
     server.on('upgrade', async (req, socket, head) => {
+      socket.on('error', () => {});
       try {
-        const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+        const safeHost = parseValidatedHost(req.headers.host) || 'localhost';
+        const url = new URL(req.url || '/', `http://${safeHost}`);
         if (url.pathname !== '/ws') {
+          socket.destroy();
+          return;
+        }
+        const origin = req.headers.origin;
+        if (origin !== undefined && !this.isAllowedOrigin(req, origin)) {
+          socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
           socket.destroy();
           return;
         }
@@ -506,17 +698,24 @@ export class CloudHttpRuntime {
         return;
       }
 
-      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+      const rawReqUrl = req.url || '/';
+      const safeReqUrl = rawReqUrl.startsWith('//') ? '/' + rawReqUrl.replace(/^\/+/, '') : rawReqUrl;
+      const safeHost = parseValidatedHost(req.headers.host) || 'localhost';
+      let url: URL;
+      try {
+        url = new URL(safeReqUrl, `http://${safeHost}`);
+      } catch {
+        throw new HttpBadRequestError('Invalid request URL');
+      }
       const pathname = url.pathname;
       const baseOrigin = this.getBaseUrl(req);
-      if (isSignedLocalTransferStore(this.store.blobStore)) {
-        this.store.blobStore.setBaseUrl(baseOrigin);
-      }
 
       if (pathname === '/favicon.svg' && req.method === 'GET') {
         res.writeHead(200, {
           'Content-Type': 'image/svg+xml; charset=utf-8',
           'Cache-Control': 'public, max-age=3600',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+          'X-Content-Type-Options': 'nosniff',
         });
         res.end(MYARTIFACT_LOGO_SVG);
         return;
@@ -573,9 +772,10 @@ export class CloudHttpRuntime {
           this.sendJson(req, res, 404, { error: 'Object not found' });
           return;
         }
+        const safeFn = sanitizeContentDispositionFilename(fn);
         res.writeHead(200, {
           'Content-Type': 'application/octet-stream',
-          'Content-Disposition': `attachment; filename="${fn.replace(/"/g, '')}"`,
+          'Content-Disposition': `attachment; filename="${safeFn}"`,
           'X-Content-Type-Options': 'nosniff',
         });
         res.end(buf);
@@ -607,12 +807,21 @@ export class CloudHttpRuntime {
         const callbackUri = `${baseOrigin}/api/auth/google/callback`;
         const flowKind =
           url.searchParams.get('flow') === 'cli_loopback' ? 'cli_loopback' : 'web';
-        const nextPath = url.searchParams.get('next') || '/';
+        const nextPath = sanitizeRelativeRedirectPath(url.searchParams.get('next') || '/');
         const cliRedirectUri = url.searchParams.get('cli_redirect_uri') || undefined;
         const cliChallenge = url.searchParams.get('cli_challenge') || undefined;
         const cliState = url.searchParams.get('cli_state') || undefined;
         const elevate = url.searchParams.get('elevate') === '1';
         const requestedWorkspace = url.searchParams.get('workspace') || undefined;
+
+        if (flowKind === 'cli_loopback') {
+          if (!cliRedirectUri || !isLoopbackRedirectUri(cliRedirectUri)) {
+            this.sendJson(req, res, 400, {
+              error: 'cli_redirect_uri must be a loopback http://127.0.0.1 or localhost URL',
+            });
+            return;
+          }
+        }
 
         await this.store.saveOAuthState({
           state,
@@ -621,7 +830,7 @@ export class CloudHttpRuntime {
           flowKind,
           redirectUri: callbackUri,
           cliChallenge,
-          cliRedirectUri: cliRedirectUri || nextPath,
+          cliRedirectUri: flowKind === 'cli_loopback' ? cliRedirectUri : nextPath,
           cliState,
           elevate,
           requestedWorkspace,
@@ -679,7 +888,12 @@ export class CloudHttpRuntime {
         const { setCookies } = this.buildSessionCookies(req, webSession.id, user.id);
 
         let redirectLocation = '/';
-        if (oauthState.flowKind === 'cli_loopback' && oauthState.cliRedirectUri && oauthState.cliChallenge) {
+        if (
+          oauthState.flowKind === 'cli_loopback' &&
+          oauthState.cliRedirectUri &&
+          oauthState.cliChallenge &&
+          isLoopbackRedirectUri(oauthState.cliRedirectUri)
+        ) {
           const qs = new URLSearchParams({
             redirect_uri: oauthState.cliRedirectUri,
             code_challenge: oauthState.cliChallenge,
@@ -689,8 +903,8 @@ export class CloudHttpRuntime {
             ...(oauthState.requestedWorkspace ? { workspace: oauthState.requestedWorkspace } : {}),
           });
           redirectLocation = `/auth/cli/authorize?${qs.toString()}`;
-        } else if (oauthState.cliRedirectUri && oauthState.cliRedirectUri.startsWith('/')) {
-          redirectLocation = oauthState.cliRedirectUri;
+        } else if (oauthState.cliRedirectUri) {
+          redirectLocation = sanitizeRelativeRedirectPath(oauthState.cliRedirectUri);
         }
 
         res.writeHead(302, {
@@ -760,7 +974,7 @@ export class CloudHttpRuntime {
           return;
         }
         const revoked = await this.store.revokeSession(
-          decodeURIComponent(sessionMatch[1]),
+          safeDecodeURIComponent(sessionMatch[1]),
           ctx.user.id
         );
         this.sendJson(req, res, revoked ? 200 : 404, { revoked });
@@ -773,6 +987,13 @@ export class CloudHttpRuntime {
         if (!ctx.authenticated || !ctx.user) {
           this.sendJson(req, res, 401, { error: 'Web sign-in required to authorize CLI' });
           return;
+        }
+        if (ctx.sessionKind !== 'web') {
+          throw new CloudPermissionError(
+            'Interactive web sign-in required to authorize CLI or device sessions',
+            403,
+            'agent_scope_restricted'
+          );
         }
         const body = await parseJsonBody(req);
         const redirectUri = String(body.redirectUri || '');
@@ -791,11 +1012,7 @@ export class CloudHttpRuntime {
           return;
         }
 
-        let defaultWorkspaceId = ctx.defaultWorkspaceId;
-        if (workspaceRef) {
-          const ws = await this.store.getWorkspace(workspaceRef);
-          if (ws) defaultWorkspaceId = ws.id;
-        }
+        const defaultWorkspaceId = await this.resolveApprovedWorkspaceId(ctx, workspaceRef);
 
         const code = generateOpaqueToken('ma_ac_', 24);
         await this.store.saveCliAuthCode({
@@ -818,6 +1035,16 @@ export class CloudHttpRuntime {
 
       // OAuth Token Exchange (CLI authorization_code + rotating refresh_token)
       if (pathname === '/api/auth/token' && req.method === 'POST') {
+        if (!this.checkAuthRateLimit(req, '/api/auth/token')) {
+          this.sendJson(
+            req,
+            res,
+            429,
+            { error: 'Too many authentication requests' },
+            { 'Retry-After': '60' }
+          );
+          return;
+        }
         const body = await parseJsonBody(req);
         const grantType = String(body.grant_type || body.grantType || '');
 
@@ -850,14 +1077,60 @@ export class CloudHttpRuntime {
             this.sendJson(req, res, 400, { error: 'refresh_token is required' });
             return;
           }
-          const nextRefreshToken = generateOpaqueToken('ma_rt_', 36);
-          const nextExpiresAt = new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString();
-          const rotated = await this.store.rotateRefreshToken({
+          const nowMs = Date.now();
+          const oneDayMs = 24 * 3600 * 1000;
+          const ninetyDaysMs = 90 * 24 * 3600 * 1000;
+          const elevMatch = presented.match(/^ma_rt_elev\.([0-9a-z]+)\./);
+          let nextRefreshToken: string;
+          let nextExpiresAtMs: number;
+          if (elevMatch) {
+            const parsedCap = Number.parseInt(elevMatch[1], 36);
+            nextExpiresAtMs =
+              Number.isFinite(parsedCap) && parsedCap > 0
+                ? Math.min(parsedCap, nowMs + oneDayMs)
+                : nowMs + oneDayMs;
+            nextRefreshToken = `ma_rt_elev.${nextExpiresAtMs.toString(36)}.${crypto.randomBytes(36).toString('base64url')}`;
+          } else {
+            nextExpiresAtMs = nowMs + ninetyDaysMs;
+            nextRefreshToken = generateOpaqueToken('ma_rt_', 36);
+          }
+
+          let rotated = await this.store.rotateRefreshToken({
             presentedTokenHash: sha256Hex(presented),
             nextRefreshTokenHash: sha256Hex(nextRefreshToken),
-            nextExpiresAt,
+            nextExpiresAt: new Date(nextExpiresAtMs).toISOString(),
             graceWindowMs: 30_000,
           });
+          let finalRefreshToken = nextRefreshToken;
+
+          if (rotated.session.sessionKind === 'cli_elevated') {
+            const createdMs = Date.parse(rotated.session.createdAt);
+            const capMs = Math.min(
+              (Number.isFinite(createdMs) ? createdMs : nowMs) + oneDayMs,
+              nowMs + oneDayMs
+            );
+            if (capMs <= Date.now()) {
+              await this.store.revokeSession(rotated.session.id, rotated.user.id);
+              throw new CloudPermissionError('Elevated session has expired', 401, 'unauthenticated');
+            }
+            const rotatedExpMs = Date.parse(rotated.session.expiresAt);
+            if (!rotated.usedGraceWindow && (!Number.isFinite(rotatedExpMs) || rotatedExpMs > capMs + 5000)) {
+              const clampedToken = `ma_rt_elev.${capMs.toString(36)}.${crypto.randomBytes(36).toString('base64url')}`;
+              rotated = await this.store.rotateRefreshToken({
+                presentedTokenHash: sha256Hex(nextRefreshToken),
+                nextRefreshTokenHash: sha256Hex(clampedToken),
+                nextExpiresAt: new Date(capMs).toISOString(),
+                graceWindowMs: 30_000,
+              });
+              finalRefreshToken = clampedToken;
+            }
+          }
+
+          const remainingSec = Math.floor((Date.parse(rotated.session.expiresAt) - Date.now()) / 1000);
+          const accessTtl =
+            rotated.session.sessionKind === 'cli_elevated' && Number.isFinite(remainingSec)
+              ? Math.max(1, Math.min(900, remainingSec))
+              : 900;
 
           const accessToken = this.tokenService.signAccessJwt(
             {
@@ -871,14 +1144,14 @@ export class CloudHttpRuntime {
                 ? { ws: rotated.session.defaultWorkspaceId }
                 : {}),
             },
-            900
+            accessTtl
           );
 
           this.sendJson(req, res, 200, {
             tokenType: 'Bearer',
             accessToken,
-            refreshToken: nextRefreshToken,
-            expiresIn: 900,
+            refreshToken: finalRefreshToken,
+            expiresIn: accessTtl,
             sessionId: rotated.session.id,
             sessionKind: rotated.session.sessionKind,
             scopes: rotated.session.scopeCeiling,
@@ -895,23 +1168,28 @@ export class CloudHttpRuntime {
 
       // RFC 8628 Device Flow
       if (pathname === '/api/auth/device/code' && req.method === 'POST') {
+        if (!this.checkAuthRateLimit(req, '/api/auth/device/code')) {
+          this.sendJson(
+            req,
+            res,
+            429,
+            { error: 'Too many authentication requests' },
+            { 'Retry-After': '60' }
+          );
+          return;
+        }
         const body = await parseJsonBody(req);
         const deviceCode = generateOpaqueToken('ma_dc_', 24);
         const userCode = generateUserCode();
         const elevate = Boolean(body.elevate);
         const deviceLabel = typeof body.deviceLabel === 'string' ? body.deviceLabel : 'CLI Device';
-        let defaultWorkspaceId: string | undefined;
-        if (typeof body.workspace === 'string' && body.workspace) {
-          const ws = await this.store.getWorkspace(body.workspace);
-          if (ws) defaultWorkspaceId = ws.id;
-        }
         const now = new Date().toISOString();
         await this.store.createDeviceAuthCode({
           deviceCodeHash: sha256Hex(deviceCode),
           userCode,
           status: 'pending',
           elevate,
-          defaultWorkspaceId,
+          defaultWorkspaceId: undefined,
           deviceLabel,
           intervalSec: 2,
           expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
@@ -931,19 +1209,32 @@ export class CloudHttpRuntime {
       }
 
       if (pathname === '/api/auth/device/approve' && req.method === 'POST') {
+        if (!this.checkAuthRateLimit(req, '/api/auth/device/approve')) {
+          this.sendJson(
+            req,
+            res,
+            429,
+            { error: 'Too many authentication requests' },
+            { 'Retry-After': '60' }
+          );
+          return;
+        }
         const { ctx } = await this.resolveAuthContext(req, url, true);
         if (!ctx.authenticated || !ctx.user) {
           this.sendJson(req, res, 401, { error: 'Web sign-in required' });
           return;
         }
+        if (ctx.sessionKind !== 'web') {
+          throw new CloudPermissionError(
+            'Interactive web sign-in required to authorize CLI or device sessions',
+            403,
+            'agent_scope_restricted'
+          );
+        }
         const body = await parseJsonBody(req);
         const userCode = String(body.userCode || body.user_code || '');
         const workspaceRef = typeof body.workspace === 'string' ? body.workspace : undefined;
-        let wsId = ctx.defaultWorkspaceId;
-        if (workspaceRef) {
-          const ws = await this.store.getWorkspace(workspaceRef);
-          if (ws) wsId = ws.id;
-        }
+        const wsId = await this.resolveApprovedWorkspaceId(ctx, workspaceRef);
         const approved = await this.store.approveDeviceAuthCode(
           userCode,
           ctx.user.id,
@@ -995,7 +1286,7 @@ export class CloudHttpRuntime {
       const shareBundleMatch = pathname.match(/^\/api\/share\/([^/]+)$/);
       if (shareBundleMatch && req.method === 'GET') {
         const { ctx } = await this.resolveAuthContext(req, url, false);
-        const token = decodeURIComponent(shareBundleMatch[1]);
+        const token = safeDecodeURIComponent(shareBundleMatch[1]);
         const bundle = await this.store.getShareLinkBundle(ctx, token);
         this.sendJson(req, res, 200, bundle);
         return;
@@ -1034,7 +1325,7 @@ export class CloudHttpRuntime {
 
       const wsParts = pathname.split('/').filter(Boolean);
       if (wsParts[0] === 'api' && wsParts[1] === 'workspaces' && wsParts[2]) {
-        const wsRef = decodeURIComponent(wsParts[2]);
+        const wsRef = safeDecodeURIComponent(wsParts[2]);
         const { ctx } = await this.resolveAuthContext(req, url, true);
         const ws = await this.store.getWorkspace(wsRef);
         if (!ws) {
@@ -1059,7 +1350,7 @@ export class CloudHttpRuntime {
           const project = await this.store.setProjectVisibility(
             ctx,
             wsId,
-            decodeURIComponent(wsParts[4]),
+            safeDecodeURIComponent(wsParts[4]),
             Boolean(body.inheritWorkspaceAcl)
           );
           this.sendJson(req, res, 200, { project });
@@ -1091,10 +1382,15 @@ export class CloudHttpRuntime {
           req.method === 'PATCH'
         ) {
           const body = await parseJsonBody(req);
-          const group = await this.store.updateGroupMembers(ctx, wsId, decodeURIComponent(wsParts[4]), {
-            addEmails: Array.isArray(body.addEmails) ? body.addEmails.map(String) : undefined,
-            removeEmails: Array.isArray(body.removeEmails) ? body.removeEmails.map(String) : undefined,
-          });
+          const group = await this.store.updateGroupMembers(
+            ctx,
+            wsId,
+            safeDecodeURIComponent(wsParts[4]),
+            {
+              addEmails: Array.isArray(body.addEmails) ? body.addEmails.map(String) : undefined,
+              removeEmails: Array.isArray(body.removeEmails) ? body.removeEmails.map(String) : undefined,
+            }
+          );
           this.sendJson(req, res, 200, { group });
           return;
         }
@@ -1153,7 +1449,11 @@ export class CloudHttpRuntime {
           wsParts[5] &&
           req.method === 'DELETE'
         ) {
-          const revoked = await this.store.revokeShareLink(ctx, wsId, decodeURIComponent(wsParts[5]));
+          const revoked = await this.store.revokeShareLink(
+            ctx,
+            wsId,
+            safeDecodeURIComponent(wsParts[5])
+          );
           this.sendJson(req, res, revoked ? 200 : 404, { revoked });
           return;
         }
@@ -1173,7 +1473,7 @@ export class CloudHttpRuntime {
       let explicitWsFromPath: string | undefined;
       const scopedMatch = pathname.match(/^\/api\/w\/([^/]+)(\/.*)$/);
       if (scopedMatch) {
-        explicitWsFromPath = decodeURIComponent(scopedMatch[1]);
+        explicitWsFromPath = safeDecodeURIComponent(scopedMatch[1]);
         apiPath = `/api${scopedMatch[2]}`;
       }
 
@@ -1272,7 +1572,7 @@ export class CloudHttpRuntime {
 
         const tbParts = apiPath.split('/').filter(Boolean);
         if (tbParts[0] === 'api' && tbParts[1] === 'tensorboard' && tbParts[2] === 'runs' && tbParts[3]) {
-          const runSlug = decodeURIComponent(tbParts[3]);
+          const runSlug = safeDecodeURIComponent(tbParts[3]);
           if (tbParts[4] === 'scalars' && req.method === 'POST') {
             const body = await parseJsonBody(req);
             const artifact = await this.store.logTensorBoardScalars(ctx, wsId, {
@@ -1313,6 +1613,10 @@ export class CloudHttpRuntime {
               name: String(body.name || 'checkpoint.safetensors'),
               contentType: typeof body.contentType === 'string' ? body.contentType : undefined,
             });
+            if (isSignedLocalTransferStore(this.store.blobStore)) {
+              const parsed = new URL(resPresign.uploadUrl);
+              resPresign.uploadUrl = `${baseOrigin}${parsed.pathname}${parsed.search}`;
+            }
             this.sendJson(req, res, 200, resPresign);
             return;
           }
@@ -1389,13 +1693,18 @@ export class CloudHttpRuntime {
             const dl = await this.store.getCheckpointDownloadUrl(
               ctx,
               wsId,
-              decodeURIComponent(tbParts[5])
+              safeDecodeURIComponent(tbParts[5])
             );
             if (!dl) {
               this.sendJson(req, res, 404, { error: 'Checkpoint not found' });
               return;
             }
-            res.writeHead(302, { Location: dl.url });
+            let downloadUrl = dl.url;
+            if (isSignedLocalTransferStore(this.store.blobStore)) {
+              const parsed = new URL(dl.url);
+              downloadUrl = `${baseOrigin}${parsed.pathname}${parsed.search}`;
+            }
+            res.writeHead(302, { Location: downloadUrl });
             res.end();
             return;
           }
@@ -1404,7 +1713,7 @@ export class CloudHttpRuntime {
         // Match /api/artifacts/:id/...
         const parts = apiPath.split('/').filter(Boolean);
         if (parts[0] === 'api' && parts[1] === 'artifacts' && parts[2]) {
-          const idOrSlug = decodeURIComponent(parts[2]);
+          const idOrSlug = safeDecodeURIComponent(parts[2]);
 
           if (parts.length === 3 && req.method === 'GET') {
             const artifact = await this.store.getArtifact(ctx, wsId, idOrSlug);
@@ -1467,6 +1776,8 @@ export class CloudHttpRuntime {
             res.writeHead(200, {
               'Content-Type': 'image/svg+xml; charset=utf-8',
               'Cache-Control': 'no-cache',
+              'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+              'X-Content-Type-Options': 'nosniff',
             });
             res.end(svg);
             return;
@@ -1555,14 +1866,18 @@ export class CloudHttpRuntime {
               standalone: true,
             });
             const download = url.searchParams.get('download') === '1';
+            const exportFilename = sanitizeContentDispositionFilename(
+              `${artifact.slug}-v${versionParam || artifact.currentVersion}.html`
+            );
             res.writeHead(200, {
               'Content-Type': 'text/html; charset=utf-8',
-              'Content-Security-Policy': "default-src * 'unsafe-inline' 'unsafe-eval' blob: data:;",
+              'Content-Security-Policy':
+                "sandbox allow-scripts allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock; default-src * 'unsafe-inline' 'unsafe-eval' blob: data:;",
+              'X-Content-Type-Options': 'nosniff',
+              'Referrer-Policy': 'no-referrer',
               ...(download
                 ? {
-                    'Content-Disposition': `attachment; filename="${artifact.slug}-v${
-                      versionParam || artifact.currentVersion
-                    }.html"`,
+                    'Content-Disposition': `attachment; filename="${exportFilename}"`,
                   }
                 : {}),
             });
@@ -1619,36 +1934,87 @@ export class CloudHttpRuntime {
       }
 
       // Serve built static SPA files for UI routes (/, /artifacts/:slug, /s/:token, /auth/cli/authorize, /auth/device)
-      if (this.publicDir) {
-        const safePath = path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, '');
-        let filePath = path.join(this.publicDir, safePath === '/' ? 'index.html' : safePath);
+      if (this.publicDir && (req.method === 'GET' || req.method === 'HEAD')) {
+        let decodedPathname: string;
+        try {
+          decodedPathname = decodeURIComponent(pathname);
+        } catch {
+          this.sendJson(req, res, 400, { error: 'Invalid URL encoding' });
+          return;
+        }
+        if (decodedPathname.includes('\0')) {
+          this.sendJson(req, res, 400, { error: 'Invalid path' });
+          return;
+        }
+        const publicRoot = path.resolve(this.publicDir);
+        const targetRel = decodedPathname === '/' ? '/index.html' : decodedPathname;
+        let filePath = path.resolve(publicRoot, '.' + targetRel);
+        if (filePath !== publicRoot && !filePath.startsWith(publicRoot + path.sep)) {
+          this.sendJson(req, res, 403, { error: 'Forbidden' });
+          return;
+        }
         if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-          filePath = path.join(this.publicDir, 'index.html');
+          filePath = path.join(publicRoot, 'index.html');
         }
         if (fs.existsSync(filePath)) {
-          const ext = path.extname(filePath).toLowerCase();
+          const realRoot = fs.realpathSync(publicRoot);
+          const realFile = fs.realpathSync(filePath);
+          if (realFile !== realRoot && !realFile.startsWith(realRoot + path.sep)) {
+            this.sendJson(req, res, 403, { error: 'Forbidden' });
+            return;
+          }
+          const ext = path.extname(realFile).toLowerCase();
           res.writeHead(200, {
             'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'SAMEORIGIN',
+            ...(this.isSecureRequest(req)
+              ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' }
+              : {}),
           });
-          fs.createReadStream(filePath).pipe(res);
+          if (req.method === 'HEAD') {
+            res.end();
+          } else {
+            fs.createReadStream(realFile).pipe(res);
+          }
           return;
         }
       }
 
       // Fallback minimal HTML if web bundle hasn't been built (useful in headless tests)
       if (pathname === '/auth/cli/authorize' || pathname === '/auth/device') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'SAMEORIGIN',
+          ...(this.isSecureRequest(req)
+            ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' }
+            : {}),
+        });
         res.end('<!DOCTYPE html><html><body><h1>MyArtifact Cloud CLI Authorization</h1></body></html>');
         return;
       }
 
       this.sendJson(req, res, 404, { error: 'Not found' });
     } catch (err) {
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       if (err instanceof CloudPermissionError) {
         this.sendJson(req, res, err.statusCode, { error: err.message, code: err.code });
         return;
       }
-      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof HttpBadRequestError || err instanceof SyntaxError) {
+        this.sendJson(req, res, 400, { error: err.message || 'Bad request' });
+        return;
+      }
+      const message =
+        process.env.NODE_ENV === 'production'
+          ? 'Internal server error'
+          : err instanceof Error
+            ? err.message
+            : String(err);
       this.sendJson(req, res, 500, { error: message });
     }
   }
