@@ -1,5 +1,33 @@
 import type { ArtifactType } from './types.js';
 
+const SHARED_SANDBOX_IMPORTS: Record<string, string> = {
+  d3: 'https://esm.sh/d3@7.9.0',
+  three: 'https://esm.sh/three@0.170.0',
+  'three/addons/': 'https://esm.sh/three@0.170.0/examples/jsm/',
+  'three/examples/jsm/': 'https://esm.sh/three@0.170.0/examples/jsm/',
+  lodash: 'https://esm.sh/lodash-es@4.17.21',
+  papaparse: 'https://esm.sh/papaparse@5.4.1',
+  mathjs: 'https://esm.sh/mathjs@13.2.0',
+  'canvas-confetti': 'https://esm.sh/canvas-confetti@1.9.3',
+};
+
+const REACT_SANDBOX_IMPORTS: Record<string, string> = {
+  react: 'https://esm.sh/react@18.3.1',
+  'react/jsx-runtime': 'https://esm.sh/react@18.3.1/jsx-runtime',
+  'react-dom': 'https://esm.sh/react-dom@18.3.1',
+  'react-dom/client': 'https://esm.sh/react-dom@18.3.1/client',
+  'lucide-react': 'https://esm.sh/lucide-react@0.460.0?external=react,react-dom',
+  recharts: 'https://esm.sh/recharts@2.13.3?external=react,react-dom',
+  ...SHARED_SANDBOX_IMPORTS,
+  '@react-three/fiber': 'https://esm.sh/@react-three/fiber@8.17.10?external=react,react-dom,three',
+  '@react-three/drei':
+    'https://esm.sh/@react-three/drei@9.117.3?external=react,react-dom,three,@react-three/fiber',
+};
+
+function buildImportMapScript(imports: Record<string, string>): string {
+  return `<script type="importmap">\n  ${JSON.stringify({ imports }, null, 2).replace(/\n/g, '\n  ')}\n  </script>`;
+}
+
 export interface SandboxRenderOptions {
   artifactId: string;
   title: string;
@@ -129,17 +157,22 @@ export function buildSandboxHtml(options: SandboxRenderOptions): string {
     })();
   `;
 
+  const htmlImportMapScript = buildImportMapScript(SHARED_SANDBOX_IMPORTS);
+  const reactImportMapScript = buildImportMapScript(REACT_SANDBOX_IMPORTS);
+
   if (type === 'html') {
-    // Inject window.storage and Tailwind if not already present
+    // Inject Three.js/utility importmap (if none provided), window.storage, and Tailwind
     const hasHtmlTag = /<html[\s>]/i.test(content);
+    const hasImportMap = /<script[^>]+type=["']importmap["']/i.test(content);
+    const importMapTag = hasImportMap ? '' : htmlImportMapScript;
     if (hasHtmlTag) {
       if (/<head[\s>]/i.test(content)) {
         return content.replace(
           /<head([^>]*)>/i,
-          `<head$1><script>${storageBridgeScript}</script>`
+          `<head$1>${importMapTag}<script>${storageBridgeScript}</script>`
         );
       }
-      return `<script>${storageBridgeScript}</script>\n${content}`;
+      return `${importMapTag}<script>${storageBridgeScript}</script>\n${content}`;
     }
     return `<!DOCTYPE html>
 <html lang="en" class="${theme}">
@@ -147,6 +180,7 @@ export function buildSandboxHtml(options: SandboxRenderOptions): string {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapedTitle}</title>
+  ${importMapTag}
   <script>${storageBridgeScript}</script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -165,24 +199,7 @@ ${content}
   <title>${escapedTitle}</title>
   <script>${storageBridgeScript}</script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script type="importmap">
-  {
-    "imports": {
-      "react": "https://esm.sh/react@18.3.1",
-      "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-      "react-dom": "https://esm.sh/react-dom@18.3.1",
-      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-      "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react,react-dom",
-      "recharts": "https://esm.sh/recharts@2.13.3?external=react,react-dom",
-      "d3": "https://esm.sh/d3@7.9.0",
-      "three": "https://esm.sh/three@0.170.0",
-      "lodash": "https://esm.sh/lodash-es@4.17.21",
-      "papaparse": "https://esm.sh/papaparse@5.4.1",
-      "mathjs": "https://esm.sh/mathjs@13.2.0",
-      "canvas-confetti": "https://esm.sh/canvas-confetti@1.9.3"
-    }
-  }
-  </script>
+  ${reactImportMapScript}
   <script src="https://unpkg.com/@babel/standalone@7.26.9/babel.min.js"></script>
   <style>
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }

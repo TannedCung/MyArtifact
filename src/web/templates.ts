@@ -24,7 +24,7 @@ export interface KitTheme {
 }
 
 export interface KitTemplate {
-  id: 'blank' | 'dashboard' | 'report' | 'diagram' | 'tool' | 'training';
+  id: 'blank' | 'dashboard' | 'scene-3d' | 'report' | 'diagram' | 'tool' | 'training';
   label: string;
   type: ArtifactType | 'any';
   use: string;
@@ -235,6 +235,198 @@ export default function Dashboard() {
 }
 `;
 
+const SCENE_3D_TSX = `// @title: Interactive Three.js 3D Viewport
+// @description: OrbitControls Three.js scene with live FPS/triangle telemetry and persistent window.storage preferences
+// @tags: template:scene-3d, theme:moss, threejs, 3d
+import React, { useEffect, useRef, useState } from 'react';
+import { Box, RotateCcw, Grid3x3, Sparkles } from 'lucide-react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* theme:start */
+const THEME = { name: 'moss', grid: '#E2DDD0', axis: '#4A524A', surface: '#FCFBF7', chart: ['#55684F', '#C8A96B', '#7C93A8', '#B8876F', '#8FA28A'] };
+const THEME_CSS = \`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{--ma-bg:#F7F4ED;--ma-surface:#FCFBF7;--ma-sunken:#EFEBE1;--ma-border:#E2DDD0;--ma-ink:#1E2420;--ma-muted:#4A524A;--ma-accent:#55684F;--ma-accent-ink:#F7F4ED;--ma-accent-soft:#E4EADF;--ma-highlight:#C8A96B;--ma-highlight-soft:#F8F1E3;--ma-danger:#B4553F;--ma-font-sans:'IBM Plex Sans', system-ui, sans-serif;--ma-font-display:'IBM Plex Sans', system-ui, sans-serif;--ma-font-mono:'IBM Plex Mono', ui-monospace, monospace}\`;
+/* theme:end */
+
+const BASE_CSS = \`body{margin:0;background:var(--ma-bg);color:var(--ma-ink);font-family:var(--ma-font-sans);-webkit-font-smoothing:antialiased}\`;
+const STORAGE_KEY = 'scene3d:prefs';
+
+export default function Scene3DStarter() {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const ctrlRef = useRef<{ camera: THREE.PerspectiveCamera; controls: OrbitControls } | null>(null);
+  const [speed, setSpeed] = useState(1.0);
+  const [wireframe, setWireframe] = useState(false);
+  const [stats, setStats] = useState({ fps: 60, triangles: 0 });
+  const [webglError, setWebglError] = useState<string | null>(null);
+  const optsRef = useRef({ speed: 1.0, wireframe: false });
+
+  useEffect(() => {
+    optsRef.current = { speed, wireframe };
+    window.storage?.set(STORAGE_KEY, JSON.stringify({ speed, wireframe })).catch(() => {});
+  }, [speed, wireframe]);
+
+  useEffect(() => {
+    window.storage?.get(STORAGE_KEY).then((r) => {
+      if (!r?.value) return;
+      const saved = JSON.parse(r.value);
+      if (typeof saved.speed === 'number') setSpeed(saved.speed);
+      if (typeof saved.wireframe === 'boolean') setWireframe(saved.wireframe);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const el = mountRef.current;
+    if (!el) return;
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch (err) {
+      setWebglError(err instanceof Error ? err.message : 'WebGL unavailable');
+      return;
+    }
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(THEME.surface);
+    const w = Math.max(el.clientWidth, 320);
+    const h = Math.max(el.clientHeight, 420);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(w, h);
+    el.innerHTML = '';
+    el.appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+    camera.position.set(4.2, 3.1, 4.8);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0.8, 0);
+    ctrlRef.current = { camera, controls };
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const keyLight = new THREE.DirectionalLight(0xfff8eb, 1.45);
+    keyLight.position.set(5, 8, 6);
+    scene.add(keyLight);
+
+    const grid = new THREE.GridHelper(10, 14, THEME.axis, THEME.grid);
+    scene.add(grid);
+
+    const coreGeo = new THREE.IcosahedronGeometry(0.95, 1);
+    const coreMat = new THREE.MeshStandardMaterial({ color: THEME.chart[0], roughness: 0.32, metalness: 0.25, flatShading: true });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.y = 1.05;
+    scene.add(core);
+
+    const ringGeo = new THREE.TorusGeometry(1.55, 0.08, 16, 64);
+    const ringMat = new THREE.MeshStandardMaterial({ color: THEME.chart[1], roughness: 0.25, metalness: 0.55 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = 1.05;
+    scene.add(ring);
+
+    const ro = new ResizeObserver(() => {
+      const nw = Math.max(el.clientWidth, 320);
+      const nh = Math.max(el.clientHeight, 420);
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nw, nh);
+    });
+    ro.observe(el);
+
+    let raf = 0;
+    let last = performance.now();
+    let frames = 0;
+    let fpsClock = last;
+
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      const { speed: sp, wireframe: wf } = optsRef.current;
+      coreMat.wireframe = wf;
+      ringMat.wireframe = wf;
+      core.rotation.y += dt * 0.7 * sp;
+      core.rotation.x += dt * 0.3 * sp;
+      ring.rotation.x = Math.PI / 3 + Math.sin(now * 0.001 * sp) * 0.25;
+      ring.rotation.z -= dt * 0.55 * sp;
+      controls.update();
+      renderer.render(scene, camera);
+
+      frames++;
+      if (now - fpsClock >= 500) {
+        setStats({ fps: Math.round((frames * 1000) / (now - fpsClock)), triangles: renderer.info.render.triangles });
+        frames = 0;
+        fpsClock = now;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      controls.dispose();
+      coreGeo.dispose();
+      coreMat.dispose();
+      ringGeo.dispose();
+      ringMat.dispose();
+      renderer.dispose();
+    };
+  }, []);
+
+  const resetCam = () => {
+    if (!ctrlRef.current) return;
+    ctrlRef.current.camera.position.set(4.2, 3.1, 4.8);
+    ctrlRef.current.controls.target.set(0, 0.8, 0);
+    ctrlRef.current.controls.update();
+  };
+
+  return (
+    <div className="min-h-screen p-6 md:p-8">
+      <style>{THEME_CSS + BASE_CSS}</style>
+      <div className="max-w-5xl mx-auto space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--ma-border)]">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-lg bg-[var(--ma-accent-soft)] text-[var(--ma-accent)] grid place-items-center"><Box size={18} /></div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight" style={{ fontFamily: 'var(--ma-font-display)' }}>Interactive Three.js 3D Scene</h1>
+              <p className="text-xs text-[var(--ma-muted)]">Drag to orbit · Scroll to zoom · Right-drag to pan</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span className="px-2.5 py-1 rounded-full bg-[var(--ma-sunken)] border border-[var(--ma-border)]">{stats.fps} FPS</span>
+            <span className="px-2.5 py-1 rounded-full bg-[var(--ma-accent-soft)] text-[var(--ma-accent)]">{stats.triangles.toLocaleString()} tris</span>
+          </div>
+        </header>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-[var(--ma-surface)] border border-[var(--ma-border)] px-4 py-2.5">
+          <label className="flex items-center gap-2 text-xs text-[var(--ma-muted)]">
+            <Sparkles size={14} className="text-[var(--ma-accent)]" />
+            Speed <span className="font-mono text-[var(--ma-ink)]">{speed.toFixed(1)}x</span>
+            <input type="range" min="0" max="2.5" step="0.1" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="accent-[var(--ma-accent)]" />
+          </label>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setWireframe((w) => !w)}
+              className={\`h-8 px-3 rounded-md border text-xs font-medium inline-flex items-center gap-1.5 \${wireframe ? 'bg-[var(--ma-accent)] text-[var(--ma-accent-ink)] border-[var(--ma-accent)]' : 'bg-[var(--ma-bg)] border-[var(--ma-border)]'}\`}>
+              <Grid3x3 size={14} /> Wireframe
+            </button>
+            <button type="button" onClick={resetCam}
+              className="h-8 px-3 rounded-md border border-[var(--ma-border)] bg-[var(--ma-bg)] text-xs font-medium inline-flex items-center gap-1.5">
+              <RotateCcw size={14} /> Reset view
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-[12px] overflow-hidden border border-[var(--ma-border)] bg-[var(--ma-surface)]">
+          {webglError ? (
+            <div className="h-[440px] grid place-items-center p-6 text-sm text-[var(--ma-danger)]">WebGL unavailable: {webglError}</div>
+          ) : (
+            <div ref={mountRef} className="w-full h-[440px]" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+`;
+
 const REPORT_MD = `<style>
 /* theme:start */
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -396,6 +588,13 @@ export const KIT_TEMPLATES: KitTemplate[] = [
     type: 'react',
     use: 'KPIs, one trend chart, a persistent side panel.',
     content: DASHBOARD_TSX,
+  },
+  {
+    id: 'scene-3d',
+    label: '3D Scene',
+    type: 'react',
+    use: 'Interactive Three.js viewport with OrbitControls and persistent scene controls.',
+    content: SCENE_3D_TSX,
   },
   {
     id: 'report',

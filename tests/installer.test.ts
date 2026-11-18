@@ -44,6 +44,8 @@ describe('Cross-Assistant Skill & MCP Installer', () => {
     assert.ok(skillContent.includes('Visual-First'));
     assert.ok(skillContent.includes('Format Decision Matrix'));
     assert.ok(skillContent.includes('recharts'));
+    assert.ok(skillContent.includes('three/addons/'));
+    assert.ok(skillContent.includes('scene-3d'));
     assert.ok(skillContent.includes('window.storage'));
     assert.ok(skillContent.includes('artifact_create'));
 

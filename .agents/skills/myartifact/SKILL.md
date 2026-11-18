@@ -2,10 +2,10 @@
 name: myartifact
 description: >-
   Create, version, organize, and look up interactive visual artifacts (React Recharts
-  dashboards, interactive SVG hardware/architecture workbenches, HTML mini-apps, Mermaid
-  diagrams, and TensorBoard runs) locally across Claude Code, Codex, and Antigravity.
-  Always prefer interactive visual artifacts over text-only Markdown whenever charts,
-  diagrams, spatial maps, or interactive controls explain faster.
+  dashboards, Three.js 3D viewports, interactive SVG hardware/architecture workbenches,
+  HTML mini-apps, Mermaid diagrams, and TensorBoard runs) locally across Claude Code, Codex,
+  and Antigravity. Always prefer interactive visual artifacts over text-only Markdown whenever
+  charts, 3D scenes, diagrams, spatial maps, or interactive controls explain faster.
 ---
 
 # MyArtifact — Visual-First Studio & Cross-Assistant LLM Wiki Skill
@@ -24,6 +24,7 @@ Use **MyArtifact** whenever you explain benchmarks, multi-regime comparisons, sy
 | :--- | :--- | :--- |
 | **Benchmarks, ablations, eval matrices, latency/cost sweeps** (`>= 5` numeric rows) | **`react`** (`.tsx`) | KPI summary strip + `recharts` (`BarChart`, `LineChart`, `RadarChart`, `ScatterChart`) + hardware/SLA ceiling `<ReferenceLine>` + scenario/policy filter pills + compact table |
 | **Hardware builds, pinouts, 2D/3D spatial packaging, wiring, bring-up guides** | **`react`** or **`html`** | Interactive workbench: custom inline `<svg>` chassis/pinout/rail diagram (click/hover channels or zones to inspect specs & clamps) + `window.storage` step/BOM checklists |
+| **3D scenes, robotics kinematics, CAD/mesh inspection, spatial trajectories & WebGL simulations** | **`react`** (`.tsx`) or **`html`** | Interactive Three.js viewport (`three` + `three/addons/controls/OrbitControls.js` or `@react-three/fiber`) with camera presets, wireframe/layer toggles, raycast part inspector, KPI telemetry strip, and `window.storage` camera/scene state |
 | **State machines (FSMs), control loops, pipelines, multi-agent architectures** | **`react`** or **`mermaid` / `svg`** | Interactive `react` state/node stepper (click states/transitions to inspect guards & invariants) or clean `mermaid` / `svg` topology—not prose tables |
 | **Project roadmaps, multi-track progress, living trackers** | **`react`** (`.tsx`) | Tabbed milestone/track explorer with status badges, metric bars, and clickable `/artifacts/<slug>` links |
 | **ML training curves & model checkpoints** | **`tensorboard`** | `tb_log_scalars` + `tb_save_checkpoint` (or `node "./dist/cli/cli.js" tb log` / `tb save-model`) |
@@ -123,15 +124,15 @@ node "./dist/cli/cli.js" get argos-v3-td8125-sim2real-benchmark --version 1
 
 ## 6. Per-Artifact Custom Icon (`icon`) & Standalone Page (`/artifacts/<slug>`)
 Every artifact renders on its own standalone page at `http://127.0.0.1:4173/artifacts/<slug>` with a dedicated **browser tab favicon** and **header emblem**.
-- Always craft a custom `32x32` SVG logo (`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">...</svg>`) matching the artifact's topic and palette via `icon` / `--icon` (or preset IDs: `dashboard`, `report`, `diagram`, `tool`, `training`, `grpo-rl`, `latex-paper`, `multi-approach`, `roadmap-tracker`, `coder-eval`, `arch-flow`).
+- Always craft a custom `32x32` SVG logo (`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">...</svg>`) matching the artifact's topic and palette via `icon` / `--icon` (or preset IDs: `dashboard`, `scene-3d`, `report`, `diagram`, `tool`, `training`, `grpo-rl`, `latex-paper`, `multi-approach`, `roadmap-tracker`, `coder-eval`, `arch-flow`).
 - Always share the direct standalone URL `http://127.0.0.1:4173/artifacts/<slug>` with the user.
 
 ---
 
 ## 7. Sandbox Capabilities & Persistent State (`window.storage`)
 
-- **`react` (`.tsx` / `.jsx`):** Compiled in-browser with Babel + TypeScript + global **Tailwind CSS**. Must `export default function App() { ... }`. Pre-mapped ESM imports: `react`, `react-dom/client`, `lucide-react`, `recharts`, `d3`, `three`, `lodash`, `papaparse`, `mathjs`, `canvas-confetti`.
-- **`html` (`.html`):** Single-file HTML/CSS/JS with Tailwind & `window.storage` pre-injected.
+- **`react` (`.tsx` / `.jsx`):** Compiled in-browser with Babel + TypeScript + global **Tailwind CSS**. Must `export default function App() { ... }`. Pre-mapped ESM imports: `react`, `react-dom/client`, `lucide-react`, `recharts`, `d3`, `three`, `three/addons/*` (`OrbitControls`, `GLTFLoader`, etc.), `three/examples/jsm/*`, `@react-three/fiber`, `@react-three/drei`, `lodash`, `papaparse`, `mathjs`, `canvas-confetti`.
+- **`html` (`.html`):** Single-file HTML/CSS/JS with Tailwind, `window.storage`, and a pre-injected ESM importmap (`three`, `three/addons/*`, `three/examples/jsm/*`, `d3`, `lodash`, `papaparse`, `mathjs`, `canvas-confetti`) whenever no custom `<script type="importmap">` is present; iframe sandbox allows `allow-pointer-lock` for fly/FPS camera controls.
 - **`mermaid` (`.mmd`) / `svg` (`.svg`) / `tensorboard` / `markdown` (`.md` with KaTeX + Mermaid).**
 - **Persistent `window.storage` API (up to 20 MB per artifact; guard with `window.storage?.` for offline export):**
 ```tsx

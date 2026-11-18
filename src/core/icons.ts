@@ -163,6 +163,17 @@ export const ARTIFACT_ICON_PRESETS: Record<string, string> = {
   <path d="M6 21L11.5 15L16 18L21.5 10.5L26 13" stroke="#8FA28A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="21.5" cy="10.5" r="2.4" fill="#C8A96B"/>
 </svg>`,
+
+  // 3D Scene / Three.js Viewport (Isometric Moss-and-Brass Prism + X/Y/Z Coordinate Axes)
+  'scene-3d': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="8" fill="#17231C"/>
+  <rect x="1" y="1" width="30" height="30" rx="7" stroke="#55684F" stroke-opacity="0.65"/>
+  <path d="M16 6.5L24.5 11.2V20.8L16 25.5L7.5 20.8V11.2L16 6.5Z" fill="#263429" stroke="#8FA28A" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M7.5 11.2L16 15.9L24.5 11.2" stroke="#C8A96B" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M16 15.9V25.5" stroke="#F7F4ED" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M16 15.9V8.5M16 15.9L22.2 19.4M16 15.9L9.8 19.4" stroke="#8FA28A" stroke-width="1.2" stroke-linecap="round" opacity="0.75"/>
+  <circle cx="16" cy="15.9" r="2.1" fill="#C8A96B" stroke="#17231C" stroke-width="0.9"/>
+</svg>`,
 };
 
 /**
@@ -183,6 +194,7 @@ const SLUG_ICON_MAP: Record<string, string> = {
   'multi-agent-architecture': 'arch-flow',
   'release-readiness-report': 'release-shield',
   'llm-cost-latency-simulator': 'tool',
+  'threejs-kinematic-workbench': 'scene-3d',
 };
 
 /**
@@ -249,6 +261,15 @@ export function generateDeterministicArtifactSvg(seed: {
   }
   if (text.includes('blog') || text.includes('engine')) {
     return ARTIFACT_ICON_PRESETS['engine-blog'];
+  }
+  if (
+    text.includes('three') ||
+    text.includes('3d') ||
+    text.includes('webgl') ||
+    text.includes('webgpu') ||
+    text.includes('kinematic')
+  ) {
+    return ARTIFACT_ICON_PRESETS['scene-3d'];
   }
 
   // Hash-based unique geometric emblem for any custom artifact

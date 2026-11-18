@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { diffLines } from 'diff';
 import { GitCompare, ArrowRight, RotateCcw } from 'lucide-react';
+import { cloudFetch } from '../cloud-api.js';
 import type { ArtifactVersion } from '../../core/types.js';
 
 const AGENT_LABELS: Record<string, string> = {
@@ -21,6 +22,9 @@ export interface DiffViewerProps {
   versions: ArtifactVersion[];
   currentVersion: number;
   hideUnchanged?: boolean;
+  readOnly?: boolean;
+  workspaceId?: string | null;
+  shareToken?: string | null;
   onRollback: (version: number) => void;
 }
 
@@ -37,6 +41,9 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   versions,
   currentVersion,
   hideUnchanged = true,
+  readOnly = false,
+  workspaceId,
+  shareToken,
   onRollback,
 }) => {
   const [fromVer, setFromVer] = useState<number>(Math.max(1, currentVersion - 1));
@@ -57,8 +64,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     }
     let active = true;
     setLoading(true);
-    fetch(
-      `/api/artifacts/${encodeURIComponent(artifactId)}/diff?from=${fromVer}&to=${toVer}`
+    cloudFetch(
+      `/api/artifacts/${encodeURIComponent(artifactId)}/diff?from=${fromVer}&to=${toVer}`,
+      {},
+      { workspaceId, shareToken }
     )
       .then((r) => r.json())
       .then((data) => {
@@ -72,7 +81,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     return () => {
       active = false;
     };
-  }, [artifactId, fromVer, toVer]);
+  }, [artifactId, fromVer, toVer, workspaceId, shareToken]);
 
   const { rows, addedLines, removedLines } = useMemo(() => {
     if (fromVer === toVer) {
@@ -155,7 +164,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     return { rows: collapsed, addedLines: added, removedLines: removed };
   }, [fromContent, toContent, fromVer, toVer, hideUnchanged]);
 
-  const canRestore = fromVer !== currentVersion && fromVer !== toVer;
+  const canRestore = !readOnly && fromVer !== currentVersion && fromVer !== toVer;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-raised text-[13px]">
