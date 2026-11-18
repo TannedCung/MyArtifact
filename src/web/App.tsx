@@ -1489,10 +1489,9 @@ export default function App() {
               {detail ? (
                 <div className="flex items-center gap-2.5 min-w-0">
                   {detailIconSvg ? (
-                    <span
-                      className="w-[30px] h-[30px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.12)] [&>svg]:w-full [&>svg]:h-full"
-                      dangerouslySetInnerHTML={{ __html: detailIconSvg }}
-                    />
+                    <span className="w-[30px] h-[30px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.12)]">
+                      <img src={svgToDataUri(detailIconSvg)} alt="" className="w-full h-full object-contain" />
+                    </span>
                   ) : (
                     <span className="w-[30px] h-[30px] rounded-[7px] bg-sage-soft text-sage border border-[var(--c-sage-border)] flex items-center justify-center shrink-0">
                       <DetailTypeIcon className="w-[15px] h-[15px]" />
@@ -2659,10 +2658,9 @@ export default function App() {
                                           : 'bg-transparent hover:bg-sunken'
                                       }`}
                                     >
-                                      <span
-                                        className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
-                                        dangerouslySetInnerHTML={{ __html: itemIconSvg }}
-                                      />
+                                      <span className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)]">
+                                        <img src={svgToDataUri(itemIconSvg)} alt="" className="w-full h-full object-contain" />
+                                      </span>
 
                                       <span className="min-w-0 flex flex-col gap-[1px]">
                                         <span className="text-[12.5px] font-medium truncate text-ink">
@@ -2725,10 +2723,9 @@ export default function App() {
                           : 'bg-transparent hover:bg-sunken'
                       }`}
                     >
-                      <span
-                        className="w-[28px] h-[28px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
-                        dangerouslySetInnerHTML={{ __html: itemIconSvg }}
-                      />
+                      <span className="w-[28px] h-[28px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)]">
+                        <img src={svgToDataUri(itemIconSvg)} alt="" className="w-full h-full object-contain" />
+                      </span>
 
                       <span className="min-w-0 flex flex-col gap-[1px]">
                         <span className="text-[13px] font-medium truncate text-ink">
@@ -2798,10 +2795,9 @@ export default function App() {
               <div className="flex items-center justify-between gap-4 pt-1">
                 <div className="min-w-0 flex items-center gap-[10px]">
                   {detailIconSvg && (
-                    <span
-                      className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)] [&>svg]:w-full [&>svg]:h-full"
-                      dangerouslySetInnerHTML={{ __html: detailIconSvg }}
-                    />
+                    <span className="w-[26px] h-[26px] rounded-[6px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.10)]">
+                      <img src={svgToDataUri(detailIconSvg)} alt="" className="w-full h-full object-contain" />
+                    </span>
                   )}
                   <h1 className="m-0 text-[17px] leading-[26px] font-semibold tracking-[-0.01em] truncate text-ink">
                     {detail.title}

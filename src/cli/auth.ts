@@ -16,13 +16,30 @@ export interface CliLoginOptions {
   onAuthUrl?: (url: string, userCode?: string) => void | Promise<void>;
 }
 
-function tryOpenBrowser(url: string): boolean {
+export function isSafeBrowserUrl(rawUrl: string): boolean {
+  if (typeof rawUrl !== 'string' || rawUrl.length === 0) return false;
+  if (/[\x00-\x1f\x7f\s]/.test(rawUrl)) return false;
   try {
+    const parsed = new URL(rawUrl);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export function tryOpenBrowser(url: string): boolean {
+  if (!isSafeBrowserUrl(url)) {
+    return false;
+  }
+  try {
+    const safeUrl = new URL(url).toString();
     const platform = process.platform;
     const cmd =
-      platform === 'darwin' ? 'open' : platform === 'win32' ? 'cmd' : 'xdg-open';
-    const args = platform === 'win32' ? ['/c', 'start', '', url] : [url];
+      platform === 'darwin' ? 'open' : platform === 'win32' ? 'rundll32' : 'xdg-open';
+    const args =
+      platform === 'win32' ? ['url.dll,FileProtocolHandler', safeUrl] : [safeUrl];
     const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+    child.on('error', () => {});
     child.unref();
     return true;
   } catch {
@@ -45,24 +62,44 @@ export async function loginWithLoopbackPkce(
     resolveCode = res;
     rejectCode = rej;
   });
+  // Prevent unhandled rejection if callback fires while onAuthUrl is still awaiting
+  codePromise.catch(() => {});
+
+  const callbackSecurityHeaders = {
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+  };
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || '/', `http://127.0.0.1`);
     if (url.pathname !== '/callback') {
-      res.writeHead(404);
+      res.writeHead(404, callbackSecurityHeaders);
       res.end('Not found');
       return;
     }
     const err = url.searchParams.get('error');
     const code = url.searchParams.get('code');
     const returnedState = url.searchParams.get('state');
-    if (err || !code || returnedState !== state) {
-      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+    const expectedStateBuf = Buffer.from(state, 'utf8');
+    const returnedStateBuf =
+      typeof returnedState === 'string' ? Buffer.from(returnedState, 'utf8') : null;
+    const stateMatches =
+      returnedStateBuf !== null &&
+      returnedStateBuf.length === expectedStateBuf.length &&
+      crypto.timingSafeEqual(returnedStateBuf, expectedStateBuf);
+    if (err || !code || !stateMatches) {
+      res.writeHead(400, {
+        'Content-Type': 'text/html; charset=utf-8',
+        ...callbackSecurityHeaders,
+      });
       res.end('<h1>Authorization failed or cancelled.</h1><p>You can close this window.</p>');
       rejectCode(new Error(err || 'State mismatch or missing code'));
       return;
     }
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      ...callbackSecurityHeaders,
+    });
     res.end(
       '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;background:#F7F4ED;color:#1E2420;"><h1>MyArtifact CLI Authorized</h1><p>Your local CLI and coding agents (Claude Code, Codex, Antigravity) are now connected. You may close this tab.</p></body></html>'
     );
@@ -182,6 +219,13 @@ export async function loginWithDeviceFlow(
     expiresIn: number;
     interval: number;
   };
+
+  if (
+    !isSafeBrowserUrl(startData.verificationUriComplete) ||
+    new URL(startData.verificationUriComplete).origin !== new URL(cloudUrl).origin
+  ) {
+    throw new Error('Server returned an invalid or cross-origin device verification URL');
+  }
 
   console.log(`\n📱 Device Authorization Login:`);
   console.log(`   1. Visit: ${startData.verificationUriComplete}`);

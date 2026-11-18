@@ -83,10 +83,21 @@ export const SandboxRenderer: React.FC<SandboxRendererProps> = ({
       }
 
       const data = event.data;
-      if (!data || data.type !== 'MYARTIFACT_STORAGE_REQ') return;
+      if (!data || typeof data !== 'object' || data.type !== 'MYARTIFACT_STORAGE_REQ') return;
       if (data.artifactId !== artifactId) return;
 
-      const { requestId, action, payload } = data;
+      const { requestId, action } = data;
+      const safePayload =
+        data.payload && typeof data.payload === 'object'
+          ? (data.payload as Record<string, unknown>)
+          : {};
+      const asString = (val: unknown): string =>
+        typeof val === 'string'
+          ? val
+          : val == null || typeof val === 'object' || typeof val === 'symbol'
+            ? ''
+            : String(val);
+
       const reply = (result: unknown, error?: string) => {
         if (event.source && 'postMessage' in event.source) {
           (event.source as Window).postMessage(
@@ -101,34 +112,40 @@ export const SandboxRenderer: React.FC<SandboxRendererProps> = ({
         }
       };
 
+      if (action === 'get' || action === 'set' || action === 'delete') {
+        if (typeof safePayload.key !== 'string' && typeof safePayload.key !== 'number') {
+          reply(null, 'Invalid storage key');
+          return;
+        }
+      }
+
+      const key = asString(safePayload.key);
+      const value = asString(safePayload.value);
+      const prefix = asString(safePayload.prefix);
+
       // Smooth Copy-on-Write ephemeral storage for Viewers & Share Links
       if (readOnlyStorage) {
         const cowPrefix = `ma_cow_${artifactId}:`;
         if (action === 'get') {
-          const k = String(payload.key);
-          const val = cowCacheRef.current.get(k);
-          reply(val !== undefined ? { key: k, value: val } : null);
+          const val = cowCacheRef.current.get(key);
+          reply(val !== undefined ? { key, value: val } : null);
         } else if (action === 'set') {
-          const k = String(payload.key);
-          const v = String(payload.value ?? '');
-          cowCacheRef.current.set(k, v);
+          cowCacheRef.current.set(key, value);
           try {
-            sessionStorage.setItem(cowPrefix + k, v);
+            sessionStorage.setItem(cowPrefix + key, value);
           } catch {
             // Ignore quota errors
           }
-          reply({ key: k, value: v });
+          reply({ key, value });
         } else if (action === 'delete') {
-          const k = String(payload.key);
-          const existed = cowCacheRef.current.delete(k);
+          const existed = cowCacheRef.current.delete(key);
           try {
-            sessionStorage.removeItem(cowPrefix + k);
+            sessionStorage.removeItem(cowPrefix + key);
           } catch {
             // Ignore
           }
-          reply({ key: k, deleted: existed });
+          reply({ key, deleted: existed });
         } else if (action === 'list') {
-          const prefix = String(payload.prefix || '');
           const keys = Array.from(cowCacheRef.current.keys())
             .filter((k) => k.startsWith(prefix))
             .sort();
@@ -143,7 +160,7 @@ export const SandboxRenderer: React.FC<SandboxRendererProps> = ({
         const base = `/api/artifacts/${encodeURIComponent(artifactId)}/storage`;
         const reqCtx = { workspaceId, shareToken };
         if (action === 'get') {
-          const res = await fetch(`${base}?key=${encodeURIComponent(payload.key)}`, {
+          const res = await fetch(`${base}?key=${encodeURIComponent(key)}`, {
             credentials: 'same-origin',
             headers: buildCloudHeaders(reqCtx),
           });
@@ -154,7 +171,7 @@ export const SandboxRenderer: React.FC<SandboxRendererProps> = ({
             method: 'PUT',
             credentials: 'same-origin',
             headers: buildCloudHeaders(reqCtx, { 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ key: payload.key, value: payload.value }),
+            body: JSON.stringify({ key, value }),
           });
           const json = await res.json();
           if (!res.ok) {
@@ -164,7 +181,7 @@ export const SandboxRenderer: React.FC<SandboxRendererProps> = ({
           onStorageMutated?.();
           reply(json.result);
         } else if (action === 'delete') {
-          const res = await fetch(`${base}?key=${encodeURIComponent(payload.key)}`, {
+          const res = await fetch(`${base}?key=${encodeURIComponent(key)}`, {
             method: 'DELETE',
             credentials: 'same-origin',
             headers: buildCloudHeaders(reqCtx),
@@ -177,7 +194,7 @@ export const SandboxRenderer: React.FC<SandboxRendererProps> = ({
           onStorageMutated?.();
           reply(json.result);
         } else if (action === 'list') {
-          const res = await fetch(`${base}?prefix=${encodeURIComponent(payload.prefix || '')}`, {
+          const res = await fetch(`${base}?prefix=${encodeURIComponent(prefix)}`, {
             credentials: 'same-origin',
             headers: buildCloudHeaders(reqCtx),
           });
