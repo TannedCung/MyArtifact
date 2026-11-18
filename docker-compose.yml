@@ -7,7 +7,7 @@ services:
     container_name: myartifact
     restart: unless-stopped
     ports:
-      - "${MYARTIFACT_PORT:-4175}:4173"
+      - "127.0.0.1:${MYARTIFACT_PORT:-4175}:4173"
     environment:
       - NODE_ENV=production
       - MYARTIFACT_HOME=/data
