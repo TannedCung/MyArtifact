@@ -1467,6 +1467,9 @@ export class CloudHttpRuntime {
           this.sendJson(req, res, 200, { events });
           return;
         }
+
+        this.sendJson(req, res, 404, { error: 'API route not found' });
+        return;
       }
 
       // =====================================================================
@@ -1481,6 +1484,17 @@ export class CloudHttpRuntime {
       }
 
       if (apiPath.startsWith('/api/')) {
+        const isKnownWorkspaceApiRoute =
+          apiPath === '/api/sync' ||
+          apiPath === '/api/wiki' ||
+          apiPath === '/api/artifacts' ||
+          apiPath.startsWith('/api/artifacts/') ||
+          apiPath === '/api/tensorboard/runs' ||
+          apiPath.startsWith('/api/tensorboard/runs/');
+        if (!isKnownWorkspaceApiRoute) {
+          this.sendJson(req, res, 404, { error: 'API route not found' });
+          return;
+        }
         const { ctx } = await this.resolveAuthContext(req, url, true);
         const wsId = await this.resolveWorkspaceId(req, url, ctx, explicitWsFromPath);
         const buildLinks = (slug: string) => ({

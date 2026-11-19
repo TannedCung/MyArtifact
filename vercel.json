@@ -23,6 +23,27 @@
       ]
     },
     {
+      "source": "/favicon.svg",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "default-src 'none'; style-src 'unsafe-inline'; sandbox" }
+      ]
+    },
+    {
+      "source": "/((?!api/|api$).*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        { "type": "host", "value": "(?:dev\\..*|.*\\.vercel\\.app)" }
+      ],
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
@@ -33,6 +54,6 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api?__ma_path=/api/$1" },
     { "source": "/favicon.svg", "destination": "/api?__ma_path=/favicon.svg" },
-    { "source": "/((?!assets/|api/|favicon\\.svg|robots\\.txt|sitemap\\.xml|llms\\.txt|manifest\\.webmanifest|og-image\\.png|apple-touch-icon\\.png).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|api/|api$|favicon\\.svg|robots\\.txt|sitemap\\.xml|llms\\.txt|manifest\\.webmanifest|og-image\\.png|apple-touch-icon\\.png).*)", "destination": "/index.html" }
   ]
 }

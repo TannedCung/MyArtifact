@@ -263,10 +263,11 @@ export async function startArtifactServer(
     const dataDir = path.resolve(options.cloud?.dataDir || getDefaultDataDir());
     let cloudStore = options.cloud?.cloudStore;
     let ownsCloudStore = false;
+    let isPostgres = false;
     if (!cloudStore) {
       ownsCloudStore = true;
       const dbUrl = process.env.DATABASE_URL;
-      const isPostgres = Boolean(
+      isPostgres = Boolean(
         dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))
       );
       cloudStore = isPostgres
@@ -277,7 +278,9 @@ export async function startArtifactServer(
         : new SqliteCloudStore(dataDir, createBlobStoreFromEnv(dataDir));
     }
 
-    const tokenService = options.cloud?.tokenService || new CloudTokenService({ dataDir });
+    const tokenService =
+      options.cloud?.tokenService ||
+      new CloudTokenService({ dataDir: isPostgres ? undefined : dataDir });
     const runtime = new CloudHttpRuntime({
       store: cloudStore,
       tokenService,
