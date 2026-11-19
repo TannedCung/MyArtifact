@@ -6,23 +6,30 @@
 
 MyArtifact brings interactive Web Artifacts (sandboxed React 19, Three.js / R3F, Mermaid, HTML, Markdown/KaTeX, SVG, and live TensorBoard runs) to terminal and IDE coding agents. It runs 100% locally on Node.js + SQLite (`~/.myartifact`) or in stateless cloud mode (Vercel + Neon Postgres + Cloudflare R2 / S3) with Google OIDC, cascading RBAC (`Workspace -> Project -> Category -> Artifact`), batch sharing, and delegated agent identities.
 
-## Quickstart CLI Commands
+## Connect to MyArtifact Cloud (Default)
 
 ```bash
-# Auto-wire MCP config & skills for Claude Code, Codex, and Antigravity
+# 1. Check whether CLI & MCP are already linked to Cloud ("profile: cloud")
+npx myartifact whoami
+
+# 2. If not logged in, authorize once via Google OIDC (use --device on SSH/containers)
+npx myartifact login --cloud https://myartifact.app
+
+# 3. Auto-wire MCP config (.mcp.json) & SKILL.md for Claude Code, Codex, and Antigravity
+# (Once logged in, myartifact mcp and CLI commands automatically target Cloud — do NOT run myartifact serve)
 npx myartifact setup
 
-# Launch local visual studio & API server on http://127.0.0.1:4173
-myartifact serve
+# 4. List or switch cloud workspaces
+npx myartifact workspace list
+npx myartifact workspace use <slug>
 
-# Sign in once with Google so local CLI & agents share your cloud identity
-myartifact login --cloud https://myartifact.app
-
-# Push local files, read artifacts, or export LLM Wiki index
-myartifact push ./dashboard.tsx --slug eval-dashboard --project research
-myartifact get eval-dashboard
-myartifact index --project research
+# 5. Push local files directly to Cloud (returns https://myartifact.app/artifacts/eval-dashboard)
+npx myartifact push ./dashboard.tsx --slug eval-dashboard --project research
+npx myartifact get eval-dashboard
+npx myartifact index --project research
 ```
+
+> Optional 100% offline local mode: `npx myartifact profile local && npx myartifact serve` (stores artifacts in `~/.myartifact` on `http://127.0.0.1:4173`).
 
 ## Supported Artifact Runtimes
 
@@ -36,7 +43,7 @@ myartifact index --project research
 
 ## Agent Operating Protocol
 
-1. **Orient first via the LLM Wiki**: Always call `artifact_wiki_index()` before creating a new artifact to inspect `~/.myartifact/index.md` projects, categories, and backlinks.
+1. **Orient first via the LLM Wiki**: Always call `artifact_wiki_index()` (or `npx myartifact index`) before creating a new artifact to inspect the workspace LLM Wiki (`index.md` & `log.md`) projects, categories, and backlinks.
 2. **Default to Visual-First Runtimes**: Choose interactive `react`, `html`, `threejs`, `mermaid`, `svg`, or `tb_log_scalars` over plain markdown whenever charts, UI workflows, 3D scenes, or diagrams explain faster. Use the Moss theme (`#F7F4ED` / `#151A16` canvas, `#485A43` / `#98AC93` sage accents).
 3. **Iterate & Cross-Link**: Use `artifact_update` (or `upsert: true`) rather than creating duplicate slugs, cross-link related artifacts with `[[other-slug]]`, and persist editable UI state via `window.storage` / `artifact_storage_set`.
 4. **Respect the Safe Agent Scope Ceiling**: Standard `myartifact login` sessions authorize `artifacts:read`, `artifacts:write`, `storage:write`, and `tb:write` while blocking destructive deletes (`artifacts:delete`) and permission changes (`iam:share`).

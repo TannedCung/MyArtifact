@@ -60,11 +60,19 @@ describe('Comprehensive SEO Landing Page & Crawler Assets', () => {
     const faqNode = jsonLd['@graph'].find((n) => n['@type'] === 'FAQPage');
     assert.ok(Array.isArray(faqNode?.mainEntity) && faqNode.mainEntity.length >= 5);
 
-    // Verify pre-rendered Humans & Agents onboarding sections exist inside Wave-1 HTML
+    // Verify pre-rendered Humans & Agents Cloud onboarding sections exist inside Wave-1 HTML
     assert.match(html, /id="quickstart"/);
     assert.match(html, /For Humans/);
     assert.match(html, /For Agents/);
     assert.match(html, /artifact_wiki_index\(\)/);
+    assert.match(html, /myartifact login --cloud https:\/\/myartifact\.app/);
+    const quickstartMatch = html.match(/<section id="quickstart"[\s\S]*?<\/section>/);
+    assert.ok(quickstartMatch, 'Built index.html must contain #quickstart section');
+    assert.doesNotMatch(
+      quickstartMatch[0],
+      /myartifact serve/,
+      '#quickstart Cloud onboarding section must not instruct local myartifact serve'
+    );
 
     // Verify local CSS is inlined cleanly with zero render-blocking local <link rel="stylesheet">
     assert.doesNotMatch(

@@ -175,12 +175,14 @@ export const DEMO_ARTIFACTS: DemoArtifact[] = [
 ];
 
 export const AGENT_BOOTSTRAP_PROMPT =
-  'Read https://myartifact.app/llms.txt (or .agents/skills/myartifact/SKILL.md). Always call artifact_wiki_index() first to inspect projects and backlinks, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, and iterate with artifact_update + [[wiki-links]].';
+  'Read https://myartifact.app/llms.txt to connect and publish to MyArtifact Cloud. Check cloud auth with npx myartifact whoami (if not logged in, ask the human to run npx myartifact login --cloud https://myartifact.app && npx myartifact setup). Always call artifact_wiki_index() first, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, iterate with artifact_update + [[wiki-links]], and return the live https://myartifact.app/artifacts/<slug> URL.';
 
 const COPY_PAYLOADS: Record<string, string> = {
+  'hero-cloud': 'npx myartifact login --cloud https://myartifact.app',
   setup: 'npx myartifact setup',
-  'human-cli': 'npx myartifact setup && myartifact serve',
-  'human-login': 'myartifact login',
+  'human-login': 'npx myartifact login --cloud https://myartifact.app',
+  'human-device': 'npx myartifact login --cloud https://myartifact.app --device',
+  'human-setup': 'npx myartifact setup',
   'agent-prompt': AGENT_BOOTSTRAP_PROMPT,
 };
 
@@ -516,7 +518,7 @@ export function bindSeoLandingEvents(
   const resetCopyLabel = (btn: HTMLButtonElement) => {
     const kind = btn.dataset.maCopy;
     const orig = btn.dataset.maOrigLabel || (kind === 'agent-prompt' ? 'Copy Prompt' : 'Copy');
-    const iconCls = kind === 'setup' ? 'w-3.5 h-3.5' : 'w-3 h-3';
+    const iconCls = kind === 'setup' || kind === 'hero-cloud' ? 'w-3.5 h-3.5' : 'w-3 h-3';
     btn.innerHTML = `${STAGE_SVG.copy(iconCls)}<span>${orig}</span>`;
   };
 
@@ -540,7 +542,8 @@ export function bindSeoLandingEvents(
       window.clearTimeout(copyTimer);
     }
 
-    const iconCls = kind === 'setup' ? 'w-3.5 h-3.5 text-sage' : 'w-3 h-3 text-sage';
+    const iconCls =
+      kind === 'setup' || kind === 'hero-cloud' ? 'w-3.5 h-3.5 text-sage' : 'w-3 h-3 text-sage';
     btn.innerHTML = `${STAGE_SVG.check(iconCls)}<span>Copied</span>`;
     activeCopyBtn = btn;
 

@@ -187,10 +187,10 @@
               },
               {
                 "@type": "Question",
-                "name": "Can I run MyArtifact 100% offline without cloud accounts?",
+                "name": "Do I need to run a local server to use MyArtifact Cloud?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Running npx myartifact setup and myartifact serve stores all metadata, versions, and window.storage state locally in ~/.myartifact using Node SQLite FTS5 and human-readable files on disk with zero external network dependencies for core local workflows."
+                  "text": "No. MyArtifact Cloud hosts the studio, Postgres search, and R2 checkpoints for you—just run npx myartifact login and npx myartifact setup locally so MCP tools publish to Cloud. (100% offline SQLite mode is also available via myartifact serve.)"
                 }
               },
               {

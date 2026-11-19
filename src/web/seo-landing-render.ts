@@ -53,8 +53,8 @@ const FAQ_ITEMS = [
     a: 'MyArtifact gives Claude Code, OpenAI Codex, and Google Antigravity one persistent visual workspace instead of trapping UI previews inside individual chat threads.',
   },
   {
-    q: 'Can I run MyArtifact 100% offline without cloud accounts?',
-    a: 'Yes. Running npx myartifact setup and myartifact serve stores all artifacts, versions, FTS5 search indexes, and window.storage state locally in ~/.myartifact with zero cloud dependency.',
+    q: 'Do I need to run a local server to use MyArtifact Cloud?',
+    a: 'No. MyArtifact Cloud hosts the studio, Postgres search, and R2 checkpoints for you—just run npx myartifact login and npx myartifact setup locally so MCP tools publish to Cloud. (100% offline SQLite mode is also available via myartifact serve.)',
   },
   {
     q: 'How do local coding agents safely access Cloud workspaces?',
@@ -205,6 +205,11 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
   ).join('');
 
   const authCtaMeta = `${opts.isCloudMode ? '1' : '0'}:${opts.googleEnabled ? '1' : '0'}:${opts.authenticated ? '1' : '0'}`;
+  const heroCmdDisplay = opts.isCloudMode ? 'npx myartifact login' : 'npx myartifact setup';
+  const heroCopyKind = opts.isCloudMode ? 'hero-cloud' : 'setup';
+  const heroCopyAria = opts.isCloudMode
+    ? 'Copy npx myartifact login cloud command'
+    : 'Copy npx myartifact setup command';
 
   return `
     <div id="top" data-ma-landing="1" data-ma-auth="${authCtaMeta}" class="min-h-screen bg-canvas text-ink selection:bg-[#C7D3C0] selection:text-[#1E2420]">
@@ -254,8 +259,8 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
               ${renderPrimaryCtaHtml(opts, true)}
               <div class="h-[44px] inline-flex items-center gap-2.5 pl-3.5 pr-1.5 rounded-[9px] border border-line-strong bg-raised shadow-[0_1px_2px_rgba(30,36,32,0.05)]">
                 ${RENDER_SVG.terminal('w-4 h-4 text-sage shrink-0')}
-                <code class="font-mono text-[13px] text-ink whitespace-nowrap">npx myartifact setup</code>
-                <button type="button" data-ma-copy="setup" aria-label="Copy npx myartifact setup command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 transition-colors">
+                <code class="font-mono text-[13px] text-ink whitespace-nowrap">${heroCmdDisplay}</code>
+                <button type="button" data-ma-copy="${heroCopyKind}" aria-label="${heroCopyAria}" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 transition-colors">
                   ${STAGE_SVG.copy()}<span>Copy</span>
                 </button>
               </div>
@@ -307,83 +312,83 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
           </div>
         </section>
 
-        <!-- Dual Onboarding: For Humans & For Agents -->
+        <!-- Dual Onboarding: For Humans & For Agents (Cloud-First) -->
         <section id="quickstart" aria-labelledby="quickstart-heading" class="border-t border-line bg-canvas">
           <div class="max-w-[1120px] mx-auto px-5 sm:px-8 py-20">
-            <div class="max-w-[620px]">
-              <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-sage">Onboarding · Two Workflows</span>
+            <div class="max-w-[660px]">
+              <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-sage">Cloud Onboarding · Two Workflows</span>
               <h2 id="quickstart-heading" class="font-serif text-[28px] sm:text-[38px] leading-[1.12] font-semibold text-ink m-0 mt-2">
-                Instructions for humans &amp; coding agents
+                Connect humans &amp; coding agents to Cloud
               </h2>
               <p class="mt-2.5 text-[14.5px] leading-relaxed text-ink-2 m-0">
-                Inspect and share visual work in the browser, or hand the studio instructions directly to Claude Code, OpenAI Codex, or Google Antigravity.
+                Open your workspace in the browser, link your terminal once via Google OIDC, and let Claude Code, Codex, and Antigravity publish live Cloud artifacts.
               </p>
             </div>
 
             <div class="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
               <!-- Card 1: For Humans -->
-              <article class="rounded-[14px] border border-line bg-raised p-6 flex flex-col justify-between gap-6 shadow-[0_6px_24px_rgba(30,36,32,0.04)]">
-                <div>
+              <article class="min-w-0 rounded-[14px] border border-line bg-raised p-6 flex flex-col justify-between gap-6 shadow-[0_6px_24px_rgba(30,36,32,0.04)]">
+                <div class="min-w-0">
                   <div class="flex items-center justify-between gap-2">
                     <span class="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.07em] px-2.5 py-1 rounded-full bg-sage-soft text-sage border border-[var(--c-sage-border)]">
                       ${RENDER_SVG.user('w-3.5 h-3.5')}
                       <span>For Humans</span>
                     </span>
-                    <span class="font-mono text-[11px] text-ink-3">Browser &amp; CLI</span>
+                    <span class="font-mono text-[11px] text-ink-3">Web Studio &amp; Cloud CLI</span>
                   </div>
 
-                  <h3 class="text-[19px] font-semibold text-ink m-0 mt-4">Run locally offline or collaborate in Cloud</h3>
+                  <h3 class="text-[19px] font-semibold text-ink m-0 mt-4">Sign in once &amp; link your local terminal</h3>
 
                   <ol class="mt-5 p-0 m-0 list-none space-y-4 text-[13.5px] text-ink-2">
-                    <li class="flex flex-col gap-1.5">
-                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">01.</span>Open Cloud Studio or run locally</span>
-                      <span class="text-ink-2 leading-relaxed">Sign in with Google above to browse team artifacts, diffs, and Batch Share permissions — or run locally on SQLite:</span>
-                      <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-line bg-canvas font-mono text-[12px] text-ink">
-                        <code class="overflow-x-auto whitespace-nowrap">npx myartifact setup &amp;&amp; myartifact serve</code>
-                        <button type="button" data-ma-copy="human-cli" aria-label="Copy local studio setup command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-raised hover:bg-sunken text-[11px] text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors">
-                          ${STAGE_SVG.copy('w-3 h-3')}<span>Copy</span>
-                        </button>
-                      </div>
-                    </li>
-
-                    <li class="flex flex-col gap-1.5">
-                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">02.</span>Connect local assistants to Cloud (optional)</span>
-                      <span class="text-ink-2 leading-relaxed">Authorize once via Google OIDC so local tools publish safely to your Cloud workspace under the Safe Agent Scope Ceiling:</span>
-                      <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-line bg-canvas font-mono text-[12px] text-ink">
-                        <code class="overflow-x-auto whitespace-nowrap">myartifact login</code>
-                        <button type="button" data-ma-copy="human-login" aria-label="Copy myartifact login command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-raised hover:bg-sunken text-[11px] text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors">
-                          ${STAGE_SVG.copy('w-3 h-3')}<span>Copy</span>
-                        </button>
-                      </div>
-                    </li>
-
                     <li class="flex flex-col gap-1">
-                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">03.</span>Browse versions, diffs &amp; access</span>
-                      <span class="text-ink-2 leading-relaxed">Switch between live Render, side-by-side Diff, Source Code, and isolated <code class="font-mono text-[12px]">window.storage</code> KV state with 1-click rollback.</span>
+                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">01.</span>Sign in to Cloud Studio</span>
+                      <span class="text-ink-2 leading-relaxed">Click <strong class="font-medium text-ink">Continue with Google</strong> above to open personal or team workspaces, inspect side-by-side diffs, and manage Batch Share permissions—zero server setup.</span>
+                    </li>
+
+                    <li class="flex flex-col gap-1.5">
+                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">02.</span>Authenticate your terminal to Cloud</span>
+                      <span class="text-ink-2 leading-relaxed">Authorize once via Google OIDC PKCE (switches profile to <code class="font-mono text-[12px]">cloud</code> under the Safe Agent Scope Ceiling; add <code class="font-mono text-[12px]">--device</code> on SSH/containers):</span>
+                      <div class="min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-line bg-canvas font-mono text-[12px] text-ink">
+                        <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">npx myartifact login --cloud https://myartifact.app</code>
+                        <button type="button" data-ma-copy="human-login" aria-label="Copy cloud login command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-raised hover:bg-sunken text-[11px] text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors">
+                          ${STAGE_SVG.copy('w-3 h-3')}<span>Copy</span>
+                        </button>
+                      </div>
+                    </li>
+
+                    <li class="flex flex-col gap-1.5">
+                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">03.</span>Wire MCP &amp; skills into your project</span>
+                      <span class="text-ink-2 leading-relaxed">Auto-configure <code class="font-mono text-[12px]">.mcp.json</code> and <code class="font-mono text-[12px]">SKILL.md</code> for Claude Code, OpenAI Codex, and Google Antigravity:</span>
+                      <div class="min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-line bg-canvas font-mono text-[12px] text-ink">
+                        <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">npx myartifact setup</code>
+                        <button type="button" data-ma-copy="human-setup" aria-label="Copy npx myartifact setup command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-raised hover:bg-sunken text-[11px] text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors">
+                          ${STAGE_SVG.copy('w-3 h-3')}<span>Copy</span>
+                        </button>
+                      </div>
                     </li>
                   </ol>
                 </div>
 
                 <div class="pt-4 border-t border-line flex flex-wrap items-center justify-between gap-3">
                   <a href="/auth/device" class="min-h-[32px] inline-flex items-center gap-1.5 font-mono text-[12px] text-sage hover:underline no-underline">
-                    <span>Authorize CLI Device</span>${RENDER_SVG.arrowRight('w-3.5 h-3.5')}
+                    <span>SSH / Device Code Login</span>${RENDER_SVG.arrowRight('w-3.5 h-3.5')}
                   </a>
-                  <span class="font-mono text-[11px] text-ink-3">MIT · macOS / Linux / Windows</span>
+                  <span class="font-mono text-[11px] text-ink-3">Safe Agent Scope Ceiling</span>
                 </div>
               </article>
 
               <!-- Card 2: For Agents -->
-              <article class="rounded-[14px] border border-line bg-raised p-6 flex flex-col justify-between gap-6 shadow-[0_6px_24px_rgba(30,36,32,0.04)]">
-                <div>
+              <article class="min-w-0 rounded-[14px] border border-line bg-raised p-6 flex flex-col justify-between gap-6 shadow-[0_6px_24px_rgba(30,36,32,0.04)]">
+                <div class="min-w-0">
                   <div class="flex items-center justify-between gap-2">
                     <span class="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.07em] px-2.5 py-1 rounded-full bg-brass-soft text-brass-ink border border-brass-line">
                       ${RENDER_SVG.bot('w-3.5 h-3.5')}
                       <span>For Agents</span>
                     </span>
-                    <span class="font-mono text-[11px] text-ink-3">MCP · SKILL.md · llms.txt</span>
+                    <span class="font-mono text-[11px] text-ink-3">Cloud MCP · SKILL.md · llms.txt</span>
                   </div>
 
-                  <h3 class="text-[19px] font-semibold text-ink m-0 mt-4">Give Claude Code, Codex &amp; Antigravity one protocol</h3>
+                  <h3 class="text-[19px] font-semibold text-ink m-0 mt-4">Publish live artifacts straight to Cloud</h3>
 
                   <div class="mt-4 rounded-[10px] border border-line-strong bg-canvas p-3.5">
                     <div class="flex items-center justify-between gap-2 mb-2">
@@ -392,34 +397,34 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
                         ${STAGE_SVG.copy('w-3 h-3')}<span>Copy Prompt</span>
                       </button>
                     </div>
-                    <p class="m-0 font-mono text-[12px] leading-[1.6] text-ink">${escapeHtml(AGENT_BOOTSTRAP_PROMPT)}</p>
+                    <p class="m-0 font-mono text-[12px] leading-[1.6] text-ink break-words">${escapeHtml(AGENT_BOOTSTRAP_PROMPT)}</p>
                   </div>
 
                   <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[12.5px]">
                     <div class="p-3 rounded-[9px] border border-line bg-canvas">
-                      <div class="font-mono text-[11px] text-sage font-medium">1 · Orient via Wiki</div>
-                      <div class="text-ink-2 mt-1">Call <code class="font-mono text-[11.5px]">artifact_wiki_index()</code> before creating so slugs &amp; categories match.</div>
+                      <div class="font-mono text-[11px] text-sage font-medium">1 · Verify Cloud Session</div>
+                      <div class="text-ink-2 mt-1">Run <code class="font-mono text-[11.5px]">npx myartifact whoami</code> to confirm <code class="font-mono text-[11.5px]">profile: cloud</code> &amp; target workspace.</div>
                     </div>
                     <div class="p-3 rounded-[9px] border border-line bg-canvas">
-                      <div class="font-mono text-[11px] text-sage font-medium">2 · Choose Visual Runtimes</div>
-                      <div class="text-ink-2 mt-1">Prefer <code class="font-mono text-[11.5px]">react</code>, <code class="font-mono text-[11.5px]">html</code>, <code class="font-mono text-[11.5px]">threejs</code>, <code class="font-mono text-[11.5px]">mermaid</code>, or <code class="font-mono text-[11.5px]">tb_log_scalars</code>.</div>
+                      <div class="font-mono text-[11px] text-sage font-medium">2 · Orient via Cloud Wiki</div>
+                      <div class="text-ink-2 mt-1">Call <code class="font-mono text-[11.5px]">artifact_wiki_index()</code> first to inspect cloud projects, categories &amp; backlinks.</div>
                     </div>
                     <div class="p-3 rounded-[9px] border border-line bg-canvas">
-                      <div class="font-mono text-[11px] text-sage font-medium">3 · Iterate &amp; Cross-Link</div>
-                      <div class="text-ink-2 mt-1">Update existing artifacts via <code class="font-mono text-[11.5px]">artifact_update</code> and <code class="font-mono text-[11.5px]">[[wiki-links]]</code>.</div>
+                      <div class="font-mono text-[11px] text-sage font-medium">3 · Publish Visual Runtimes</div>
+                      <div class="text-ink-2 mt-1">Prefer <code class="font-mono text-[11.5px]">react</code>, <code class="font-mono text-[11.5px]">html</code>, <code class="font-mono text-[11.5px]">threejs</code>, <code class="font-mono text-[11.5px]">mermaid</code>, or <code class="font-mono text-[11.5px]">tb_log_scalars</code> &amp; share <code class="font-mono text-[11.5px]">/artifacts/&lt;slug&gt;</code>.</div>
                     </div>
                     <div class="p-3 rounded-[9px] border border-line bg-canvas">
                       <div class="font-mono text-[11px] text-sage font-medium">4 · Safe Scope Ceiling</div>
-                      <div class="text-ink-2 mt-1">Reads &amp; writes succeed; destructive deletes &amp; ACL shares stay blocked.</div>
+                      <div class="text-ink-2 mt-1">Cloud reads/writes succeed; deletes &amp; ACL share edits stay blocked without <code class="font-mono text-[11.5px]">--elevate</code>.</div>
                     </div>
                   </div>
                 </div>
 
                 <div class="pt-4 border-t border-line flex flex-wrap items-center justify-between gap-3">
                   <a href="/llms.txt" class="min-h-[32px] inline-flex items-center gap-1.5 font-mono text-[12px] text-sage hover:underline no-underline">
-                    <span>Open Machine Docs (/llms.txt)</span>${RENDER_SVG.arrowRight('w-3.5 h-3.5')}
+                    <span>Open Cloud Agent Spec (/llms.txt)</span>${RENDER_SVG.arrowRight('w-3.5 h-3.5')}
                   </a>
-                  <span class="font-mono text-[11px] text-ink-3">8 MCP Tools · Moss Theme</span>
+                  <span class="font-mono text-[11px] text-ink-3">8 Cloud MCP Tools · Moss Theme</span>
                 </div>
               </article>
             </div>
@@ -547,7 +552,7 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
         <section class="max-w-[920px] mx-auto px-5 sm:px-8 py-16">
           <div class="rounded-[16px] border border-[var(--c-sage-border)] bg-sage-soft/50 px-6 py-10 text-center flex flex-col items-center gap-4">
             <h2 class="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0">Start in 10 seconds.</h2>
-            <p class="text-[14.5px] text-ink-2 m-0 max-w-[480px]">Run <code class="font-mono text-[13px] px-1.5 py-0.5 rounded bg-raised border border-line">npx myartifact setup</code> locally or sign in with Google to share workspaces with your team.</p>
+            <p class="text-[14.5px] text-ink-2 m-0 max-w-[520px]">Sign in with Google to open your Cloud workspace, then run <code class="font-mono text-[13px] px-1.5 py-0.5 rounded bg-raised border border-line">npx myartifact login &amp;&amp; npx myartifact setup</code> to connect your coding agents.</p>
             <div class="mt-2 flex flex-wrap items-center justify-center gap-3">${renderPrimaryCtaHtml(opts, true)}</div>
           </div>
         </section>

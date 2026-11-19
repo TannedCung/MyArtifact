@@ -107,7 +107,7 @@ program
 program
   .command('login')
   .description('Log in once with Google so local CLI & coding agents (Claude Code, Codex, Antigravity) share your cloud identity')
-  .option('--cloud <url>', 'MyArtifact Cloud server URL', process.env.MYARTIFACT_CLOUD_URL || 'http://127.0.0.1:4173')
+  .option('--cloud <url>', 'MyArtifact Cloud server URL', process.env.MYARTIFACT_CLOUD_URL || 'https://myartifact.app')
   .option('--device', 'Use RFC 8628 device-code flow (recommended for SSH / headless containers)')
   .option('--elevate', 'Request short-lived elevated permissions (allows batch sharing and deletes)')
   .option('-w, --workspace <ws>', 'Default workspace slug or ID')

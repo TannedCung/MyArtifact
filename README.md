@@ -107,16 +107,24 @@ const { keys } = await window.storage.list('note:');
 
 > **Prerequisite**: Node.js **>= 22.5.0** (uses Node's native `node:sqlite` module with zero native C++ compilation required) or **Docker** for self-hosted local studio, or any browser for MyArtifact Cloud.
 
-### Option A: Cloud Workspace (Browser + Optional CLI Link)
+### Option A: Connect to MyArtifact Cloud (Recommended — Zero Server Setup)
 
 1. Open [myartifact.app](https://myartifact.app/) and click **Continue with Google** (Google OIDC) to access your workspace, version diffs, cascading RBAC folders, and Batch Sharing.
-2. Link your local terminal & coding assistants to the cloud workspace once (authorized under the **Safe Agent Scope Ceiling**):
+2. Link your local terminal & coding assistants to MyArtifact Cloud once (authorized under the **Safe Agent Scope Ceiling**; add `--device` for SSH/headless environments):
 
 ```bash
-myartifact login
+npx myartifact login --cloud https://myartifact.app
 ```
 
-### Option B: Direct Node.js Local Studio (100% Offline)
+3. Configure `.mcp.json` and `SKILL.md` for Claude Code, OpenAI Codex, and Google Antigravity, then verify your active Cloud profile:
+
+```bash
+npx myartifact setup
+npx myartifact whoami
+npx myartifact workspace list
+```
+
+### Option B: Self-Hosted / Offline Local Studio (Node.js)
 
 ```bash
 # 1. Install dependencies & build CLI, MCP server, daemon, and Web Studio
@@ -130,7 +138,7 @@ node dist/cli/cli.js setup
 npm start
 ```
 
-### Option C: Docker Compose (Always-On Local Daemon)
+### Option C: Self-Hosted / Offline Local Studio (Docker Compose)
 
 ```bash
 # Build and start the background container (persists data to ~/.myartifact)
@@ -145,22 +153,22 @@ docker compose logs -f
 
 ## For Agents
 
-Paste this bootstrap instruction into **Claude Code**, **OpenAI Codex**, or **Google Antigravity** (or run `npx myartifact setup` so they auto-discover `.agents/skills/myartifact/SKILL.md` and `.mcp.json`):
+Paste this bootstrap instruction into **Claude Code**, **OpenAI Codex**, or **Google Antigravity** (once logged in via `npx myartifact login --cloud https://myartifact.app` and configured with `npx myartifact setup`):
 
 > **Agent Bootstrap Prompt**
 > ```text
-> Read https://myartifact.app/llms.txt (or .agents/skills/myartifact/SKILL.md).
-> Always call artifact_wiki_index() first to inspect existing projects, categories, and backlinks.
-> Choose interactive visual runtimes ("react", "html", "threejs", "mermaid", "svg", or tb_log_scalars) over plain markdown whenever charts, UI workflows, 3D scenes, or diagrams explain faster.
-> Iterate in place with artifact_update, add [[wiki-links]] in descriptions, and stay within the Safe Agent Scope Ceiling (no destructive deletes or ACL share mutations without --elevate).
+> Read https://myartifact.app/llms.txt to connect and publish to MyArtifact Cloud.
+> Check cloud auth with npx myartifact whoami (if not logged in, ask the human to run npx myartifact login --cloud https://myartifact.app && npx myartifact setup).
+> Always call artifact_wiki_index() first, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, iterate with artifact_update + [[wiki-links]], and return the live https://myartifact.app/artifacts/<slug> URL.
 > ```
 
 ### Agent Operating Protocol
 
-1. **Orient first via the LLM Wiki**: Call `artifact_wiki_index()` to read `~/.myartifact/index.md` and `log.md` so new outputs land in the right `project` / `category` and avoid duplicating existing slugs.
-2. **Default to Visual-First Runtimes**: Choose `"react"` (Tailwind + Recharts / Lucide), `"html"` (self-contained ES modules / Three.js), `"mermaid"`, `"svg"`, or `tb_log_scalars` even if older entries in the project used markdown. Follow the Moss theme (`#F7F4ED` / `#151A16` canvas, `#485A43` / `#98AC93` sage accents).
-3. **Iterate & Cross-Link**: Use `artifact_update` (or `upsert: true`) rather than spawning duplicate slugs, link related artifacts with `[[other-slug]]`, and store user-editable UI state in `window.storage` (via `artifact_storage_set` or in-sandbox hooks).
-4. **Respect the Safe Agent Scope Ceiling**: When connected to Cloud via `myartifact login`, agents inherit `artifacts:read`, `artifacts:write`, `storage:write`, and `tb:write`—while destructive deletes (`artifacts:delete`) and permission edits (`iam:share`) remain blocked unless explicitly run with `--elevate`.
+1. **Verify Cloud Connection**: Confirm `npx myartifact whoami` shows `Profile: cloud` and the target workspace (do **not** run `myartifact serve` when targeting Cloud).
+2. **Orient first via the Cloud Wiki**: Call `artifact_wiki_index()` to read the workspace LLM Wiki (`index.md` & `log.md`) so new outputs land in the right `project` / `category` and avoid duplicating existing slugs.
+3. **Default to Visual-First Runtimes**: Choose `"react"` (Tailwind + Recharts / Lucide), `"html"` (self-contained ES modules / Three.js), `"mermaid"`, `"svg"`, or `tb_log_scalars` even if older entries in the project used markdown. Follow the Moss theme (`#F7F4ED` / `#151A16` canvas, `#485A43` / `#98AC93` sage accents).
+4. **Iterate, Cross-Link & Share Cloud URLs**: Use `artifact_update` (or `upsert: true`) rather than spawning duplicate slugs, link related artifacts with `[[other-slug]]`, persist UI state in `window.storage`, and return live `https://myartifact.app/artifacts/<slug>` links.
+5. **Respect the Safe Agent Scope Ceiling**: Standard `myartifact login` sessions authorize `artifacts:read`, `artifacts:write`, `storage:write`, and `tb:write`—while destructive deletes (`artifacts:delete`) and permission edits (`iam:share`) remain blocked unless explicitly run with `--elevate`.
 
 ### Assistant Auto-Configuration
 
