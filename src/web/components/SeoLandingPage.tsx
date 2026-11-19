@@ -24,7 +24,7 @@ import {
   Users,
   Workflow,
 } from 'lucide-react';
-import { MYARTIFACT_LOGO_SVG } from '../../core/icons.js';
+import { MYARTIFACT_LOGO_SVG } from '../../core/brand-logo.js';
 
 export interface SeoLandingPageProps {
   theme: 'day' | 'night';
@@ -321,12 +321,13 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-canvas text-ink selection:bg-[#C7D3C0] selection:text-[#1E2420]">
+    <div id="top" className="min-h-screen bg-canvas text-ink selection:bg-[#C7D3C0] selection:text-[#1E2420]">
       {/* Top Sticky Navigation */}
       <header className="sticky top-0 z-40 border-b border-line bg-canvas/90 backdrop-blur-md">
         <div className="max-w-[1160px] mx-auto px-5 sm:px-8 h-[60px] flex items-center justify-between gap-4">
           <a href="#top" className="flex items-center gap-2.5 text-ink no-underline min-w-0">
             <span
+              aria-hidden="true"
               className="w-[30px] h-[30px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.12)] [&>svg]:w-full [&>svg]:h-full"
               dangerouslySetInnerHTML={{ __html: MYARTIFACT_LOGO_SVG }}
             />
@@ -364,19 +365,19 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
               onClick={onToggleTheme}
               aria-label={theme === 'night' ? 'Switch to day theme' : 'Switch to night theme'}
               title={theme === 'night' ? 'Switch to day theme' : 'Switch to night theme'}
-              className="w-[34px] h-[34px] rounded-[7px] border border-line bg-raised hover:bg-sunken text-ink-2 flex items-center justify-center transition-colors"
+              className="w-[36px] h-[36px] rounded-[7px] border border-line bg-raised hover:bg-sunken text-ink-2 flex items-center justify-center transition-colors"
             >
-              {theme === 'night' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {theme === 'night' ? <Sun className="w-4 h-4" aria-hidden="true" /> : <Moon className="w-4 h-4" aria-hidden="true" />}
             </button>
 
             <a
               href="https://github.com/TannedCung/MyArtifact"
               target="_blank"
-              rel="noreferrer"
-              className="hidden sm:inline-flex h-[34px] px-3 rounded-[7px] border border-line bg-raised hover:bg-sunken text-ink-2 hover:text-ink text-[12.5px] font-medium items-center gap-1.5 transition-colors no-underline"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex h-[36px] px-3 rounded-[7px] border border-line bg-raised hover:bg-sunken text-ink-2 hover:text-ink text-[12.5px] font-medium items-center gap-1.5 transition-colors no-underline"
             >
               <span>GitHub</span>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
             </a>
 
             {renderPrimaryCta(false)}
@@ -384,7 +385,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
         </div>
       </header>
 
-      <main id="top">
+      <main id="main-content">
         {/* Hero Section */}
         <section className="max-w-[1160px] mx-auto px-5 sm:px-8 pt-12 sm:pt-16 pb-10 sm:pb-14">
           <div className="max-w-[840px]">
@@ -451,16 +452,17 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                 </div>
                 <button
                   onClick={() => handleCopy('setup', 'npx myartifact setup')}
-                  className="h-[28px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors"
+                  aria-label="Copy npx myartifact setup command"
+                  className="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors"
                 >
                   {copiedCmd === 'setup' ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-sage" />
+                      <Check className="w-3.5 h-3.5 text-sage" aria-hidden="true" />
                       <span>Copied</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5" />
+                      <Copy className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Copy</span>
                     </>
                   )}
@@ -469,7 +471,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
 
               <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-[10px] border border-line bg-raised shadow-[0_1px_2px_rgba(30,36,32,0.05)]">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <ShieldCheck className="w-4 h-4 text-[var(--c-brass-icon)] shrink-0" />
+                  <ShieldCheck className="w-4 h-4 text-[var(--c-brass-icon)] shrink-0" aria-hidden="true" />
                   <div className="min-w-0">
                     <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-3">
                       2 · Cloud Identity for Agents
@@ -483,7 +485,8 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                   onClick={() =>
                     handleCopy('login', 'myartifact login --cloud https://myartifact.app')
                   }
-                  className="h-[28px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors"
+                  aria-label="Copy myartifact login command"
+                  className="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors"
                 >
                   {copiedCmd === 'login' ? (
                     <>
@@ -662,7 +665,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                     <History className="w-3.5 h-3.5" />
                     v{selectedArtifact.version} LATEST
                   </span>
-                  <div className="flex items-center rounded-[7px] bg-sunken p-0.5 border border-line">
+                  <div className="flex items-center gap-1 rounded-[7px] bg-sunken p-1 border border-line flex-wrap">
                     {(
                       [
                         ['preview', 'Preview'],
@@ -674,7 +677,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                       <button
                         key={tabId}
                         onClick={() => setActiveTab(tabId)}
-                        className={`h-[26px] px-2.5 rounded-[5px] text-[12px] font-medium transition-colors ${
+                        className={`min-h-[34px] px-3 rounded-[5px] text-[12px] font-medium transition-colors ${
                           activeTab === tabId
                             ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.08)]'
                             : 'text-ink-3 hover:text-ink'
@@ -711,7 +714,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                           <button
                             key={k}
                             onClick={() => setMetricView(k)}
-                            className={`px-2.5 py-1 rounded-[5px] font-medium transition-colors ${
+                            className={`min-h-[32px] px-3 rounded-[5px] font-medium transition-colors ${
                               metricView === k ? 'bg-sage text-canvas' : 'text-ink-2 hover:text-ink'
                             }`}
                           >
@@ -888,16 +891,17 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                       </span>
                       <button
                         onClick={() => handleCopy('code', selectedArtifact.code.join('\n'))}
-                        className="h-[24px] px-2 rounded bg-raised border border-line text-[11px] font-mono text-ink-2 hover:text-ink inline-flex items-center gap-1"
+                        aria-label="Copy demo artifact source code"
+                        className="min-h-[32px] px-2.5 rounded bg-raised border border-line text-[11px] font-mono text-ink-2 hover:text-ink inline-flex items-center gap-1"
                       >
-                        {copiedCmd === 'code' ? <Check className="w-3 h-3 text-sage" /> : <Copy className="w-3 h-3" />}
+                        {copiedCmd === 'code' ? <Check className="w-3 h-3 text-sage" aria-hidden="true" /> : <Copy className="w-3 h-3" aria-hidden="true" />}
                         {copiedCmd === 'code' ? 'Copied' : 'Copy'}
                       </button>
                     </div>
                     <div className="p-3 font-mono text-[12px] leading-[1.6] overflow-x-auto">
                       {selectedArtifact.code.map((ln, idx) => (
                         <div key={idx} className="grid grid-cols-[36px_1fr] gap-3">
-                          <span className="text-right text-ink-4 select-none">{idx + 1}</span>
+                          <span aria-hidden="true" className="text-right text-ink-3 select-none">{idx + 1}</span>
                           <pre className="m-0 text-ink whitespace-pre">{ln || ' '}</pre>
                         </div>
                       ))}
@@ -908,7 +912,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                 {activeTab === 'diff' && (
                   <div className="rounded-[10px] border border-line bg-raised overflow-hidden font-mono text-[12px] leading-[1.6]">
                     <div className="px-3.5 py-2 border-b border-line bg-sunken text-ink-2 flex items-center gap-2">
-                      <GitCompare className="w-3.5 h-3.5 text-sage" />
+                      <GitCompare className="w-3.5 h-3.5 text-sage" aria-hidden="true" />
                       <span>
                         Comparing v{Math.max(1, selectedArtifact.version - 1)} → v{selectedArtifact.version}
                       </span>
@@ -925,9 +929,9 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                               : 'text-ink-2'
                           }`}
                         >
-                          <span className="text-right pr-2 text-ink-4 select-none">{row.lineOld}</span>
-                          <span className="text-right pr-2 text-ink-4 select-none">{row.lineNew}</span>
-                          <span className="select-none font-semibold">
+                          <span aria-hidden="true" className="text-right pr-2 text-ink-3 select-none">{row.lineOld}</span>
+                          <span aria-hidden="true" className="text-right pr-2 text-ink-3 select-none">{row.lineNew}</span>
+                          <span aria-hidden="true" className="select-none font-semibold">
                             {row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ' '}
                           </span>
                           <pre className="m-0 whitespace-pre">{row.text}</pre>
@@ -1280,6 +1284,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
         <div className="max-w-[1160px] mx-auto px-5 sm:px-8 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[12.5px] text-ink-3">
           <div className="flex items-center gap-2.5">
             <span
+              aria-hidden="true"
               className="w-[22px] h-[22px] rounded-[5px] overflow-hidden flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
               dangerouslySetInnerHTML={{ __html: MYARTIFACT_LOGO_SVG }}
             />
@@ -1289,25 +1294,25 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
           </div>
 
           <nav aria-label="Footer navigation" className="flex flex-wrap items-center gap-4">
-            <a href="/signin" className="hover:text-ink transition-colors no-underline text-ink-2">
+            <a href="/signin" className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center">
               Sign In
             </a>
-            <a href="/auth/device" className="hover:text-ink transition-colors no-underline text-ink-2">
+            <a href="/auth/device" className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center">
               CLI Device Flow
             </a>
-            <a href="/llms.txt" className="hover:text-ink transition-colors no-underline text-ink-2">
+            <a href="/llms.txt" className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center">
               llms.txt
             </a>
-            <a href="/sitemap.xml" className="hover:text-ink transition-colors no-underline text-ink-2">
+            <a href="/sitemap.xml" className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center">
               Sitemap
             </a>
             <a
               href="https://github.com/TannedCung/MyArtifact"
               target="_blank"
-              rel="noreferrer"
-              className="hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center gap-1"
+              rel="noopener noreferrer"
+              className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center gap-1"
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="w-3.5 h-3.5" aria-hidden="true" />
               <span>GitHub</span>
             </a>
           </nav>

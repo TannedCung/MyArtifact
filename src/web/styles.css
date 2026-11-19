@@ -30,9 +30,9 @@
 :root {
   color-scheme: light;
   --c-canvas:#F7F4ED; --c-raised:#FCFBF7; --c-sunken:#EFEBE1; --c-line:#E2DDD0; --c-line-strong:#D3CDBD;
-  --c-ink:#1E2420; --c-ink-2:#4A524A; --c-ink-3:#656C62; --c-ink-4:#9A9F94;
-  --c-sage:#55684F; --c-sage-hover:#435340; --c-sage-soft:#E4EADF;
-  --c-brass-soft:#F8F1E3; --c-brass-line:#EADBB8; --c-brass-ink:#735C2B;
+  --c-ink:#1E2420; --c-ink-2:#4A524A; --c-ink-3:#535A50; --c-ink-4:#9A9F94;
+  --c-sage:#485A43; --c-sage-hover:#3A4936; --c-sage-soft:#E4EADF;
+  --c-brass-soft:#F8F1E3; --c-brass-line:#EADBB8; --c-brass-ink:#664F21;
   --c-add:#EEF2EA; --c-add-ink:#2F3B2C; --c-del:#F8ECE7; --c-del-ink:#6E2E20;
   --c-danger:#B4553F; --c-danger-soft:#F4E2DB; --c-danger-ink:#8A3A28;
 
@@ -40,70 +40,72 @@
   --c-sage-border:#C7D3C0;
   --c-live-dot:#6F8A69;
   --c-live-ink:#3D4F39;
-  --c-brass-icon:#8E733D;
+  --c-brass-icon:#7A612E;
   --c-banner-ink:#4E3E1C;
 
-  /* Agent colours (bg / fg / dot) */
-  --ag-claude-bg:#F8F1E3; --ag-claude-fg:#735C2B; --ag-claude-dot:#C8A96B;
-  --ag-codex-bg:#EEF2EA; --ag-codex-fg:#3D4F39; --ag-codex-dot:#8FA28A;
-  --ag-agy-bg:#E1E8EE; --ag-agy-fg:#3E5266; --ag-agy-dot:#7C93A8;
-  --ag-watcher-bg:#F4E7DF; --ag-watcher-fg:#7A4A35; --ag-watcher-dot:#B8876F;
-  --ag-user-bg:#EFEBE1; --ag-user-fg:#4A524A; --ag-user-dot:#9A9F94;
+  /* Agent colours (bg / fg / dot) — WCAG AA >= 5.5:1 */
+  --ag-claude-bg:#F8F1E3; --ag-claude-fg:#634E22; --ag-claude-dot:#C8A96B;
+  --ag-codex-bg:#EEF2EA; --ag-codex-fg:#334530; --ag-codex-dot:#8FA28A;
+  --ag-agy-bg:#E1E8EE; --ag-agy-fg:#334658; --ag-agy-dot:#7C93A8;
+  --ag-watcher-bg:#F4E7DF; --ag-watcher-fg:#693E2B; --ag-watcher-dot:#B8876F;
+  --ag-user-bg:#EFEBE1; --ag-user-fg:#434B43; --ag-user-dot:#9A9F94;
 }
 
 :root[data-theme="night"] {
   color-scheme: dark;
   --c-canvas:#151A16; --c-raised:#1D231E; --c-sunken:#262D27; --c-line:#2D352E; --c-line-strong:#3A443B;
-  --c-ink:#ECEAE3; --c-ink-2:#B5BCB0; --c-ink-3:#9AA196; --c-ink-4:#7D8579;
-  --c-sage:#8FA28A; --c-sage-hover:#A9BAA4; --c-sage-soft:#2A352B;
-  --c-brass-soft:#2E2A1E; --c-brass-line:#4A4128; --c-brass-ink:#D9BE86;
-  --c-add:#1F2A20; --c-add-ink:#C7D3C0; --c-del:#2E201C; --c-del-ink:#E7B3A5;
-  --c-danger:#D98068; --c-danger-soft:#3A2520; --c-danger-ink:#E79A86;
+  --c-ink:#ECEAE3; --c-ink-2:#B5BCB0; --c-ink-3:#A6ADA2; --c-ink-4:#858D81;
+  --c-sage:#98AC93; --c-sage-hover:#ADC0A8; --c-sage-soft:#2A352B;
+  --c-brass-soft:#2E2A1E; --c-brass-line:#4A4128; --c-brass-ink:#E0C68E;
+  --c-add:#1F2A20; --c-add-ink:#C7D3C0; --c-del:#2E201C; --c-del-ink:#EBBAB0;
+  --c-danger:#D98068; --c-danger-soft:#3A2520; --c-danger-ink:#EEA896;
 
   /* Supplemental Moss tokens for night */
   --c-sage-border:#3E4C3B;
   --c-live-dot:#8FA28A;
-  --c-live-ink:#A9C2A2;
-  --c-brass-icon:#C8A96B;
+  --c-live-ink:#B3CCB0;
+  --c-brass-icon:#D5B679;
   --c-banner-ink:#E6D3A8;
 
-  /* Agent colours (bg / fg / dot) */
-  --ag-claude-bg:#2E2A1E; --ag-claude-fg:#D9BE86; --ag-claude-dot:#C8A96B;
-  --ag-codex-bg:#1F2A20; --ag-codex-fg:#A9C2A2; --ag-codex-dot:#8FA28A;
-  --ag-agy-bg:#1F2830; --ag-agy-fg:#A9BDD0; --ag-agy-dot:#93A9BD;
-  --ag-watcher-bg:#33261F; --ag-watcher-fg:#DDB09A; --ag-watcher-dot:#C99A82;
-  --ag-user-bg:#262D27; --ag-user-fg:#B5BCB0; --ag-user-dot:#7D8579;
+  /* Agent colours (bg / fg / dot) — WCAG AA >= 5.5:1 */
+  --ag-claude-bg:#2E2A1E; --ag-claude-fg:#E2CA96; --ag-claude-dot:#C8A96B;
+  --ag-codex-bg:#1F2A20; --ag-codex-fg:#B5CEAE; --ag-codex-dot:#8FA28A;
+  --ag-agy-bg:#1F2830; --ag-agy-fg:#B2C5D8; --ag-agy-dot:#93A9BD;
+  --ag-watcher-bg:#33261F; --ag-watcher-fg:#E4B9A4; --ag-watcher-dot:#C99A82;
+  --ag-user-bg:#262D27; --ag-user-fg:#BCC3B8; --ag-user-dot:#858D81;
 }
 
-html {
-  scroll-behavior: smooth;
-}
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
 
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  transition: background-color 0.2s;
-}
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.2s;
+  }
 
-button,
-input,
-select,
-textarea {
-  font-family: inherit;
-  color: inherit;
-}
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+    color: inherit;
+  }
 
-button {
-  cursor: pointer;
-}
+  button {
+    cursor: pointer;
+  }
 
-button:disabled {
-  cursor: default;
+  button:disabled {
+    cursor: default;
+  }
 }
 
 .focus-moss:focus {

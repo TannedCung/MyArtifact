@@ -19,23 +19,25 @@ function readPngDimensions(filePath: string): { width: number; height: number } 
 }
 
 describe('Comprehensive SEO Landing Page & Crawler Assets', () => {
-  test('dist/public/index.html contains complete SEO meta tags, Open Graph, Twitter Card, noscript H1, and valid JSON-LD @graph', () => {
+  test('dist/public/index.html contains complete SEO meta tags, non-blocking fonts, Wave-1 pre-render H1, code-split entry, and valid JSON-LD @graph', () => {
     const publicDir = path.resolve(process.cwd(), 'dist/public');
     const htmlPath = path.join(publicDir, 'index.html');
     assert.ok(fs.existsSync(htmlPath), 'dist/public/index.html must exist (run npm run build first)');
 
     const html = fs.readFileSync(htmlPath, 'utf8');
     assert.ok(!html.includes('__SITE_ORIGIN__'), 'Vite plugin must replace __SITE_ORIGIN__ placeholder');
+    assert.ok(!html.includes('__GSC_VERIFICATION_META__'), 'Vite plugin must replace GSC verification placeholder');
     assert.match(html, /<title>MyArtifact — .*<\/title>/);
     assert.match(html, /<meta\s+name="description"\s+content="[^"]{80,}"/s);
     assert.match(html, /<link\s+rel="canonical"\s+href="https:\/\/myartifact\.app\/"/);
+    assert.match(html, /fonts\.googleapis\.com[\s\S]*media="print"/);
     assert.match(html, /<meta\s+property="og:type"\s+content="website"/);
     assert.match(html, /<meta\s+property="og:image"\s+content="https?:\/\/[^"]+\/og-image\.png"/);
     assert.match(html, /<meta\s+property="og:image:width"\s+content="1200"/);
     assert.match(html, /<meta\s+property="og:image:height"\s+content="630"/);
     assert.match(html, /<meta\s+name="twitter:card"\s+content="summary_large_image"/);
     assert.match(html, /<meta\s+name="twitter:image"\s+content="https?:\/\/[^"]+\/og-image\.png"/);
-    assert.match(html, /<noscript>[\s\S]*<h1>[\s\S]*<\/h1>[\s\S]*<\/noscript>/);
+    assert.match(html, /<div id="root">[\s\S]*<h1[^>]*>[\s\S]*<\/h1>[\s\S]*<\/div>/);
 
     const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
     assert.ok(jsonLdMatch, 'Structured data JSON-LD script must exist');
@@ -45,12 +47,27 @@ describe('Comprehensive SEO Landing Page & Crawler Assets', () => {
     };
     assert.equal(jsonLd['@context'], 'https://schema.org');
     const types = new Set(jsonLd['@graph'].map((n) => n['@type']));
+    assert.ok(types.has('Organization'));
     assert.ok(types.has('WebSite'));
+    assert.ok(types.has('BreadcrumbList'));
     assert.ok(types.has('SoftwareApplication'));
     assert.ok(types.has('FAQPage'));
 
+    const orgNode = jsonLd['@graph'].find((n) => n['@type'] === 'Organization');
+    const orgLogo = orgNode?.logo as { url?: string } | undefined;
+    assert.ok(orgLogo?.url?.endsWith('/apple-touch-icon.png'));
+
     const faqNode = jsonLd['@graph'].find((n) => n['@type'] === 'FAQPage');
     assert.ok(Array.isArray(faqNode?.mainEntity) && faqNode.mainEntity.length >= 6);
+
+    // Verify landing entry script chunk is code-split away from lazy Studio chunks (< 280 KB raw)
+    const entryScriptMatch = html.match(/<script type="module"[^>]+src="\/assets\/(index-[^"]+\.js)"/);
+    assert.ok(entryScriptMatch, 'Built index.html must reference Vite entry script chunk');
+    const entrySizeBytes = fs.statSync(path.join(publicDir, 'assets', entryScriptMatch[1])).size;
+    assert.ok(
+      entrySizeBytes < 280 * 1024,
+      `Expected code-split entry JS < 280 KB, got ${Math.round(entrySizeBytes / 1024)} KB`
+    );
   });
 
   test('dist/public PNG assets have valid headers and exact target dimensions', () => {

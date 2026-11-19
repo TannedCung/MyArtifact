@@ -52,6 +52,7 @@ import { CloudAuthGate } from './components/CloudAuthGate.js';
 import { SeoLandingPage } from './components/SeoLandingPage.js';
 import { WorkspaceBar } from './components/WorkspaceBar.js';
 import { BatchShareModal, type ShareModalTarget } from './components/BatchShareModal.js';
+import { syncDocumentSeo } from './seo-head.js';
 import { cloudFetch } from './cloud-api.js';
 import {
   MYARTIFACT_LOGO_SVG,
@@ -692,23 +693,47 @@ export default function App() {
       (authReady && isCloudMode && !authUser && !shareToken && pageMode !== 'artifact' && pageMode !== 'signin');
 
     if (isShowingLanding) {
-      document.title =
-        'MyArtifact — Visual Artifact Studio & MCP Server for Claude Code, Codex & Antigravity';
+      syncDocumentSeo({
+        title:
+          'MyArtifact — Visual Artifact Studio & MCP Server for Claude Code, Codex & Antigravity',
+        canonicalPath: '/',
+        noindex: false,
+      });
       link.type = 'image/svg+xml';
       link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
     } else if (pageMode === 'signin') {
-      document.title = 'Sign In — MyArtifact Cloud';
+      syncDocumentSeo({
+        title: 'Sign In — MyArtifact Cloud',
+        canonicalPath: '/',
+        noindex: true,
+      });
+      link.type = 'image/svg+xml';
+      link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
+    } else if (pageMode === 'cli_authorize' || pageMode === 'device_authorize') {
+      syncDocumentSeo({
+        title: 'Authorize CLI — MyArtifact Cloud',
+        canonicalPath: '/',
+        noindex: true,
+      });
       link.type = 'image/svg+xml';
       link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
     } else if (pageMode === 'artifact' && detail) {
-      document.title = detail.title;
+      syncDocumentSeo({
+        title: `${detail.title} — MyArtifact`,
+        canonicalPath: '/',
+        noindex: Boolean(shareToken || isCloudMode),
+      });
       const artSvg = resolveArtifactIconSvg(detail);
       link.type = 'image/svg+xml';
       link.href = svgToDataUri(artSvg);
     } else {
-      document.title = detail
-        ? `${detail.title} — MyArtifact Studio`
-        : 'MyArtifact — Local Cross-Assistant Artifact Studio';
+      syncDocumentSeo({
+        title: detail
+          ? `${detail.title} — MyArtifact Studio`
+          : 'MyArtifact — Local Cross-Assistant Artifact Studio',
+        canonicalPath: '/',
+        noindex: Boolean(shareToken || (typeof window !== 'undefined' && window.location.search.includes('view=studio'))),
+      });
       link.type = 'image/svg+xml';
       link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
     }
