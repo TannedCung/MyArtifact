@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   ArtifactStore,
   evaluateVisualOpportunity,
@@ -47,13 +48,32 @@ function requireCloudRepo(opts: {
   return { vault, repo };
 }
 
+function resolveCliVersion(): string {
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  for (const rel of ['../package.json', '../../package.json']) {
+    try {
+      const candidate = path.resolve(dir, rel);
+      const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8')) as {
+        name?: string;
+        version?: string;
+      };
+      if (parsed.name === 'myartifact' && typeof parsed.version === 'string') {
+        return parsed.version;
+      }
+    } catch {
+      // Try next candidate path
+    }
+  }
+  return '1.0.0';
+}
+
 program
   .name('myartifact')
   .enablePositionalOptions()
   .description(
     'Local-first & Cloud RBAC cross-assistant visual artifact studio & MCP server for Claude Code, Codex, and Antigravity'
   )
-  .version('1.1.0');
+  .version(resolveCliVersion());
 
 program
   .command('serve')
@@ -656,7 +676,11 @@ program
 program
   .command('setup')
   .description('Install MyArtifact skills (SKILL.md) and MCP config for Antigravity, Claude Code, and Codex')
-  .option('-t, --target <dir>', 'Workspace directory to configure', process.cwd())
+  .option(
+    '-t, --target <dir>',
+    'Project directory path to configure (default: current directory; use --global for ~/.claude, ~/.codex, ~/.gemini)',
+    process.cwd()
+  )
   .option('-g, --global', 'Also install into global ~/.gemini, ~/.claude, and ~/.codex skill directories')
   .action((opts) => {
     const result = installAgentIntegrations({
