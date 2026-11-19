@@ -339,11 +339,20 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(
     initialRoute.artifactSlug
   );
+  const selectedIdRef = useRef<string | null>(selectedId);
+  selectedIdRef.current = selectedId;
+  const detailReqSeqRef = useRef<number>(0);
   const [detail, setDetail] = useState<ArtifactDetail | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(
     initialRoute.version
   );
-  const [versionContent, setVersionContent] = useState<string>('');
+  const selectedVersionRef = useRef<number | null>(selectedVersion);
+  selectedVersionRef.current = selectedVersion;
+  const [versionContentState, setVersionContentState] = useState<{
+    artifactId: string;
+    version: number;
+    content: string;
+  } | null>(null);
   const [storageEntries, setStorageEntries] = useState<StorageEntry[]>([]);
   const [activeTab, setActiveTab] = useState<ActiveTab>(
     initialRoute.tab || 'preview'
@@ -423,6 +432,10 @@ export default function App() {
   );
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [shareToken] = useState<string | null>(initialRoute.shareToken);
+  const [shareLinkState, setShareLinkState] = useState<
+    'idle' | 'ok' | 'auth_required' | 'invalid'
+  >(initialRoute.shareToken ? 'idle' : 'ok');
+  const [shareLinkMessage, setShareLinkMessage] = useState<string | null>(null);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
   const [shareModalTarget, setShareModalTarget] = useState<ShareModalTarget | null>(null);
 
@@ -446,6 +459,7 @@ export default function App() {
         if (prov.mode !== 'cloud') {
           setIsCloudMode(false);
           setRealtimeWsEnabled(true);
+          setShareLinkState('ok');
           setAuthReady(true);
           return;
         }
@@ -457,7 +471,8 @@ export default function App() {
         const me = meRes.ok ? await meRes.json() : { authenticated: false };
         if (cancelled) return;
 
-        if (me.authenticated && me.user) {
+        const isAuthed = Boolean(me.authenticated && me.user);
+        if (isAuthed) {
           setAuthUser(me.user);
           setWorkspaces(me.workspaces || []);
           setCsrfToken(me.csrfToken || null);
@@ -466,15 +481,39 @@ export default function App() {
           );
         } else {
           setAuthUser(null);
-          if (shareToken) {
-            const shareRes = await fetch(`/api/share/${encodeURIComponent(shareToken)}`);
-            if (shareRes.ok) {
-              const bundle = await shareRes.json();
-              if (!cancelled && bundle.workspace?.id) {
-                setActiveWorkspaceId(bundle.workspace.id);
-              }
+        }
+
+        if (shareToken) {
+          const shareRes = await cloudFetch(
+            `/api/share/${encodeURIComponent(shareToken)}`,
+            {},
+            { shareToken }
+          );
+          if (cancelled) return;
+          if (shareRes.ok) {
+            const bundle = await shareRes.json();
+            if (cancelled) return;
+            setShareLinkState('ok');
+            setShareLinkMessage(null);
+            if (bundle.workspace?.id) {
+              setActiveWorkspaceId(bundle.workspace.id);
             }
+            if (!initialRoute.artifactSlug && bundle.artifacts?.[0]?.id) {
+              setSelectedId((prev) => prev || bundle.artifacts[0].id);
+            }
+          } else if (shareRes.status === 401 && !isAuthed) {
+            setShareLinkState('auth_required');
+            setShareLinkMessage('Sign in with Google to access this shared workspace or domain link.');
+          } else {
+            const errData = (await shareRes.json().catch(() => null)) as { error?: string } | null;
+            if (cancelled) return;
+            setShareLinkState('invalid');
+            setShareLinkMessage(
+              errData?.error || 'This share link is invalid, expired, or has been revoked.'
+            );
           }
+        } else {
+          setShareLinkState('ok');
         }
       } catch {
         // Fallback to local mode if providers check fails
@@ -485,7 +524,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [shareToken]);
+  }, [shareToken, initialRoute.artifactSlug]);
 
   const openWikiModal = useCallback(
     async (tab: 'index' | 'log' = 'index', projOverride?: string) => {
@@ -627,6 +666,7 @@ export default function App() {
   // Fetch artifacts list
   const fetchList = useCallback(async () => {
     if (!authReady) return;
+    if (shareToken && shareLinkState !== 'ok') return;
     if (isCloudMode && !authUser && !shareToken) return;
     const res = await apiFetch('/api/artifacts');
     if (!res.ok) return;
@@ -645,20 +685,35 @@ export default function App() {
         ) || list[0];
       setSelectedId(target.id);
     }
-  }, [authReady, isCloudMode, authUser, shareToken, apiFetch, selectedId, pageMode]);
+  }, [authReady, isCloudMode, authUser, shareToken, shareLinkState, apiFetch, selectedId, pageMode]);
 
   const fetchDetail = useCallback(
     async (id: string, preserveVersion = false) => {
       if (!authReady) return;
+      if (shareToken && shareLinkState !== 'ok') return;
       if (isCloudMode && !authUser && !shareToken) return;
+      const reqSeq = !preserveVersion ? ++detailReqSeqRef.current : detailReqSeqRef.current;
       const res = await apiFetch(`/api/artifacts/${encodeURIComponent(id)}`);
+      if (reqSeq !== detailReqSeqRef.current) return;
       if (!res.ok) {
-        setNotFoundSlug(id);
+        if (!preserveVersion) {
+          setNotFoundSlug(id);
+        }
         return;
       }
       setNotFoundSlug(null);
       const data = await res.json();
+      if (reqSeq !== detailReqSeqRef.current) return;
       const art: ArtifactDetail = data.artifact;
+      if (
+        preserveVersion &&
+        selectedIdRef.current &&
+        selectedIdRef.current !== id &&
+        selectedIdRef.current !== art.id &&
+        selectedIdRef.current !== art.slug
+      ) {
+        return;
+      }
       setDetail(art);
       setStorageEntries(data.storage || []);
       if (!preserveVersion) {
@@ -668,11 +723,24 @@ export default function App() {
             ? route.version
             : art.currentVersion;
         setSelectedVersion(targetVer);
-        setVersionContent(art.content);
+        if (targetVer === art.currentVersion) {
+          setVersionContentState({
+            artifactId: art.id,
+            version: targetVer,
+            content: art.content,
+          });
+          setDraftCode(art.content);
+        }
+      } else if ((selectedVersionRef.current ?? art.currentVersion) === art.currentVersion) {
+        setVersionContentState({
+          artifactId: art.id,
+          version: art.currentVersion,
+          content: art.content,
+        });
         setDraftCode(art.content);
       }
     },
-    [authReady, isCloudMode, authUser, shareToken, apiFetch]
+    [authReady, isCloudMode, authUser, shareToken, shareLinkState, apiFetch]
   );
 
   useEffect(() => {
@@ -692,7 +760,18 @@ export default function App() {
       pageMode === 'landing' ||
       (authReady && isCloudMode && !authUser && !shareToken && pageMode !== 'artifact' && pageMode !== 'signin');
 
-    if (isShowingLanding) {
+    if (shareLinkState === 'invalid' || shareLinkState === 'auth_required') {
+      syncDocumentSeo({
+        title:
+          shareLinkState === 'auth_required'
+            ? 'Sign In to View Shared Artifact — MyArtifact Cloud'
+            : 'Share Link Unavailable — MyArtifact Cloud',
+        canonicalPath: '/',
+        noindex: true,
+      });
+      link.type = 'image/svg+xml';
+      link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
+    } else if (isShowingLanding) {
       syncDocumentSeo({
         title:
           'MyArtifact — Visual Artifact Studio & MCP Server for Claude Code, Codex & Antigravity',
@@ -737,7 +816,7 @@ export default function App() {
       link.type = 'image/svg+xml';
       link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
     }
-  }, [detail, pageMode, authReady, isCloudMode, authUser, shareToken]);
+  }, [detail, pageMode, authReady, isCloudMode, authUser, shareToken, shareLinkState]);
 
   useEffect(() => {
     fetchList();
@@ -753,25 +832,38 @@ export default function App() {
   useEffect(() => {
     if (!detail || !selectedVersion) return;
     if (selectedVersion === detail.currentVersion) {
-      setVersionContent(detail.content);
+      setVersionContentState({
+        artifactId: detail.id,
+        version: detail.currentVersion,
+        content: detail.content,
+      });
       setDraftCode(detail.content);
       return;
     }
+    let cancelled = false;
     apiFetch(
       `/api/artifacts/${encodeURIComponent(detail.id)}/versions/${selectedVersion}`
     )
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (typeof data.content === 'string') {
-          setVersionContent(data.content);
-          setDraftCode(data.content);
-        }
-      });
+        if (cancelled || !data || typeof data.content !== 'string') return;
+        setVersionContentState({
+          artifactId: detail.id,
+          version: selectedVersion,
+          content: data.content,
+        });
+        setDraftCode(data.content);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [detail, selectedVersion, apiFetch]);
 
   // WebSocket live reload connection (only when enabled; skipped on serverless deployments)
   useEffect(() => {
     if (!authReady) return;
+    if (shareToken && shareLinkState !== 'ok') return;
     if (isCloudMode && !realtimeWsEnabled) return;
     if (isCloudMode && !authUser && !shareToken) return;
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -849,6 +941,22 @@ export default function App() {
   const isHistorical = Boolean(
     detail && viewVersion !== detail.currentVersion
   );
+  const versionContent = detail
+    ? versionContentState &&
+      versionContentState.artifactId === detail.id &&
+      versionContentState.version === viewVersion
+      ? versionContentState.content
+      : viewVersion === detail.currentVersion
+      ? detail.content
+      : ''
+    : '';
+  const isHistoricalLoading = Boolean(
+    detail &&
+      isHistorical &&
+      (!versionContentState ||
+        versionContentState.artifactId !== detail.id ||
+        versionContentState.version !== viewVersion)
+  );
   const isDirty = Boolean(
     detail && !isHistorical && draftCode !== versionContent
   );
@@ -864,6 +972,7 @@ export default function App() {
 
   useEffect(() => {
     if (!authReady || !isCloudMode || realtimeWsEnabled) return;
+    if (shareToken && shareLinkState !== 'ok') return;
     if (!authUser && !shareToken) return;
 
     let cancelled = false;
@@ -971,7 +1080,7 @@ export default function App() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [authReady, isCloudMode, realtimeWsEnabled, authUser, shareToken, activeWorkspaceId, apiFetch]);
+  }, [authReady, isCloudMode, realtimeWsEnabled, authUser, shareToken, shareLinkState, activeWorkspaceId, apiFetch]);
 
   const handleSaveIteration = useCallback(async () => {
     if (!detail || isHistorical || !isDirty || !canEdit) return;
@@ -1551,6 +1660,62 @@ export default function App() {
         googleEnabled={googleEnabled}
         onBackToLanding={navigateToLanding}
       />
+    );
+  }
+
+  if (shareToken && shareLinkState === 'auth_required') {
+    return (
+      <CloudAuthGate
+        mode="signin"
+        authenticated={false}
+        user={null}
+        workspaces={[]}
+        googleEnabled={googleEnabled}
+        onBackToLanding={navigateToLanding}
+      />
+    );
+  }
+
+  if (shareToken && shareLinkState === 'invalid') {
+    return (
+      <div className="min-h-screen bg-canvas text-ink flex items-center justify-center px-4 py-6 sm:p-6 overflow-x-hidden">
+        <div className="w-full max-w-[440px] min-w-0 rounded-[14px] border border-line bg-raised shadow-[0_12px_36px_rgba(30,36,32,0.10)] p-5 sm:p-7 flex flex-col gap-5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-[9px] border border-danger/30 bg-danger-soft text-danger-ink flex items-center justify-center shrink-0">
+              <CircleAlert className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-[16px] font-semibold tracking-tight text-ink">
+                Share link unavailable
+              </h1>
+              <p className="text-[12px] text-ink-3">
+                MyArtifact Cloud Shared Access
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-[10px] border border-line bg-sunken/70 p-4 text-[13px] text-ink-2 leading-relaxed">
+            {shareLinkMessage || 'This share link is invalid, expired, or has been revoked.'}
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            {googleEnabled && (
+              <a
+                href="/signin"
+                className="h-[40px] px-4 rounded-[9px] bg-sage hover:bg-sage-hover text-canvas font-medium text-[13.5px] flex items-center justify-center transition-colors no-underline"
+              >
+                Sign in with Google
+              </a>
+            )}
+            <a
+              href="/"
+              className="text-[12.5px] text-ink-3 hover:text-ink transition-colors text-center pt-1 no-underline"
+            >
+              ← Product Overview
+            </a>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -2494,7 +2659,7 @@ export default function App() {
                   <span className="w-[6px] h-[6px] rounded-full bg-[var(--c-live-dot)] shadow-[0_0_0_2px_var(--color-sage-soft)]" />
                   {isCloudMode ? 'Cloud · Live' : 'Live · :4173'}
                 </span>
-              ) : isCloudMode && !realtimeWsEnabled && (httpSynced || authUser || shareToken) ? (
+              ) : isCloudMode && !realtimeWsEnabled && (httpSynced || authUser) ? (
                 <span className="text-[11px] text-[var(--c-live-ink)] flex items-center gap-[5px] whitespace-nowrap">
                   <span className="w-[6px] h-[6px] rounded-full bg-[var(--c-live-dot)] shadow-[0_0_0_2px_var(--color-sage-soft)]" />
                   Cloud · Synced
@@ -3351,18 +3516,25 @@ export default function App() {
                       </span>
                     </div>
                     <div className="min-h-[520px] h-[calc(100vh-170px)]">
-                      <SandboxRenderer
-                        artifactId={detail.id}
-                        title={detail.title}
-                        type={detail.type}
-                        language={detail.language}
-                        content={versionContent}
-                        storageEntries={storageEntries}
-                        readOnlyStorage={!canEdit}
-                        workspaceId={activeWorkspaceId}
-                        shareToken={shareToken}
-                        onStorageMutated={() => fetchDetail(detail.id, true)}
-                      />
+                      {isHistoricalLoading ? (
+                        <div className="h-full w-full flex items-center justify-center text-[13px] text-ink-3 bg-canvas">
+                          Loading snapshot…
+                        </div>
+                      ) : (
+                        <SandboxRenderer
+                          key={`${detail.id}-${viewVersion}-${reloadNonce}`}
+                          artifactId={detail.id}
+                          title={detail.title}
+                          type={detail.type}
+                          language={detail.language}
+                          content={versionContent}
+                          storageEntries={storageEntries}
+                          readOnlyStorage={!canEdit}
+                          workspaceId={activeWorkspaceId}
+                          shareToken={shareToken}
+                          onStorageMutated={() => fetchDetail(detail.id, true)}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>

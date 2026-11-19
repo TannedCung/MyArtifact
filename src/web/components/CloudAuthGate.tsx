@@ -155,14 +155,14 @@ export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-canvas text-ink flex items-center justify-center p-6">
-      <div className="w-full max-w-[440px] rounded-[14px] border border-line bg-raised shadow-[0_12px_36px_rgba(30,36,32,0.10)] p-7 flex flex-col gap-5">
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-canvas text-ink flex items-center justify-center px-4 py-6 sm:p-6 overflow-x-hidden">
+      <div className="w-full max-w-[440px] min-w-0 rounded-[14px] border border-line bg-raised shadow-[0_12px_36px_rgba(30,36,32,0.10)] p-5 sm:p-7 flex flex-col gap-5">
+        <div className="flex items-center gap-3 min-w-0">
           <div
-            className="w-9 h-9 rounded-[9px] overflow-hidden border border-line shadow-xs [&>svg]:w-full [&>svg]:h-full"
+            className="w-9 h-9 rounded-[9px] overflow-hidden border border-line shadow-xs shrink-0 [&>svg]:w-full [&>svg]:h-full"
             dangerouslySetInnerHTML={{ __html: MYARTIFACT_LOGO_SVG }}
           />
-          <div>
+          <div className="min-w-0">
             <h1 className="text-[16px] font-semibold tracking-tight text-ink">
               MyArtifact Cloud
             </h1>
