@@ -65,6 +65,7 @@ describe('Comprehensive SEO Landing Page & Crawler Assets', () => {
     assert.match(html, /For Humans/);
     assert.match(html, /For Agents/);
     assert.match(html, /artifact_wiki_index\(\)/);
+    assert.match(html, /npm i -g github:TannedCung\/MyArtifact/);
     assert.match(html, /myartifact login --cloud https:\/\/myartifact\.app/);
     const quickstartMatch = html.match(/<section id="quickstart"[\s\S]*?<\/section>/);
     assert.ok(quickstartMatch, 'Built index.html must contain #quickstart section');

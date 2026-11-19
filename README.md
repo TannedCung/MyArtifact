@@ -109,19 +109,25 @@ const { keys } = await window.storage.list('note:');
 
 ### Option A: Connect to MyArtifact Cloud (Recommended — Zero Server Setup)
 
-1. Open [myartifact.app](https://myartifact.app/) and click **Continue with Google** (Google OIDC) to access your workspace, version diffs, cascading RBAC folders, and Batch Sharing.
-2. Link your local terminal & coding assistants to MyArtifact Cloud once (authorized under the **Safe Agent Scope Ceiling**; add `--device` for SSH/headless environments):
+> **CLI Note**: The CLI installs from GitHub (`github:<org>/MyArtifact`) or via `npm link` in a local clone (`npx myartifact` without prior install returns `npm E404` while unpublished on `npmjs.org`).
+
+1. Open your deployed Cloud studio (e.g., `https://example.com`) and click **Continue with Google** (Google OIDC) to access your workspace, version diffs, cascading RBAC folders, and Batch Sharing.
+2. Install the CLI globally once and link your terminal & coding assistants to Cloud (authorized under the **Safe Agent Scope Ceiling**; add `--device` for SSH/headless environments):
 
 ```bash
-npx myartifact login --cloud https://myartifact.app
+# Install from GitHub (or run `npm run build && npm link` inside a local clone)
+npm i -g github:<org>/MyArtifact
+
+# Authenticate once via Google OIDC
+myartifact login --cloud https://example.com
 ```
 
 3. Configure `.mcp.json` and `SKILL.md` for Claude Code, OpenAI Codex, and Google Antigravity, then verify your active Cloud profile:
 
 ```bash
-npx myartifact setup
-npx myartifact whoami
-npx myartifact workspace list
+myartifact setup
+myartifact whoami
+myartifact workspace list
 ```
 
 ### Option B: Self-Hosted / Offline Local Studio (Node.js)
@@ -130,9 +136,10 @@ npx myartifact workspace list
 # 1. Install dependencies & build CLI, MCP server, daemon, and Web Studio
 npm install
 npm run build
+npm link   # Exposes `myartifact` globally on PATH
 
 # 2. Configure workspace skills (SKILL.md) and MCP config (.mcp.json)
-node dist/cli/cli.js setup
+myartifact setup
 
 # 3. Start the local visual studio & watcher daemon (http://127.0.0.1:4173)
 npm start
@@ -153,21 +160,21 @@ docker compose logs -f
 
 ## For Agents
 
-Paste this bootstrap instruction into **Claude Code**, **OpenAI Codex**, or **Google Antigravity** (once logged in via `npx myartifact login --cloud https://myartifact.app` and configured with `npx myartifact setup`):
+Paste this bootstrap instruction into **Claude Code**, **OpenAI Codex**, or **Google Antigravity** (once logged in via `myartifact login --cloud https://example.com` and configured with `myartifact setup`):
 
 > **Agent Bootstrap Prompt**
 > ```text
-> Read https://myartifact.app/llms.txt to connect and publish to MyArtifact Cloud.
-> Check cloud auth with npx myartifact whoami (if not logged in, ask the human to run npx myartifact login --cloud https://myartifact.app && npx myartifact setup).
-> Always call artifact_wiki_index() first, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, iterate with artifact_update + [[wiki-links]], and return the live https://myartifact.app/artifacts/<slug> URL.
+> Read https://example.com/llms.txt to connect and publish to MyArtifact Cloud.
+> Check CLI & cloud auth with myartifact whoami (if myartifact is not installed yet, run npm i -g github:<org>/MyArtifact; if not logged in, ask the human to run myartifact login --cloud https://example.com && myartifact setup).
+> Always call artifact_wiki_index() first, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, iterate with artifact_update + [[wiki-links]], and return the live https://example.com/artifacts/<slug> URL.
 > ```
 
 ### Agent Operating Protocol
 
-1. **Verify Cloud Connection**: Confirm `npx myartifact whoami` shows `Profile: cloud` and the target workspace (do **not** run `myartifact serve` when targeting Cloud).
+1. **Verify Cloud Connection**: Confirm `myartifact whoami` shows `Profile: cloud` and the target workspace (do **not** run `myartifact serve` when targeting Cloud).
 2. **Orient first via the Cloud Wiki**: Call `artifact_wiki_index()` to read the workspace LLM Wiki (`index.md` & `log.md`) so new outputs land in the right `project` / `category` and avoid duplicating existing slugs.
 3. **Default to Visual-First Runtimes**: Choose `"react"` (Tailwind + Recharts / Lucide), `"html"` (self-contained ES modules / Three.js), `"mermaid"`, `"svg"`, or `tb_log_scalars` even if older entries in the project used markdown. Follow the Moss theme (`#F7F4ED` / `#151A16` canvas, `#485A43` / `#98AC93` sage accents).
-4. **Iterate, Cross-Link & Share Cloud URLs**: Use `artifact_update` (or `upsert: true`) rather than spawning duplicate slugs, link related artifacts with `[[other-slug]]`, persist UI state in `window.storage`, and return live `https://myartifact.app/artifacts/<slug>` links.
+4. **Iterate, Cross-Link & Share Cloud URLs**: Use `artifact_update` (or `upsert: true`) rather than spawning duplicate slugs, link related artifacts with `[[other-slug]]`, persist UI state in `window.storage`, and return live `https://example.com/artifacts/<slug>` links.
 5. **Respect the Safe Agent Scope Ceiling**: Standard `myartifact login` sessions authorize `artifacts:read`, `artifacts:write`, `storage:write`, and `tb:write`—while destructive deletes (`artifacts:delete`) and permission edits (`iam:share`) remain blocked unless explicitly run with `--elevate`.
 
 ### Assistant Auto-Configuration

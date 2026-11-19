@@ -175,14 +175,14 @@ export const DEMO_ARTIFACTS: DemoArtifact[] = [
 ];
 
 export const AGENT_BOOTSTRAP_PROMPT =
-  'Read https://myartifact.app/llms.txt to connect and publish to MyArtifact Cloud. Check cloud auth with npx myartifact whoami (if not logged in, ask the human to run npx myartifact login --cloud https://myartifact.app && npx myartifact setup). Always call artifact_wiki_index() first, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, iterate with artifact_update + [[wiki-links]], and return the live https://myartifact.app/artifacts/<slug> URL.';
+  'Read https://myartifact.app/llms.txt to connect and publish to MyArtifact Cloud. Check CLI & cloud auth with myartifact whoami (if myartifact is not installed yet, run npm i -g github:TannedCung/MyArtifact; if not logged in, ask the human to run myartifact login --cloud https://myartifact.app && myartifact setup). Always call artifact_wiki_index() first, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, iterate with artifact_update + [[wiki-links]], and return the live https://myartifact.app/artifacts/<slug> URL.';
 
 const COPY_PAYLOADS: Record<string, string> = {
-  'hero-cloud': 'npx myartifact login --cloud https://myartifact.app',
-  setup: 'npx myartifact setup',
-  'human-login': 'npx myartifact login --cloud https://myartifact.app',
-  'human-device': 'npx myartifact login --cloud https://myartifact.app --device',
-  'human-setup': 'npx myartifact setup',
+  'hero-cloud': 'npm i -g github:TannedCung/MyArtifact && myartifact login --cloud https://myartifact.app',
+  setup: 'npm i -g github:TannedCung/MyArtifact && myartifact setup',
+  'human-login': 'npm i -g github:TannedCung/MyArtifact && myartifact login --cloud https://myartifact.app',
+  'human-device': 'myartifact login --cloud https://myartifact.app --device',
+  'human-setup': 'myartifact setup',
   'agent-prompt': AGENT_BOOTSTRAP_PROMPT,
 };
 

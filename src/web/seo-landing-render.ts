@@ -54,7 +54,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Do I need to run a local server to use MyArtifact Cloud?',
-    a: 'No. MyArtifact Cloud hosts the studio, Postgres search, and R2 checkpoints for you—just run npx myartifact login and npx myartifact setup locally so MCP tools publish to Cloud. (100% offline SQLite mode is also available via myartifact serve.)',
+    a: 'No. MyArtifact Cloud hosts the studio, Postgres search, and R2 checkpoints for you—just install the CLI (npm i -g github:TannedCung/MyArtifact) and run myartifact login && myartifact setup so MCP tools publish to Cloud. (100% offline SQLite mode is also available via myartifact serve.)',
   },
   {
     q: 'How do local coding agents safely access Cloud workspaces?',
@@ -205,11 +205,11 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
   ).join('');
 
   const authCtaMeta = `${opts.isCloudMode ? '1' : '0'}:${opts.googleEnabled ? '1' : '0'}:${opts.authenticated ? '1' : '0'}`;
-  const heroCmdDisplay = opts.isCloudMode ? 'npx myartifact login' : 'npx myartifact setup';
+  const heroCmdDisplay = opts.isCloudMode ? 'myartifact login' : 'myartifact setup';
   const heroCopyKind = opts.isCloudMode ? 'hero-cloud' : 'setup';
   const heroCopyAria = opts.isCloudMode
-    ? 'Copy npx myartifact login cloud command'
-    : 'Copy npx myartifact setup command';
+    ? 'Copy myartifact cloud install and login command'
+    : 'Copy myartifact setup command';
 
   return `
     <div id="top" data-ma-landing="1" data-ma-auth="${authCtaMeta}" class="min-h-screen bg-canvas text-ink selection:bg-[#C7D3C0] selection:text-[#1E2420]">
@@ -346,10 +346,10 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
                     </li>
 
                     <li class="flex flex-col gap-1.5">
-                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">02.</span>Authenticate your terminal to Cloud</span>
-                      <span class="text-ink-2 leading-relaxed">Authorize once via Google OIDC PKCE (switches profile to <code class="font-mono text-[12px]">cloud</code> under the Safe Agent Scope Ceiling; add <code class="font-mono text-[12px]">--device</code> on SSH/containers):</span>
+                      <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">02.</span>Install CLI &amp; authenticate to Cloud</span>
+                      <span class="text-ink-2 leading-relaxed">Install from GitHub once and authorize via Google OIDC PKCE (switches profile to <code class="font-mono text-[12px]">cloud</code> under the Safe Agent Scope Ceiling; add <code class="font-mono text-[12px]">--device</code> on SSH):</span>
                       <div class="min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-line bg-canvas font-mono text-[12px] text-ink">
-                        <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">npx myartifact login --cloud https://myartifact.app</code>
+                        <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">npm i -g github:TannedCung/MyArtifact &amp;&amp; myartifact login --cloud https://myartifact.app</code>
                         <button type="button" data-ma-copy="human-login" aria-label="Copy cloud login command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-raised hover:bg-sunken text-[11px] text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors">
                           ${STAGE_SVG.copy('w-3 h-3')}<span>Copy</span>
                         </button>
@@ -360,8 +360,8 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
                       <span class="font-medium text-ink"><span class="font-mono text-sage mr-1.5">03.</span>Wire MCP &amp; skills into your project</span>
                       <span class="text-ink-2 leading-relaxed">Auto-configure <code class="font-mono text-[12px]">.mcp.json</code> and <code class="font-mono text-[12px]">SKILL.md</code> for Claude Code, OpenAI Codex, and Google Antigravity:</span>
                       <div class="min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-line bg-canvas font-mono text-[12px] text-ink">
-                        <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">npx myartifact setup</code>
-                        <button type="button" data-ma-copy="human-setup" aria-label="Copy npx myartifact setup command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-raised hover:bg-sunken text-[11px] text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors">
+                        <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">myartifact setup</code>
+                        <button type="button" data-ma-copy="human-setup" aria-label="Copy myartifact setup command" class="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-raised hover:bg-sunken text-[11px] text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors">
                           ${STAGE_SVG.copy('w-3 h-3')}<span>Copy</span>
                         </button>
                       </div>
@@ -402,8 +402,8 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
 
                   <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[12.5px]">
                     <div class="p-3 rounded-[9px] border border-line bg-canvas">
-                      <div class="font-mono text-[11px] text-sage font-medium">1 · Verify Cloud Session</div>
-                      <div class="text-ink-2 mt-1">Run <code class="font-mono text-[11.5px]">npx myartifact whoami</code> to confirm <code class="font-mono text-[11.5px]">profile: cloud</code> &amp; target workspace.</div>
+                      <div class="font-mono text-[11px] text-sage font-medium">1 · Verify CLI &amp; Session</div>
+                      <div class="text-ink-2 mt-1">Run <code class="font-mono text-[11.5px]">myartifact whoami</code> (or <code class="font-mono text-[11.5px]">npm i -g github:TannedCung/MyArtifact</code> first) to confirm <code class="font-mono text-[11.5px]">profile: cloud</code>.</div>
                     </div>
                     <div class="p-3 rounded-[9px] border border-line bg-canvas">
                       <div class="font-mono text-[11px] text-sage font-medium">2 · Orient via Cloud Wiki</div>
@@ -552,7 +552,7 @@ export function renderSeoLandingHtml(opts: SeoLandingRenderOptions): string {
         <section class="max-w-[920px] mx-auto px-5 sm:px-8 py-16">
           <div class="rounded-[16px] border border-[var(--c-sage-border)] bg-sage-soft/50 px-6 py-10 text-center flex flex-col items-center gap-4">
             <h2 class="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0">Start in 10 seconds.</h2>
-            <p class="text-[14.5px] text-ink-2 m-0 max-w-[520px]">Sign in with Google to open your Cloud workspace, then run <code class="font-mono text-[13px] px-1.5 py-0.5 rounded bg-raised border border-line">npx myartifact login &amp;&amp; npx myartifact setup</code> to connect your coding agents.</p>
+            <p class="text-[14.5px] text-ink-2 m-0 max-w-[540px]">Sign in with Google to open your Cloud workspace, then run <code class="font-mono text-[13px] px-1.5 py-0.5 rounded bg-raised border border-line">npm i -g github:TannedCung/MyArtifact</code>, <code class="font-mono text-[13px] px-1.5 py-0.5 rounded bg-raised border border-line">myartifact login</code>, and <code class="font-mono text-[13px] px-1.5 py-0.5 rounded bg-raised border border-line">myartifact setup</code> to connect your coding agents.</p>
             <div class="mt-2 flex flex-wrap items-center justify-center gap-3">${renderPrimaryCtaHtml(opts, true)}</div>
           </div>
         </section>

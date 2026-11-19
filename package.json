@@ -44,6 +44,7 @@
     "build:web": "vite build",
     "build:server": "tsup src/cli/cli.ts src/mcp/mcp-server.ts src/index.ts --format esm --target node22 --out-dir dist --external pg --clean",
     "build": "npm run build:server && npm run build:web",
+    "prepare": "node --input-type=module -e \"import fs from 'node:fs'; import cp from 'node:child_process'; if (fs.existsSync('src/cli/cli.ts') && fs.existsSync('node_modules/.bin/tsup')) { cp.execSync('npm run build', { stdio: 'inherit' }); fs.chmodSync('dist/cli/cli.js', 0o755); }\"",
     "start": "node dist/cli/cli.js serve",
     "mcp": "node dist/cli/cli.js mcp",
     "test": "tsx --test tests/*.test.ts"

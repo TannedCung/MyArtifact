@@ -38,7 +38,7 @@ function assertSafeCliPath(cliPath: string): string {
   return cliPath;
 }
 
-export function buildUniversalSkillMarkdown(cliCommand = 'npx myartifact'): string {
+export function buildUniversalSkillMarkdown(cliCommand = 'myartifact'): string {
   if (/[\x00-\x1f\x7f`]|\$\(/.test(cliCommand)) {
     throw new Error('CLI command contains unsafe shell or control characters');
   }
