@@ -109,14 +109,12 @@ const { keys } = await window.storage.list('note:');
 
 ### Option A: Connect to MyArtifact Cloud (Recommended — Zero Server Setup)
 
-> **CLI Note**: The CLI installs from GitHub (`github:<org>/MyArtifact`) or via `npm link` in a local clone (`npx myartifact` without prior install returns `npm E404` while unpublished on `npmjs.org`).
-
 1. Open your deployed Cloud studio (e.g., `https://example.com`) and click **Continue with Google** (Google OIDC) to access your workspace, version diffs, cascading RBAC folders, and Batch Sharing.
-2. Install the CLI globally once and link your terminal & coding assistants to Cloud (authorized under the **Safe Agent Scope Ceiling**; add `--device` for SSH/headless environments):
+2. Install the `myartifact` CLI globally once (requires Node.js >= 22.5) and link your terminal & coding assistants to Cloud (authorized under the **Safe Agent Scope Ceiling**; add `--device` for SSH/headless environments):
 
 ```bash
-# Install from GitHub (or run `npm run build && npm link` inside a local clone)
-npm i -g github:<org>/MyArtifact
+# Install the MyArtifact CLI globally (or run `npm run build && npm link` inside a local clone)
+npm i -g myartifact
 
 # Authenticate once via Google OIDC
 myartifact login --cloud https://example.com
@@ -165,7 +163,7 @@ Paste this bootstrap instruction into **Claude Code**, **OpenAI Codex**, or **Go
 > **Agent Bootstrap Prompt**
 > ```text
 > Read https://example.com/llms.txt to connect and publish to MyArtifact Cloud.
-> Check CLI & cloud auth with myartifact whoami (if myartifact is not installed yet, run npm i -g github:<org>/MyArtifact; if not logged in, ask the human to run myartifact login --cloud https://example.com && myartifact setup).
+> Check CLI & cloud auth with myartifact whoami (if myartifact is not installed yet, run npm i -g myartifact; if not logged in, ask the human to run myartifact login --cloud https://example.com && myartifact setup).
 > Always call artifact_wiki_index() first, prefer interactive react/html/threejs/mermaid/tensorboard artifacts over plain markdown, iterate with artifact_update + [[wiki-links]], and return the live https://example.com/artifacts/<slug> URL.
 > ```
 

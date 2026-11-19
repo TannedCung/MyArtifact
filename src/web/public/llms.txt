@@ -8,11 +8,9 @@ MyArtifact brings interactive Web Artifacts (sandboxed React 19, Three.js / R3F,
 
 ## Connect to MyArtifact Cloud (Default)
 
-> **CLI Installation Note**: `myartifact` is currently distributed from GitHub rather than `registry.npmjs.org` (`npx myartifact` will return `npm E404` if not yet installed locally). Install globally once via `npm i -g github:TannedCung/MyArtifact` (or `npm i -g github:TannedCung/MyArtifact#dev` for staging, or `npm link` inside a cloned repository), then run `myartifact` directly.
-
 ```bash
-# 0. Install the CLI globally from GitHub if `command -v myartifact` is missing
-npm i -g github:TannedCung/MyArtifact
+# 0. Install the MyArtifact CLI globally (Node.js >= 22.5)
+npm i -g myartifact
 
 # 1. Check whether CLI & MCP are already linked to Cloud ("profile: cloud")
 myartifact whoami
