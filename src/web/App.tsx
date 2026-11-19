@@ -49,6 +49,7 @@ import {
 import { SandboxRenderer } from './components/SandboxRenderer.js';
 import { DiffViewer } from './components/DiffViewer.js';
 import { CloudAuthGate } from './components/CloudAuthGate.js';
+import { SeoLandingPage } from './components/SeoLandingPage.js';
 import { WorkspaceBar } from './components/WorkspaceBar.js';
 import { BatchShareModal, type ShareModalTarget } from './components/BatchShareModal.js';
 import { cloudFetch } from './cloud-api.js';
@@ -75,7 +76,13 @@ import type {
 type ActiveTab = 'preview' | 'code' | 'diff' | 'storage';
 type ViewportSize = 'desktop' | 'tablet' | 'mobile';
 type StudioTheme = 'day' | 'night';
-type PageMode = 'artifact' | 'studio' | 'cli_authorize' | 'device_authorize';
+type PageMode =
+  | 'artifact'
+  | 'studio'
+  | 'landing'
+  | 'signin'
+  | 'cli_authorize'
+  | 'device_authorize';
 
 function parseRouteFromLocation(): {
   mode: PageMode;
@@ -121,6 +128,31 @@ function parseRouteFromLocation(): {
   if (pathname === '/auth/device') {
     return {
       mode: 'device_authorize',
+      artifactSlug: null,
+      version: null,
+      tab: null,
+      shareToken: null,
+      workspaceParam,
+    };
+  }
+  if (pathname === '/signin' || params.get('signin') === '1') {
+    return {
+      mode: 'signin',
+      artifactSlug: null,
+      version: null,
+      tab: null,
+      shareToken: null,
+      workspaceParam,
+    };
+  }
+  if (
+    pathname === '/welcome' ||
+    pathname === '/about' ||
+    pathname === '/features' ||
+    params.get('view') === 'welcome'
+  ) {
+    return {
+      mode: 'landing',
       artifactSlug: null,
       version: null,
       tab: null,
@@ -557,6 +589,22 @@ export default function App() {
     setNotFoundSlug(null);
   }, []);
 
+  const navigateToLanding = useCallback(() => {
+    window.history.pushState({}, '', '/welcome');
+    setPageMode('landing');
+    setZenMode(false);
+    setVerOpen(false);
+    setMenuOpen(false);
+  }, []);
+
+  const navigateToSignIn = useCallback(() => {
+    window.history.pushState({}, '', '/signin');
+    setPageMode('signin');
+    setZenMode(false);
+    setVerOpen(false);
+    setMenuOpen(false);
+  }, []);
+
   useEffect(() => {
     const onPopState = () => {
       const route = parseRouteFromLocation();
@@ -639,7 +687,20 @@ export default function App() {
       document.head.appendChild(link);
     }
 
-    if (pageMode === 'artifact' && detail) {
+    const isShowingLanding =
+      pageMode === 'landing' ||
+      (authReady && isCloudMode && !authUser && !shareToken && pageMode !== 'artifact' && pageMode !== 'signin');
+
+    if (isShowingLanding) {
+      document.title =
+        'MyArtifact — Visual Artifact Studio & MCP Server for Claude Code, Codex & Antigravity';
+      link.type = 'image/svg+xml';
+      link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
+    } else if (pageMode === 'signin') {
+      document.title = 'Sign In — MyArtifact Cloud';
+      link.type = 'image/svg+xml';
+      link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
+    } else if (pageMode === 'artifact' && detail) {
       document.title = detail.title;
       const artSvg = resolveArtifactIconSvg(detail);
       link.type = 'image/svg+xml';
@@ -651,7 +712,7 @@ export default function App() {
       link.type = 'image/svg+xml';
       link.href = svgToDataUri(MYARTIFACT_LOGO_SVG);
     }
-  }, [detail, pageMode]);
+  }, [detail, pageMode, authReady, isCloudMode, authUser, shareToken]);
 
   useEffect(() => {
     fetchList();
@@ -1255,6 +1316,16 @@ export default function App() {
           handleExportHtml();
         },
       },
+      {
+        key: 'act-overview',
+        label: 'Product Overview & Docs',
+        meta: '/welcome',
+        Icon: ExternalLink,
+        run: () => {
+          setPaletteOpen(false);
+          navigateToLanding();
+        },
+      },
     ].filter((act) => !q || act.label.toLowerCase().includes(q));
 
     const matchedActions = rawActions.map((act, idx) => ({
@@ -1271,6 +1342,7 @@ export default function App() {
     openCreateModal,
     toggleTheme,
     handleExportHtml,
+    navigateToLanding,
   ]);
 
   const safePaletteIndex = Math.min(
@@ -1408,6 +1480,21 @@ export default function App() {
     });
   }, []);
 
+  if (pageMode === 'landing') {
+    return (
+      <SeoLandingPage
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        isCloudMode={isCloudMode}
+        googleEnabled={googleEnabled}
+        authenticated={Boolean(authUser)}
+        userEmail={authUser?.email || null}
+        onOpenStudio={() => navigateToStudio(selectedId)}
+        onOpenSignIn={navigateToSignIn}
+      />
+    );
+  }
+
   if (!authReady) {
     return (
       <div className="h-screen w-screen bg-canvas text-ink-2 flex items-center justify-center text-[13px]">
@@ -1429,14 +1516,42 @@ export default function App() {
     );
   }
 
-  if (isCloudMode && !authUser && !shareToken) {
+  if (pageMode === 'signin') {
     return (
       <CloudAuthGate
         mode="signin"
-        authenticated={false}
-        user={null}
-        workspaces={[]}
+        authenticated={Boolean(authUser)}
+        user={authUser}
+        workspaces={workspaces}
         googleEnabled={googleEnabled}
+        onBackToLanding={navigateToLanding}
+      />
+    );
+  }
+
+  if (isCloudMode && !authUser && !shareToken) {
+    if (pageMode === 'artifact') {
+      return (
+        <CloudAuthGate
+          mode="signin"
+          authenticated={false}
+          user={null}
+          workspaces={[]}
+          googleEnabled={googleEnabled}
+          onBackToLanding={navigateToLanding}
+        />
+      );
+    }
+    return (
+      <SeoLandingPage
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        isCloudMode={isCloudMode}
+        googleEnabled={googleEnabled}
+        authenticated={false}
+        userEmail={null}
+        onOpenStudio={() => navigateToSignIn()}
+        onOpenSignIn={navigateToSignIn}
       />
     );
   }

@@ -1,0 +1,62 @@
+# MyArtifact
+
+> Open-source, local-first & serverless cloud visual artifact studio and Model Context Protocol (MCP) server for **Claude Code**, **OpenAI Codex**, and **Google Antigravity**.
+
+## Overview
+
+MyArtifact brings interactive Web Artifacts (sandboxed React 19, Three.js / R3F, Mermaid, HTML, Markdown/KaTeX, SVG, and live TensorBoard runs) to terminal and IDE coding agents. It runs 100% locally on Node.js + SQLite (`~/.myartifact`) or in stateless cloud mode (Vercel + Neon Postgres + Cloudflare R2 / S3) with Google OIDC, cascading RBAC (`Workspace -> Project -> Category -> Artifact`), batch sharing, and delegated agent identities.
+
+## Quickstart CLI Commands
+
+```bash
+# Auto-wire MCP config & skills for Claude Code, Codex, and Antigravity
+npx myartifact setup
+
+# Launch local visual studio & API server on http://127.0.0.1:4173
+myartifact serve
+
+# Sign in once with Google so local CLI & agents share your cloud identity
+myartifact login --cloud https://myartifact.app
+
+# Push local files, read artifacts, or export LLM Wiki index
+myartifact push ./dashboard.tsx --slug eval-dashboard --project research
+myartifact get eval-dashboard
+myartifact index --project research
+```
+
+## Supported Artifact Runtimes
+
+- `react`: Sandboxed React 19 TSX/JSX with preloaded Tailwind v4, Recharts, Lucide React, Three.js (+ OrbitControls, EffectComposer), @react-three/fiber, and @react-three/drei.
+- `html`: Isolated sandboxed HTML/CSS/JS widgets and mini-apps with persistent `window.storage`.
+- `mermaid`: Mermaid v11 flowcharts, sequence diagrams, ERDs, class diagrams, and state machines.
+- `svg`: Custom diagrams, clean hardware schematics, and bespoke icon artboards.
+- `markdown`: Rich typography reports rendered with Marked and KaTeX math (`$...$` / `$$...$$`).
+- `tensorboard`: Native TensorFlow `.tfevents` scalar curve dashboards plus model checkpoint lineage (`.safetensors` / `.pt`).
+- `code`: Syntax-ready source files and config snippets with unified diff inspection.
+
+## MCP Tools (10 Tools via `myartifact mcp`)
+
+- `artifact_create` — Create or upsert a visual artifact with semantic project/category taxonomy (`project/category`).
+- `artifact_update` — Iterate an artifact into an immutable version checkpoint (`v2`, `v3`, ...) with agent attribution.
+- `artifact_get` — Fetch latest or historical version content, links, and `window.storage` entries.
+- `artifact_list` — Search artifacts via FTS5/PostgreSQL FTS or filter by project, category, tag, or agent.
+- `artifact_wiki_index` — Retrieve the synthesized Karpathy-pattern LLM Wiki `index.md`, `log.md`, and backlink graph.
+- `artifact_storage_get` — Inspect persistent `window.storage` key/value state for interactive artifacts.
+- `artifact_storage_set` — Persist stateful configuration or UI state into `window.storage`.
+- `tensorboard_log_scalars` — Log training scalar series directly to a live visual TensorBoard run.
+- `tensorboard_save_checkpoint` — Upload/register model weight checkpoints (direct SigV4 presigned transfer on cloud).
+- `tensorboard_get_runs` — Inspect tracked TensorBoard runs, best metrics, and checkpoint artifacts.
+
+## Cloud Auth, RBAC & Safe Agent Scope Ceiling
+
+- **Google OIDC + PKCE**: Browser auth sets `__Host-ma_session` HTTP-only cookies + CSRF double-submit protection; CLI login uses PKCE loopback (`127.0.0.1`) or RFC 8628 device flow with refresh-token replay detection.
+- **Cascading RBAC**: Hierarchical roles (`viewer = 10`, `editor = 20`, `admin = 30`, `owner = 40`) evaluate `Workspace -> Project -> Category -> Artifact`, supporting private projects (`inheritWorkspaceAcl = false`).
+- **Batch Sharing**: Apply grants across multiple artifacts/projects/categories × users, deferred `pending_email` invites (auto-claimed on verified Google login), workspace groups, verified Google `hd` workspace domains, and capability Share Links.
+- **Safe Agent Scope Ceiling**: Standard `myartifact login` issues delegated sessions (`artifacts:read`, `artifacts:write`, `storage:write`, `tb:write`) and blocks `artifacts:delete`, `iam:share`, and `workspace:admin` (`403 agent_scope_restricted`) unless explicitly elevated (`--elevate`).
+
+## Links
+
+- Homepage: https://myartifact.app/
+- Web App Manifest: https://myartifact.app/manifest.webmanifest
+- Sitemap: https://myartifact.app/sitemap.xml
+- GitHub: https://github.com/TannedCung/MyArtifact

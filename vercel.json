@@ -12,6 +12,6 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api?__ma_path=/api/$1" },
     { "source": "/favicon.svg", "destination": "/api?__ma_path=/favicon.svg" },
-    { "source": "/((?!assets/|api/|favicon\\.svg).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|api/|favicon\\.svg|robots\\.txt|sitemap\\.xml|llms\\.txt|manifest\\.webmanifest|og-image\\.png|apple-touch-icon\\.png).*)", "destination": "/index.html" }
   ]
 }

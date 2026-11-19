@@ -2,6 +2,7 @@
 
 @theme {
   --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-serif: "IBM Plex Serif", Georgia, serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --color-canvas: var(--c-canvas);        /* app background, sidebar */
@@ -74,10 +75,14 @@
   --ag-user-bg:#262D27; --ag-user-fg:#B5BCB0; --ag-user-dot:#7D8579;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 html,
 body {
   margin: 0;
-  height: 100%;
+  min-height: 100%;
   background-color: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);

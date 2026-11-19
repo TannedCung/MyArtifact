@@ -1,0 +1,21 @@
+{
+  "name": "MyArtifact Studio",
+  "short_name": "MyArtifact",
+  "description": "Local-first & serverless cloud visual artifact studio and MCP server for Claude Code, OpenAI Codex, and Google Antigravity.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F4ED",
+  "theme_color": "#55684F",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

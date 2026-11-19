@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /welcome
+Allow: /llms.txt
+Allow: /sitemap.xml
+Disallow: /api/
+Disallow: /auth/
+
+Sitemap: https://myartifact.app/sitemap.xml

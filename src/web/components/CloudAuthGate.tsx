@@ -27,6 +27,7 @@ export interface CloudAuthGateProps {
   csrfToken?: string | null;
   googleEnabled?: boolean;
   onApproved?: () => void;
+  onBackToLanding?: () => void;
 }
 
 export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
@@ -37,6 +38,7 @@ export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
   csrfToken,
   googleEnabled = true,
   onApproved,
+  onBackToLanding,
 }) => {
   const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const redirectUri = params.get('redirect_uri') || '';
@@ -70,10 +72,12 @@ export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
       });
       return `/api/auth/google/login?${qs.toString()}`;
     }
+    const rawPath = typeof window !== 'undefined' ? window.location.pathname : '/';
+    const rawSearch = typeof window !== 'undefined' ? window.location.search : '';
     const next =
-      typeof window !== 'undefined'
-        ? `${window.location.pathname}${window.location.search}`
-        : '/';
+      rawPath === '/signin' || rawPath === '/welcome' || rawPath === '/about' || rawPath === '/features'
+        ? '/'
+        : `${rawPath}${rawSearch}`;
     return `/api/auth/google/login?next=${encodeURIComponent(next)}`;
   };
 
@@ -196,6 +200,40 @@ export const CloudAuthGate: React.FC<CloudAuthGateProps> = ({
                 Google OIDC client credentials are not configured on this server.
               </div>
             )}
+
+            {mode === 'signin' && (
+              onBackToLanding ? (
+                <button
+                  type="button"
+                  onClick={onBackToLanding}
+                  className="text-[12.5px] text-ink-3 hover:text-ink transition-colors text-center pt-1"
+                >
+                  ← Back to Product Overview
+                </button>
+              ) : (
+                <a
+                  href="/welcome"
+                  className="text-[12.5px] text-ink-3 hover:text-ink transition-colors text-center pt-1 no-underline"
+                >
+                  ← Product Overview
+                </a>
+              )
+            )}
+          </div>
+        ) : mode === 'signin' ? (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 text-[12.5px] text-ink-2 bg-sunken px-3 py-2 rounded-[8px] border border-line">
+              <Check className="w-4 h-4 text-sage shrink-0" />
+              <span className="truncate">
+                Signed in as <strong className="text-ink">{user?.email}</strong>
+              </span>
+            </div>
+            <a
+              href="/?view=studio"
+              className="h-[40px] rounded-[9px] bg-sage hover:bg-sage-hover text-canvas font-medium text-[13.5px] flex items-center justify-center transition-colors no-underline"
+            >
+              Open MyArtifact Studio →
+            </a>
           </div>
         ) : mode === 'cli_authorize' ? (
           <div className="flex flex-col gap-4">
