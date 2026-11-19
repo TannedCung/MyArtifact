@@ -1,13 +1,12 @@
-import React, { Suspense, useCallback, useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { SeoLandingPage } from './components/SeoLandingPage.js';
 import { MYARTIFACT_LOGO_SVG } from '../core/brand-logo.js';
 import { syncDocumentSeo } from './seo-head.js';
+import {
+  bindSeoLandingEvents,
+  syncSeoLandingTheme,
+} from './seo-landing-dom.js';
 import './styles.css';
 
 declare const __DEFAULT_CLOUD_MODE__: boolean;
-
-const LazyStudioApp = React.lazy(() => import('./App.js'));
 
 const DEFAULT_SEO_TITLE =
   'MyArtifact — Visual Artifact Studio & MCP Server for Claude Code, Codex & Antigravity';
@@ -15,6 +14,7 @@ const DEFAULT_SEO_DESC =
   'Open-source local-first and cloud visual artifact studio & MCP server for Claude Code, OpenAI Codex, and Google Antigravity. Render sandboxed React, Three.js, Mermaid, HTML, SVG & TensorBoard runs with immutable version history, diffs, and cascading RBAC.';
 
 type StudioTheme = 'day' | 'night';
+type RouteKind = 'landing' | 'studio' | 'not_found';
 
 function readInitialTheme(): StudioTheme {
   try {
@@ -32,7 +32,16 @@ function readInitialTheme(): StudioTheme {
   return 'day';
 }
 
-function classifyRoute(pathname: string, search: string): 'landing' | 'studio' | 'not_found' {
+function applyTheme(theme: StudioTheme): void {
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem('ma-studio-theme', theme);
+  } catch {
+    // Ignore storage access errors
+  }
+}
+
+function classifyRoute(pathname: string, search: string): RouteKind {
   const params = new URLSearchParams(search);
   const view = params.get('view');
 
@@ -75,73 +84,76 @@ function classifyRoute(pathname: string, search: string): 'landing' | 'studio' |
   return 'not_found';
 }
 
-const NotFoundPage: React.FC<{ onGoHome: () => void }> = ({ onGoHome }) => (
-  <main className="min-h-screen bg-canvas text-ink flex items-center justify-center p-6">
-    <div className="max-w-[460px] w-full rounded-[14px] border border-line bg-raised p-7 text-center flex flex-col items-center gap-4 shadow-[0_12px_36px_rgba(30,36,32,0.08)]">
-      <div
-        className="w-10 h-10 rounded-[9px] overflow-hidden border border-line [&>svg]:w-full [&>svg]:h-full"
-        dangerouslySetInnerHTML={{ __html: MYARTIFACT_LOGO_SVG }}
-      />
-      <div className="font-mono text-[11.5px] uppercase tracking-[0.08em] text-ink-3">
-        HTTP 404 · Route Not Found
+function renderNotFoundHtml(): string {
+  return `
+    <main class="min-h-screen bg-canvas text-ink flex items-center justify-center p-6">
+      <div class="max-w-[460px] w-full rounded-[14px] border border-line bg-raised p-7 text-center flex flex-col items-center gap-4 shadow-[0_12px_36px_rgba(30,36,32,0.08)]">
+        <div class="w-10 h-10 rounded-[9px] overflow-hidden border border-line [&>svg]:w-full [&>svg]:h-full">${MYARTIFACT_LOGO_SVG}</div>
+        <div class="font-mono text-[11.5px] uppercase tracking-[0.08em] text-ink-3">HTTP 404 · Route Not Found</div>
+        <h1 class="font-serif text-[26px] font-semibold text-ink m-0">404 — Page not found</h1>
+        <p class="text-[14px] text-ink-2 m-0 leading-relaxed">
+          This path does not match a studio view, artifact slug, or share link on MyArtifact.
+        </p>
+        <a href="/" data-ma-go-home class="h-[40px] px-5 rounded-[8px] bg-sage hover:bg-sage-hover text-canvas text-[13.5px] font-medium inline-flex items-center justify-center no-underline transition-colors">
+          ← Back to MyArtifact Home
+        </a>
       </div>
-      <h1 className="font-serif text-[26px] font-semibold text-ink m-0">
-        404 — Page not found
-      </h1>
-      <p className="text-[14px] text-ink-2 m-0 leading-relaxed">
-        This path does not match a studio view, artifact slug, or share link on MyArtifact.
-      </p>
-      <a
-        href="/"
-        onClick={(e) => {
-          e.preventDefault();
-          onGoHome();
-        }}
-        className="h-[40px] px-5 rounded-[8px] bg-sage hover:bg-sage-hover text-canvas text-[13.5px] font-medium inline-flex items-center justify-center no-underline transition-colors"
-      >
-        ← Back to MyArtifact Home
-      </a>
-    </div>
-  </main>
-);
+    </main>`;
+}
 
-const RootShell: React.FC = () => {
-  const [locState, setLocState] = useState(() =>
-    typeof window !== 'undefined'
-      ? { pathname: window.location.pathname, search: window.location.search }
-      : { pathname: '/', search: '' }
-  );
-  const [theme, setTheme] = useState<StudioTheme>(readInitialTheme);
+function bootstrapRootShell(): void {
+  const container = document.getElementById('root');
+  if (!container) return;
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try {
-      localStorage.setItem('ma-studio-theme', theme);
-    } catch {
-      // Ignore storage errors
+  let currentTheme: StudioTheme = readInitialTheme();
+  applyTheme(currentTheme);
+
+  let cleanupView: (() => void) | null = null;
+  let routeSeq = 0;
+  let studioModulePromise: Promise<typeof import('./studio-entry.js')> | null = null;
+
+  const loadStudioModule = () => {
+    if (!studioModulePromise) {
+      studioModulePromise = import('./studio-entry.js');
     }
-  }, [theme]);
+    return studioModulePromise;
+  };
 
-  useEffect(() => {
-    const syncLoc = () => {
-      setLocState({ pathname: window.location.pathname, search: window.location.search });
-    };
-    window.addEventListener('popstate', syncLoc);
-    return () => window.removeEventListener('popstate', syncLoc);
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'night' ? 'day' : 'night'));
-  }, []);
-
-  const navigateTo = useCallback((url: string) => {
+  const navigateTo = (url: string) => {
     window.history.pushState({}, '', url);
-    setLocState({ pathname: window.location.pathname, search: window.location.search });
-  }, []);
+    renderRoute();
+  };
 
-  const routeKind = classifyRoute(locState.pathname, locState.search);
+  const renderRoute = () => {
+    const seq = ++routeSeq;
+    const routeKind = classifyRoute(window.location.pathname, window.location.search);
 
-  useEffect(() => {
+    if (cleanupView) {
+      cleanupView();
+      cleanupView = null;
+    }
+
+    if (routeKind === 'not_found') {
+      syncDocumentSeo({
+        title: '404 — Page Not Found | MyArtifact',
+        canonicalPath: '/',
+        noindex: true,
+      });
+      if (studioModulePromise) {
+        delete container.dataset.maStudioReady;
+        void studioModulePromise.then((m) => m.unmountStudioApp());
+      }
+      container.innerHTML = renderNotFoundHtml();
+      const homeLink = container.querySelector<HTMLAnchorElement>('[data-ma-go-home]');
+      const onGoHome = (e: MouseEvent) => {
+        e.preventDefault();
+        navigateTo('/');
+      };
+      homeLink?.addEventListener('click', onGoHome);
+      cleanupView = () => homeLink?.removeEventListener('click', onGoHome);
+      return;
+    }
+
     if (routeKind === 'landing') {
       syncDocumentSeo({
         title: DEFAULT_SEO_TITLE,
@@ -149,54 +161,66 @@ const RootShell: React.FC = () => {
         canonicalPath: '/',
         noindex: false,
       });
-    } else if (routeKind === 'not_found') {
-      syncDocumentSeo({
-        title: '404 — Page Not Found | MyArtifact',
-        canonicalPath: '/',
-        noindex: true,
-      });
-    }
-  }, [routeKind]);
-
-  if (routeKind === 'not_found') {
-    return <NotFoundPage onGoHome={() => navigateTo('/')} />;
-  }
-
-  if (routeKind === 'landing') {
-    const hasCsrfCookie =
-      typeof document !== 'undefined' && document.cookie.includes('ma_csrf=');
-    return (
-      <SeoLandingPage
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        isCloudMode={__DEFAULT_CLOUD_MODE__}
-        googleEnabled={true}
-        authenticated={Boolean(__DEFAULT_CLOUD_MODE__ && hasCsrfCookie)}
-        userEmail={null}
-        onOpenStudio={() => navigateTo('/?view=studio')}
-        onOpenSignIn={() => navigateTo('/signin')}
-      />
-    );
-  }
-
-  return (
-    <Suspense
-      fallback={
-        <div className="h-screen w-screen bg-canvas text-ink-2 flex items-center justify-center text-[13px]">
-          Initializing MyArtifact Studio…
-        </div>
+      if (studioModulePromise) {
+        delete container.dataset.maStudioReady;
+        void studioModulePromise.then((m) => m.unmountStudioApp());
       }
-    >
-      <LazyStudioApp />
-    </Suspense>
-  );
-};
 
-const container = document.getElementById('root');
-if (container) {
-  createRoot(container).render(
-    <React.StrictMode>
-      <RootShell />
-    </React.StrictMode>
-  );
+      const isCloudMode = Boolean(__DEFAULT_CLOUD_MODE__);
+      const googleEnabled = true;
+      const hasCsrfCookie =
+        typeof document !== 'undefined' && document.cookie.includes('ma_csrf=');
+      const authenticated = Boolean(isCloudMode && hasCsrfCookie);
+      const expectedAuthMeta = `${isCloudMode ? '1' : '0'}:${googleEnabled ? '1' : '0'}:${authenticated ? '1' : '0'}`;
+
+      const attachLandingEvents = () => {
+        cleanupView = bindSeoLandingEvents(container, {
+          onToggleTheme: () => {
+            currentTheme = currentTheme === 'night' ? 'day' : 'night';
+            applyTheme(currentTheme);
+            syncSeoLandingTheme(container, currentTheme);
+          },
+          onOpenStudio: () => navigateTo('/?view=studio'),
+          onOpenSignIn: () => navigateTo('/signin'),
+        });
+      };
+
+      const preRendered = container.querySelector<HTMLElement>('[data-ma-landing="1"]');
+      if (preRendered && preRendered.dataset.maAuth === expectedAuthMeta) {
+        syncSeoLandingTheme(container, currentTheme);
+        attachLandingEvents();
+        return;
+      }
+
+      void import('./seo-landing-render.js').then(({ renderSeoLandingHtml }) => {
+        if (seq !== routeSeq) return;
+        container.innerHTML = renderSeoLandingHtml({
+          theme: currentTheme,
+          isCloudMode,
+          googleEnabled,
+          authenticated,
+          userEmail: null,
+        });
+        attachLandingEvents();
+      });
+      return;
+    }
+
+    // Studio route: lazy-load React & Studio bundle
+    if (!container.dataset.maStudioReady) {
+      container.innerHTML =
+        '<div class="h-screen w-screen bg-canvas text-ink-2 flex items-center justify-center text-[13px]">Initializing MyArtifact Studio…</div>';
+    }
+
+    void loadStudioModule().then((mod) => {
+      if (seq !== routeSeq) return;
+      container.dataset.maStudioReady = '1';
+      mod.mountStudioApp(container);
+    });
+  };
+
+  window.addEventListener('popstate', renderRoute);
+  renderRoute();
 }
+
+bootstrapRootShell();

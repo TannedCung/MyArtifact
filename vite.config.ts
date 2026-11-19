@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
+import { renderSeoLandingHtml } from './src/web/seo-landing-render.js';
 
 function escapeHtmlAttr(val: string): string {
   return val
@@ -28,16 +29,82 @@ function seoSiteOriginPlugin(): Plugin {
       const gscMetaTag = gscToken
         ? `<meta name="google-site-verification" content="${escapeHtmlAttr(gscToken)}" />`
         : '';
+      const isCloudMode = Boolean(
+        process.env.VERCEL || process.env.MYARTIFACT_MODE === 'cloud'
+      );
+      const preRenderedLanding = renderSeoLandingHtml({
+        theme: 'day',
+        isCloudMode,
+        googleEnabled: true,
+        authenticated: false,
+        userEmail: null,
+      });
 
       return html
         .replaceAll('__SITE_ORIGIN__', siteOrigin)
-        .replace('<!-- __GSC_VERIFICATION_META__ -->', gscMetaTag);
+        .replace('<!-- __GSC_VERIFICATION_META__ -->', gscMetaTag)
+        .replace('<!-- __PRE_RENDERED_LANDING__ -->', () => preRenderedLanding);
+    },
+  };
+}
+
+function optimizeLandingHtmlPlugin(): Plugin {
+  return {
+    name: 'myartifact-optimize-landing-html',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      const htmlAsset = bundle['index.html'];
+      if (!htmlAsset || htmlAsset.type !== 'asset') return;
+
+      let html =
+        typeof htmlAsset.source === 'string'
+          ? htmlAsset.source
+          : Buffer.from(htmlAsset.source).toString('utf8');
+
+      const inlinedCssBlocks: string[] = [];
+
+      html = html.replace(/<link\b[^>]*>\s*/gi, (tag) => {
+        if (/\brel=["']stylesheet["']/i.test(tag)) {
+          const hrefMatch = tag.match(/\bhref=["'](\/assets\/[^"']+\.css)["']/i);
+          if (hrefMatch) {
+            const bundleKey = hrefMatch[1].replace(/^\//, '');
+            const cssAsset = bundle[bundleKey];
+            if (cssAsset && cssAsset.type === 'asset') {
+              const cssText =
+                typeof cssAsset.source === 'string'
+                  ? cssAsset.source
+                  : Buffer.from(cssAsset.source).toString('utf8');
+              inlinedCssBlocks.push(cssText);
+              return '';
+            }
+          }
+        }
+
+        if (/\brel=["']modulepreload["']/i.test(tag)) {
+          const hrefMatch = tag.match(/\bhref=["'](\/assets\/[^"']+\.js)["']/i);
+          if (
+            hrefMatch &&
+            /\/assets\/(?:vendor-|studio-|App-)/.test(hrefMatch[1])
+          ) {
+            return '';
+          }
+        }
+
+        return tag;
+      });
+
+      if (inlinedCssBlocks.length > 0) {
+        const styleTag = `<style>${inlinedCssBlocks.join('\n')}</style>\n  </head>`;
+        html = html.replace('</head>', () => styleTag);
+      }
+
+      htmlAsset.source = html;
     },
   };
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), seoSiteOriginPlugin()],
+  plugins: [react(), tailwindcss(), seoSiteOriginPlugin(), optimizeLandingHtmlPlugin()],
   root: path.resolve(__dirname, 'src/web'),
   define: {
     __DEFAULT_CLOUD_MODE__: JSON.stringify(

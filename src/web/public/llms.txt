@@ -34,18 +34,23 @@ myartifact index --project research
 - `tensorboard`: Native TensorFlow `.tfevents` scalar curve dashboards plus model checkpoint lineage (`.safetensors` / `.pt`).
 - `code`: Syntax-ready source files and config snippets with unified diff inspection.
 
-## MCP Tools (10 Tools via `myartifact mcp`)
+## Agent Operating Protocol
 
-- `artifact_create` — Create or upsert a visual artifact with semantic project/category taxonomy (`project/category`).
-- `artifact_update` — Iterate an artifact into an immutable version checkpoint (`v2`, `v3`, ...) with agent attribution.
+1. **Orient first via the LLM Wiki**: Always call `artifact_wiki_index()` before creating a new artifact to inspect `~/.myartifact/index.md` projects, categories, and backlinks.
+2. **Default to Visual-First Runtimes**: Choose interactive `react`, `html`, `threejs`, `mermaid`, `svg`, or `tb_log_scalars` over plain markdown whenever charts, UI workflows, 3D scenes, or diagrams explain faster. Use the Moss theme (`#F7F4ED` / `#151A16` canvas, `#485A43` / `#98AC93` sage accents).
+3. **Iterate & Cross-Link**: Use `artifact_update` (or `upsert: true`) rather than creating duplicate slugs, cross-link related artifacts with `[[other-slug]]`, and persist editable UI state via `window.storage` / `artifact_storage_set`.
+4. **Respect the Safe Agent Scope Ceiling**: Standard `myartifact login` sessions authorize `artifacts:read`, `artifacts:write`, `storage:write`, and `tb:write` while blocking destructive deletes (`artifacts:delete`) and permission changes (`iam:share`).
+
+## MCP Tools (8 Tools via `myartifact mcp`)
+
+- `artifact_wiki_index` — Retrieve the synthesized Karpathy-pattern LLM Wiki `index.md`, `log.md`, and backlink graph.
+- `artifact_create` — Create or upsert a visual artifact with semantic project/category taxonomy (`project`, `category`).
+- `artifact_update` — Iterate an artifact into an immutable version checkpoint (`v2`, `v3`, ...) with agent attribution and unified diffs.
 - `artifact_get` — Fetch latest or historical version content, links, and `window.storage` entries.
 - `artifact_list` — Search artifacts via FTS5/PostgreSQL FTS or filter by project, category, tag, or agent.
-- `artifact_wiki_index` — Retrieve the synthesized Karpathy-pattern LLM Wiki `index.md`, `log.md`, and backlink graph.
-- `artifact_storage_get` — Inspect persistent `window.storage` key/value state for interactive artifacts.
 - `artifact_storage_set` — Persist stateful configuration or UI state into `window.storage`.
-- `tensorboard_log_scalars` — Log training scalar series directly to a live visual TensorBoard run.
-- `tensorboard_save_checkpoint` — Upload/register model weight checkpoints (direct SigV4 presigned transfer on cloud).
-- `tensorboard_get_runs` — Inspect tracked TensorBoard runs, best metrics, and checkpoint artifacts.
+- `tb_log_scalars` — Log training scalar series directly to a live visual TensorBoard run (`.tfevents`).
+- `tb_save_checkpoint` — Version model weight checkpoints under a TensorBoard run (direct S3/R2 SigV4 transfer on cloud).
 
 ## Cloud Auth, RBAC & Safe Agent Scope Ceiling
 

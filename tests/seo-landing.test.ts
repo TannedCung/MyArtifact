@@ -60,13 +60,34 @@ describe('Comprehensive SEO Landing Page & Crawler Assets', () => {
     const faqNode = jsonLd['@graph'].find((n) => n['@type'] === 'FAQPage');
     assert.ok(Array.isArray(faqNode?.mainEntity) && faqNode.mainEntity.length >= 5);
 
-    // Verify landing entry script chunk is code-split away from lazy Studio chunks (< 280 KB raw)
+    // Verify pre-rendered Humans & Agents onboarding sections exist inside Wave-1 HTML
+    assert.match(html, /id="quickstart"/);
+    assert.match(html, /For Humans/);
+    assert.match(html, /For Agents/);
+    assert.match(html, /artifact_wiki_index\(\)/);
+
+    // Verify local CSS is inlined cleanly with zero render-blocking local <link rel="stylesheet">
+    assert.doesNotMatch(
+      html,
+      /<link\b[^>]*rel=["']stylesheet["'][^>]*href=["']\/assets\/[^"']+\.css["']/i,
+      'Local stylesheet must be inlined into <head>, not linked as render-blocking CSS'
+    );
+    assert.match(html, /<style>[\s\S]*--c-canvas[\s\S]*<\/style>/, 'Inlined Moss theme CSS must appear in <head>');
+
+    // Verify landing entry does not preload React or Studio chunks
+    assert.doesNotMatch(
+      html,
+      /<link\b[^>]*rel=["']modulepreload["'][^>]*href=["']\/assets\/(?:vendor-|studio-|App-)[^"']+["']/i,
+      'Landing index.html must not preload React or heavy Studio chunks'
+    );
+
+    // Verify landing entry script chunk is zero-React & ultra-compact (< 40 KB raw)
     const entryScriptMatch = html.match(/<script type="module"[^>]+src="\/assets\/(index-[^"]+\.js)"/);
     assert.ok(entryScriptMatch, 'Built index.html must reference Vite entry script chunk');
     const entrySizeBytes = fs.statSync(path.join(publicDir, 'assets', entryScriptMatch[1])).size;
     assert.ok(
-      entrySizeBytes < 280 * 1024,
-      `Expected code-split entry JS < 280 KB, got ${Math.round(entrySizeBytes / 1024)} KB`
+      entrySizeBytes < 40 * 1024,
+      `Expected zero-React landing entry JS < 40 KB, got ${Math.round(entrySizeBytes / 1024)} KB`
     );
   });
 

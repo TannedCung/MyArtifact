@@ -94,7 +94,7 @@ const { keys } = await window.storage.list('note:');
 - Inspect, add, edit, or delete keys live from the **State** tab in the Web UI.
 
 ### 4. Triple Integration Bridge (MCP + CLI + Dropzone Watcher)
-- **MCP Server (`myartifact mcp`)**: Native Model Context Protocol server over `stdio` exposing 5 tools (`artifact_create`, `artifact_update`, `artifact_get`, `artifact_list`, `artifact_storage_set`).
+- **MCP Server (`myartifact mcp`)**: Native Model Context Protocol server over `stdio` exposing 8 tools (`artifact_wiki_index`, `artifact_create`, `artifact_update`, `artifact_get`, `artifact_list`, `artifact_storage_set`, `tb_log_scalars`, `tb_save_checkpoint`).
 - **CLI (`myartifact push`, `list`, `get`)**: Lightweight shell commands that any agent or script can invoke.
 - **Dropzone File Watcher**: Drop or edit any file in `~/.myartifact/dropzone/` (or custom `--watch` directories) to auto-create and version artifacts with instant WebSocket hot-reload.
 
@@ -103,43 +103,66 @@ const { keys } = await window.storage.list('note:');
 
 ---
 
-## Quick Start
+## For Humans
 
-> **Prerequisite**: Node.js **>= 22.5.0** (uses Node's native `node:sqlite` module with zero native C++ compilation required) or **Docker**.
+> **Prerequisite**: Node.js **>= 22.5.0** (uses Node's native `node:sqlite` module with zero native C++ compilation required) or **Docker** for self-hosted local studio, or any browser for MyArtifact Cloud.
 
-### Option A: Docker Compose (Recommended for Always-On Local Daemon)
+### Option A: Cloud Workspace (Browser + Optional CLI Link)
+
+1. Open [myartifact.app](https://myartifact.app/) and click **Continue with Google** (Google OIDC) to access your workspace, version diffs, cascading RBAC folders, and Batch Sharing.
+2. Link your local terminal & coding assistants to the cloud workspace once (authorized under the **Safe Agent Scope Ceiling**):
+
+```bash
+myartifact login
+```
+
+### Option B: Direct Node.js Local Studio (100% Offline)
+
+```bash
+# 1. Install dependencies & build CLI, MCP server, daemon, and Web Studio
+npm install
+npm run build
+
+# 2. Configure workspace skills (SKILL.md) and MCP config (.mcp.json)
+node dist/cli/cli.js setup
+
+# 3. Start the local visual studio & watcher daemon (http://127.0.0.1:4173)
+npm start
+```
+
+### Option C: Docker Compose (Always-On Local Daemon)
 
 ```bash
 # Build and start the background container (persists data to ~/.myartifact)
 docker compose up -d --build
 
 # Open the studio at http://127.0.0.1:4173
-# Check container health & logs
 docker compose ps
 docker compose logs -f
 ```
 
-### Option B: Direct Node.js Build & Run
-
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Build the CLI, MCP server, backend daemon, and React Web UI
-npm run build
-
-# 3. Install workspace skills (SKILL.md) and MCP config (.mcp.json)
-node dist/cli/cli.js setup
-
-# 4. Start the local visual studio & watcher daemon (http://127.0.0.1:4173)
-npm start
-```
-
 ---
 
-## Assistant Integration Guide
+## For Agents
 
-Run `setup` to automatically generate skill instructions and MCP configuration for **Antigravity**, **Claude Code**, and **Codex**:
+Paste this bootstrap instruction into **Claude Code**, **OpenAI Codex**, or **Google Antigravity** (or run `npx myartifact setup` so they auto-discover `.agents/skills/myartifact/SKILL.md` and `.mcp.json`):
+
+> **Agent Bootstrap Prompt**
+> ```text
+> Read https://myartifact.app/llms.txt (or .agents/skills/myartifact/SKILL.md).
+> Always call artifact_wiki_index() first to inspect existing projects, categories, and backlinks.
+> Choose interactive visual runtimes ("react", "html", "threejs", "mermaid", "svg", or tb_log_scalars) over plain markdown whenever charts, UI workflows, 3D scenes, or diagrams explain faster.
+> Iterate in place with artifact_update, add [[wiki-links]] in descriptions, and stay within the Safe Agent Scope Ceiling (no destructive deletes or ACL share mutations without --elevate).
+> ```
+
+### Agent Operating Protocol
+
+1. **Orient first via the LLM Wiki**: Call `artifact_wiki_index()` to read `~/.myartifact/index.md` and `log.md` so new outputs land in the right `project` / `category` and avoid duplicating existing slugs.
+2. **Default to Visual-First Runtimes**: Choose `"react"` (Tailwind + Recharts / Lucide), `"html"` (self-contained ES modules / Three.js), `"mermaid"`, `"svg"`, or `tb_log_scalars` even if older entries in the project used markdown. Follow the Moss theme (`#F7F4ED` / `#151A16` canvas, `#485A43` / `#98AC93` sage accents).
+3. **Iterate & Cross-Link**: Use `artifact_update` (or `upsert: true`) rather than spawning duplicate slugs, link related artifacts with `[[other-slug]]`, and store user-editable UI state in `window.storage` (via `artifact_storage_set` or in-sandbox hooks).
+4. **Respect the Safe Agent Scope Ceiling**: When connected to Cloud via `myartifact login`, agents inherit `artifacts:read`, `artifacts:write`, `storage:write`, and `tb:write`—while destructive deletes (`artifacts:delete`) and permission edits (`iam:share`) remain blocked unless explicitly run with `--elevate`.
+
+### Assistant Auto-Configuration
 
 ```bash
 # Configure current project workspace (.agents/skills, .claude/skills, .mcp.json)
@@ -172,15 +195,18 @@ node dist/cli/cli.js setup --global
 
 ## MCP Tools Reference
 
-When mounted as an MCP server, **MyArtifact** provides the following tools to your coding assistant:
+When mounted as an MCP server (`myartifact mcp`), **MyArtifact** exposes 8 tools to your coding assistant:
 
 | Tool Name | Description | Key Arguments |
 | :--- | :--- | :--- |
-| `artifact_create` | Create a new artifact (or upsert a new version by `slug`). | `title`*, `content`*, `slug`, `type`, `agent`, `project`, `tags`, `upsert` |
-| `artifact_update` | Update an existing artifact by ID or slug and record `vN+1`. | `id`*, `content`*, `title`, `summary`, `agent` |
+| `artifact_wiki_index` | Read the LLM Wiki master catalog (`index.md`) and operation log (`log.md`). | `project`, `includeLog` |
+| `artifact_create` | Create a new artifact (or upsert `vN+1` by `slug`). | `title`*, `content`*, `slug`, `type`, `agent`, `project`, `category`, `tags`, `upsert` |
+| `artifact_update` | Update an existing artifact by ID or slug and record `vN+1`. | `id`*, `content`*, `title`, `summary`, `agent`, `category` |
 | `artifact_get` | Fetch artifact source code, version history, and `window.storage`. | `id`*, `version`, `includeStorage` |
-| `artifact_list` | Full-text search (FTS5) and filter artifacts across assistants. | `query`, `agent`, `type`, `project`, `limit` |
+| `artifact_list` | Full-text search (FTS5) and filter artifacts across assistants. | `query`, `agent`, `type`, `project`, `category`, `limit` |
 | `artifact_storage_set` | Seed or update a key-value entry in `window.storage`. | `id`*, `key`*, `value`* |
+| `tb_log_scalars` | Stream TensorBoard scalar metrics & write `.tfevents` records. | `run`*, `metrics`*, `step`, `epoch`, `hparams`, `modelName`, `framework`, `status` |
+| `tb_save_checkpoint` | Version a trained checkpoint (`.safetensors`, `.pt`, `.onnx`) under a run. | `run`*, `name`, `step`, `sourceFilePath`, `metrics`, `isBest`, `summary` |
 
 ---
 
