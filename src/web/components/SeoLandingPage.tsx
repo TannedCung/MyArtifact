@@ -3,10 +3,9 @@ import {
   Activity,
   ArrowRight,
   Atom,
-  BookOpen,
+  Box,
   Check,
   ChevronDown,
-  CodeXml,
   Copy,
   Database,
   ExternalLink,
@@ -15,13 +14,10 @@ import {
   History,
   Lock,
   Moon,
-  PenTool,
-  Share2,
   ShieldCheck,
   Sparkles,
   Sun,
   Terminal,
-  Users,
   Workflow,
 } from 'lucide-react';
 import { MYARTIFACT_LOGO_SVG } from '../../core/brand-logo.js';
@@ -37,22 +33,20 @@ export interface SeoLandingPageProps {
   onOpenSignIn: () => void;
 }
 
-type ShowcaseTab = 'preview' | 'code' | 'diff' | 'storage';
+type ShowcaseTab = 'preview' | 'diff' | 'code' | 'state';
 
 interface DemoArtifact {
   id: string;
   slug: string;
   title: string;
-  type: 'react' | 'mermaid' | 'tensorboard' | 'svg';
+  runtimeLabel: string;
+  type: 'react' | 'threejs' | 'mermaid' | 'tensorboard';
   projectPath: string;
   version: number;
-  agent: 'claude-code' | 'codex' | 'antigravity' | 'watcher';
   agentLabel: string;
   agentBg: string;
   agentFg: string;
   agentDot: string;
-  updatedAgo: string;
-  summary: string;
   code: string[];
   diff: Array<{ kind: 'ctx' | 'del' | 'add'; lineOld: string; lineNew: string; text: string }>;
   storage: Array<{ key: string; value: string; scope: string }>;
@@ -60,183 +54,210 @@ interface DemoArtifact {
 
 const DEMO_ARTIFACTS: DemoArtifact[] = [
   {
-    id: 'demo-eval',
+    id: 'demo-react',
     slug: 'rl-locomotion-bench',
-    title: 'RL Locomotion Eval Suite',
+    title: 'RL Policy Benchmark',
+    runtimeLabel: 'React',
     type: 'react',
-    projectPath: 'robotics / benchmarks',
+    projectPath: 'robotics',
     version: 3,
-    agent: 'claude-code',
     agentLabel: 'Claude Code',
     agentBg: 'var(--ag-claude-bg)',
     agentFg: 'var(--ag-claude-fg)',
     agentDot: 'var(--ag-claude-dot)',
-    updatedAgo: '4m ago',
-    summary: 'v3 · Added Recharts confidence interval & window.storage preset filter',
     code: [
-      'import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";',
-      'import { useEffect, useState } from "react";',
+      'import { ResponsiveContainer, BarChart, Bar } from "recharts";',
       '',
-      'export default function LocomotionBench() {',
-      '  const [metric, setMetric] = useState("reward");',
-      '  useEffect(() => {',
-      '    window.storage?.get("bench:metric").then((r) => r?.value && setMetric(r.value));',
-      '  }, []);',
+      'export default function PolicyBenchmark() {',
+      '  const [metric, setMetric] = useState("grpo");',
       '  return (',
-      '    <section className="p-5 bg-canvas text-ink rounded-xl border border-line">',
-      '      <header className="flex justify-between items-center mb-4">',
-      '        <h2 className="font-semibold">GRPO vs PPO Policy Return</h2>',
-      '        <button onClick={() => window.storage?.set("bench:metric", metric)}>Persist</button>',
-      '      </header>',
-      '      <ResponsiveContainer width="100%" height={220}>...',
+      '    <Card title="Locomotion Policy Return">',
+      '      <MetricToggle value={metric} onChange={persistKV} />',
+      '      <ResponsiveContainer width="100%" height={200}>',
+      '        <BarChart data={SERIES[metric]} />',
+      '      </ResponsiveContainer>',
+      '    </Card>',
+      '  );',
+      '}',
     ],
     diff: [
-      { kind: 'ctx', lineOld: '11', lineNew: '11', text: '<header className="flex justify-between items-center mb-4">' },
-      { kind: 'del', lineOld: '12', lineNew: '', text: '  <h2 className="font-semibold">Policy Reward Snapshot</h2>' },
-      { kind: 'add', lineOld: '', lineNew: '12', text: '  <h2 className="font-semibold">GRPO vs PPO Policy Return</h2>' },
-      { kind: 'add', lineOld: '', lineNew: '13', text: '  <button onClick={() => window.storage?.set("bench:metric", metric)}>Persist</button>' },
-      { kind: 'ctx', lineOld: '13', lineNew: '14', text: '</header>' },
-      { kind: 'add', lineOld: '', lineNew: '15', text: '<ConfidenceBand lower={0.79} upper={0.91} />' },
+      { kind: 'ctx', lineOld: '3', lineNew: '3', text: 'export default function PolicyBenchmark() {' },
+      { kind: 'del', lineOld: '4', lineNew: '', text: '  const [metric, setMetric] = useState("ppo");' },
+      { kind: 'add', lineOld: '', lineNew: '4', text: '  const [metric, setMetric] = useState("grpo");' },
+      { kind: 'add', lineOld: '', lineNew: '5', text: '  window.storage?.set("bench:metric", metric);' },
+      { kind: 'ctx', lineOld: '6', lineNew: '7', text: '  return <Card title="Locomotion Policy Return" />;' },
     ],
     storage: [
-      { key: 'bench:metric', value: '"reward"', scope: 'workspace' },
+      { key: 'bench:metric', value: '"grpo"', scope: 'workspace' },
       { key: 'selected_env', value: '"Humanoid-v4"', scope: 'workspace' },
-      { key: 'baseline_tag', value: '"ppo-clip-0.2"', scope: 'workspace' },
+      { key: 'viewer_filter', value: '"last_7d"', scope: 'viewer CoW' },
     ],
   },
   {
-    id: 'demo-rbac',
-    slug: 'cascading-rbac-topology',
-    title: 'Cascading RBAC & Share Links',
-    type: 'mermaid',
-    projectPath: 'platform / iam',
+    id: 'demo-threejs',
+    slug: 'kinematic-rig-viewport',
+    title: '3D Kinematic Viewport',
+    runtimeLabel: 'Three.js',
+    type: 'threejs',
+    projectPath: 'simulation',
     version: 2,
-    agent: 'codex',
+    agentLabel: 'Antigravity',
+    agentBg: 'var(--ag-agy-bg)',
+    agentFg: 'var(--ag-agy-fg)',
+    agentDot: 'var(--ag-agy-dot)',
+    code: [
+      'import * as THREE from "three";',
+      'import { Canvas } from "@react-three/fiber";',
+      'import { OrbitControls } from "@react-three/drei";',
+      '',
+      'export default function KinematicViewport() {',
+      '  return (',
+      '    <Canvas camera={{ position: [3.2, 2.4, 3.6], fov: 42 }}>',
+      '      <OrbitControls enableDamping />',
+      '      <IsometricLatticeRig />',
+      '    </Canvas>',
+      '  );',
+      '}',
+    ],
+    diff: [
+      { kind: 'ctx', lineOld: '7', lineNew: '7', text: '<Canvas camera={{ position: [3.2, 2.4, 3.6] }}>' },
+      { kind: 'del', lineOld: '8', lineNew: '', text: '  <meshStandardMaterial wireframe />' },
+      { kind: 'add', lineOld: '', lineNew: '8', text: '  <OrbitControls enableDamping />' },
+      { kind: 'add', lineOld: '', lineNew: '9', text: '  <IsometricLatticeRig />' },
+    ],
+    storage: [
+      { key: 'camera_fov', value: '42', scope: 'workspace' },
+      { key: 'orbit_damping', value: 'true', scope: 'workspace' },
+    ],
+  },
+  {
+    id: 'demo-mermaid',
+    slug: 'cascading-rbac-topology',
+    title: 'Cascading RBAC Graph',
+    runtimeLabel: 'Mermaid',
+    type: 'mermaid',
+    projectPath: 'platform',
+    version: 2,
     agentLabel: 'OpenAI Codex',
     agentBg: 'var(--ag-codex-bg)',
     agentFg: 'var(--ag-codex-fg)',
     agentDot: 'var(--ag-codex-dot)',
-    updatedAgo: '18m ago',
-    summary: 'v2 · Added private project isolation override (inheritWorkspaceAcl = false)',
     code: [
       'flowchart LR',
-      '  WS["Workspace Role (10..40)"] -->|inherit| PRJ["Project Scope"]',
-      '  PRJ -->|inherit_workspace_acl = false| ISOLATED["Private Project"]',
+      '  WS["Workspace (Owner)"] --> PRJ["Private Project"]',
       '  PRJ --> CAT["Category Folder"]',
       '  CAT --> ART["Artifact v1..vN"]',
-      '  CLI["CLI / MCP Agent"] -.->|Safe Ceiling| ART',
-      '  LINK["Share Token (anyone/domain)"] -.->|Read/Edit| ART',
+      '  CLI["CLI / MCP Agent"] -.->|"Safe Ceiling"| ART',
     ],
     diff: [
       { kind: 'ctx', lineOld: '1', lineNew: '1', text: 'flowchart LR' },
-      { kind: 'ctx', lineOld: '2', lineNew: '2', text: '  WS["Workspace Role (10..40)"] -->|inherit| PRJ["Project Scope"]' },
-      { kind: 'add', lineOld: '', lineNew: '3', text: '  PRJ -->|inherit_workspace_acl = false| ISOLATED["Private Project"]' },
-      { kind: 'add', lineOld: '', lineNew: '4', text: '  CLI["CLI / MCP Agent"] -.->|Safe Ceiling| ART' },
+      { kind: 'add', lineOld: '', lineNew: '2', text: '  WS["Workspace (Owner)"] --> PRJ["Private Project"]' },
+      { kind: 'add', lineOld: '', lineNew: '5', text: '  CLI["CLI / MCP Agent"] -.->|"Safe Ceiling"| ART' },
     ],
     storage: [
-      { key: 'diagram:zoom', value: '"100%"', scope: 'workspace' },
-      { key: 'highlight_node', value: '"Safe Ceiling"', scope: 'viewer CoW' },
+      { key: 'diagram:layout', value: '"LR"', scope: 'workspace' },
+      { key: 'inherit_workspace', value: 'false', scope: 'project ACL' },
     ],
   },
   {
     id: 'demo-tb',
     slug: 'qwen-grpo-run',
-    title: 'Qwen-GRPO Training Curves',
+    title: 'Qwen-GRPO Curves',
+    runtimeLabel: 'TensorBoard',
     type: 'tensorboard',
-    projectPath: 'rl-training / runs',
+    projectPath: 'rl-runs',
     version: 4,
-    agent: 'antigravity',
-    agentLabel: 'Antigravity',
-    agentBg: 'var(--ag-agy-bg)',
-    agentFg: 'var(--ag-agy-fg)',
-    agentDot: 'var(--ag-agy-dot)',
-    updatedAgo: '32m ago',
-    summary: 'v4 · Logged step 4,000 scalars & SigV4 R2 checkpoint step-4000-best.safetensors',
+    agentLabel: 'Claude Code',
+    agentBg: 'var(--ag-claude-bg)',
+    agentFg: 'var(--ag-claude-fg)',
+    agentDot: 'var(--ag-claude-dot)',
     code: [
-      '# Native MCP call from Antigravity / training worker:',
       'tensorboard_log_scalars({',
       '  slug: "qwen-grpo-run",',
-      '  project: "rl-training",',
       '  step: 4000,',
-      '  metrics: { "train/reward": 0.884, "train/kl_div": 0.024, "eval/pass@1": 0.742 }',
-      '})',
-      '',
-      '# Direct SigV4 presigned PUT to Cloudflare R2 (bypasses 4.5MB serverless limit):',
+      '  metrics: { "train/reward": 0.884, "train/kl_div": 0.024 }',
+      '});',
       'tensorboard_save_checkpoint({',
       '  slug: "qwen-grpo-run",',
-      '  name: "step-4000-best.safetensors",',
+      '  name: "step-4000.safetensors",',
       '  isBest: true',
-      '})',
+      '});',
     ],
     diff: [
-      { kind: 'del', lineOld: '5', lineNew: '', text: '  step: 3200, metrics: { "train/reward": 0.812, "eval/pass@1": 0.691 }' },
-      { kind: 'add', lineOld: '', lineNew: '5', text: '  step: 4000, metrics: { "train/reward": 0.884, "eval/pass@1": 0.742 }' },
-      { kind: 'add', lineOld: '', lineNew: '11', text: '  name: "step-4000-best.safetensors", isBest: true' },
+      { kind: 'del', lineOld: '3', lineNew: '', text: '  step: 3200, metrics: { "train/reward": 0.812 }' },
+      { kind: 'add', lineOld: '', lineNew: '3', text: '  step: 4000, metrics: { "train/reward": 0.884 }' },
     ],
     storage: [
       { key: 'tb:smoothing', value: '0.65', scope: 'workspace' },
-      { key: 'tb:pinned_ckpt', value: '"step-4000-best.safetensors"', scope: 'workspace' },
+      { key: 'tb:best_ckpt', value: '"step-4000.safetensors"', scope: 'R2 SigV4' },
     ],
   },
+];
+
+const COMPARISON_ROWS: Array<{
+  label: string;
+  myArtifact: string;
+  chatLocked: string;
+  rawFiles: string;
+  maPositive?: boolean;
+}> = [
   {
-    id: 'demo-edge',
-    slug: 'vercel-neon-topology',
-    title: 'Serverless $0/mo Cloud Topology',
-    type: 'svg',
-    projectPath: 'infra / serverless',
-    version: 2,
-    agent: 'watcher',
-    agentLabel: 'Watched file',
-    agentBg: 'var(--ag-watcher-bg)',
-    agentFg: 'var(--ag-watcher-fg)',
-    agentDot: 'var(--ag-watcher-dot)',
-    updatedAgo: '1h ago',
-    summary: 'v2 · Updated stateless ETag /api/sync & R2 direct presigned path',
-    code: [
-      '<svg viewBox="0 0 640 280" xmlns="http://www.w3.org/2000/svg">',
-      '  <!-- Cloudflare DNS -> Vercel CDN + api/index.js -> Neon -pooler + R2 -->',
-      '  <rect x="24" y="96" width="144" height="72" rx="10" />',
-      '  <rect x="236" y="42" width="168" height="72" rx="10" />',
-      '  <rect x="236" y="158" width="168" height="72" rx="10" />',
-      '  <rect x="468" y="42" width="148" height="72" rx="10" />',
-      '  <rect x="468" y="158" width="148" height="72" rx="10" />',
-      '</svg>',
-    ],
-    diff: [
-      { kind: 'del', lineOld: '2', lineNew: '', text: '  <!-- Persistent /ws WebSocket + Postgres LISTEN -->' },
-      { kind: 'add', lineOld: '', lineNew: '2', text: '  <!-- Stateless HTTP ETag /api/sync (304 Not Modified) + Neon -pooler -->' },
-    ],
-    storage: [
-      { key: 'topology:env', value: '"vercel-hobby-sin1"', scope: 'workspace' },
-      { key: 'poll_interval_ms', value: '5000', scope: 'workspace' },
-    ],
+    label: 'Shared across Claude Code, Codex & Antigravity',
+    myArtifact: 'MCP + CLI',
+    chatLocked: 'Per-chat only',
+    rawFiles: 'Manual copy',
+    maPositive: true,
+  },
+  {
+    label: 'React, Three.js, Mermaid, KaTeX & TensorBoard',
+    myArtifact: '7 runtimes',
+    chatLocked: 'Partial',
+    rawFiles: 'Manual setup',
+    maPositive: true,
+  },
+  {
+    label: 'Immutable versions, diffs & window.storage',
+    myArtifact: 'Built-in',
+    chatLocked: 'Ephemeral',
+    rawFiles: 'Manual git',
+    maPositive: true,
+  },
+  {
+    label: 'Google OIDC cascading RBAC & batch sharing',
+    myArtifact: '4-tier ACL',
+    chatLocked: 'Public link',
+    rawFiles: 'None',
+    maPositive: true,
+  },
+  {
+    label: '100% offline local mode + $0/mo cloud deploy',
+    myArtifact: 'MIT Open Source',
+    chatLocked: 'Cloud only',
+    rawFiles: 'Local only',
+    maPositive: true,
   },
 ];
 
 const FAQ_ITEMS = [
   {
     q: 'How is MyArtifact different from chat-locked Claude or GPT Artifacts?',
-    a: 'Chat-locked artifacts vanish inside isolated chat threads and cannot be edited by other coding assistants. MyArtifact gives Claude Code, OpenAI Codex, Google Antigravity, and your local filesystem one shared visual workspace with immutable v1..vN checkpoints, unified diffs, full-text search, and persistent window.storage.',
+    a: 'MyArtifact gives Claude Code, OpenAI Codex, and Google Antigravity one persistent visual workspace instead of trapping UI previews inside individual chat threads.',
   },
   {
     q: 'Can I run MyArtifact 100% offline without cloud accounts?',
-    a: 'Yes. Running npx myartifact setup and myartifact serve stores all artifacts, versions, FTS5 search indexes, and window.storage entries locally in ~/.myartifact with zero required cloud accounts or telemetry.',
+    a: 'Yes. Running npx myartifact setup and myartifact serve stores all artifacts, versions, FTS5 search indexes, and window.storage state locally in ~/.myartifact with zero cloud dependency.',
   },
   {
-    q: 'How do local coding agents safely access my Cloud workspaces?',
-    a: 'Run myartifact login --cloud https://myartifact.app once in your terminal via Google OIDC PKCE loopback or RFC 8628 device flow. By default, local CLI and MCP agents receive a delegated session bounded by a Safe Agent Scope Ceiling (read/write artifacts, storage, and TensorBoard only — destructive deletes and IAM sharing return 403 agent_scope_restricted unless you explicitly run myartifact login --elevate).',
+    q: 'How do local coding agents safely access Cloud workspaces?',
+    a: 'Run myartifact login once via Google OIDC. Local CLI and MCP tools inherit your RBAC role under a Safe Agent Scope Ceiling that blocks deletes and sharing changes unless --elevate is passed.',
   },
   {
     q: 'How does cascading RBAC and Batch Sharing work?',
-    a: 'Roles (viewer, editor, admin, owner) cascade down Workspace -> Project -> Category -> Artifact, with support for private projects (inheritWorkspaceAcl = false). Batch Sharing lets owners apply roles across multiple selected artifacts, projects, or categories at once for email invites (auto-claimed on first verified Google login), Workspace Groups, verified Google hd domains, or expiring capability Share Links.',
-  },
-  {
-    q: 'Can untrusted shared artifacts access another user’s workspace state?',
-    a: 'No. Every interactive artifact executes inside an isolated sandboxed iframe with strict postMessage origin/source validation, sanitized SVG icons, and Viewer Copy-on-Write sessionStorage isolation so read-only viewers can interact with controls without mutating workspace storage.',
+    a: 'Roles cascade across Workspace -> Project -> Category -> Artifact (with optional private projects), and Batch Sharing grants access across emails, workspace groups, verified Google domains, or expiring links.',
   },
   {
     q: 'What does it cost to self-host MyArtifact Cloud?',
-    a: 'MyArtifact is MIT-licensed and architected for $0/month hosting on Vercel Hobby (stateless Node 22 functions using conditional ETag /api/sync instead of permanent WebSockets), Neon Free Serverless PostgreSQL, and Cloudflare R2 free tier for >4.5 MB model checkpoints.',
+    a: 'MyArtifact is MIT-licensed and runs at $0/month on Vercel Hobby serverless functions (using conditional ETag /api/sync), Neon Free Postgres, and Cloudflare R2.',
   },
 ];
 
@@ -252,15 +273,15 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
 }) => {
   const [selectedId, setSelectedId] = useState<string>(DEMO_ARTIFACTS[0].id);
   const [activeTab, setActiveTab] = useState<ShowcaseTab>('preview');
-  const [metricView, setMetricView] = useState<'reward' | 'success' | 'kl'>('reward');
-  const [copiedCmd, setCopiedCmd] = useState<'setup' | 'login' | 'code' | null>(null);
+  const [metricView, setMetricView] = useState<'grpo' | 'ppo' | 'kl'>('grpo');
+  const [copiedCmd, setCopiedCmd] = useState<'setup' | 'code' | null>(null);
 
   const selectedArtifact = useMemo(
     () => DEMO_ARTIFACTS.find((a) => a.id === selectedId) || DEMO_ARTIFACTS[0],
     [selectedId]
   );
 
-  const handleCopy = async (kind: 'setup' | 'login' | 'code', text: string) => {
+  const handleCopy = async (kind: 'setup' | 'code', text: string) => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -278,7 +299,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
   const renderPrimaryCta = (large = false) => {
     const sizeCls = large
       ? 'h-[44px] px-5 text-[14px] rounded-[9px]'
-      : 'h-[34px] px-3.5 text-[13px] rounded-[7px]';
+      : 'h-[36px] px-3.5 text-[13px] rounded-[7px]';
 
     if (primaryCtaIsStudio) {
       return (
@@ -286,8 +307,8 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
           onClick={onOpenStudio}
           className={`${sizeCls} bg-sage hover:bg-sage-hover text-canvas font-medium inline-flex items-center justify-center gap-2 transition-colors shadow-[0_1px_2px_rgba(30,36,32,0.10)]`}
         >
-          <span>{authenticated ? 'Open Studio' : 'Launch Local Studio'}</span>
-          <ArrowRight className="w-4 h-4" />
+          <span>{authenticated ? 'Open Studio' : 'Launch Studio'}</span>
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </button>
       );
     }
@@ -296,7 +317,7 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
       return (
         <a
           href={googleLoginHref}
-          className={`${sizeCls} bg-sage hover:bg-sage-hover text-canvas font-medium inline-flex items-center justify-center gap-2 transition-colors shadow-[0_1px_2px_rgba(30,36,32,0.10)] no-underline`}
+          className={`${sizeCls} bg-sage hover:bg-sage-hover text-canvas font-medium inline-flex items-center justify-center gap-2 transition-colors shadow-[0_1px_2px_rgba(30,36,32,0.10)] no-underline whitespace-nowrap shrink-0`}
         >
           <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -304,7 +325,14 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
               d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z"
             />
           </svg>
-          <span>Continue with Google</span>
+          {large ? (
+            <span>Continue with Google</span>
+          ) : (
+            <>
+              <span className="hidden sm:inline">Continue with Google</span>
+              <span className="sm:hidden">Sign in</span>
+            </>
+          )}
         </a>
       );
     }
@@ -314,48 +342,36 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
         onClick={onOpenSignIn}
         className={`${sizeCls} bg-sage hover:bg-sage-hover text-canvas font-medium inline-flex items-center justify-center gap-2 transition-colors`}
       >
-        <span>Sign In to Cloud</span>
-        <ArrowRight className="w-4 h-4" />
+        <span>Sign In</span>
+        <ArrowRight className="w-4 h-4" aria-hidden="true" />
       </button>
     );
   };
 
   return (
     <div id="top" className="min-h-screen bg-canvas text-ink selection:bg-[#C7D3C0] selection:text-[#1E2420]">
-      {/* Top Sticky Navigation */}
-      <header className="sticky top-0 z-40 border-b border-line bg-canvas/90 backdrop-blur-md">
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 h-[60px] flex items-center justify-between gap-4">
-          <a href="#top" className="flex items-center gap-2.5 text-ink no-underline min-w-0">
+      {/* Minimal Sticky Top Bar */}
+      <header className="sticky top-0 z-40 border-b border-line/80 bg-canvas/88 backdrop-blur-md">
+        <div className="max-w-[1120px] mx-auto px-4 sm:px-8 h-[60px] flex items-center justify-between gap-3">
+          <a href="#top" className="flex items-center gap-2.5 text-ink no-underline shrink-0">
             <span
               aria-hidden="true"
-              className="w-[30px] h-[30px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.12)] [&>svg]:w-full [&>svg]:h-full"
+              className="w-[28px] h-[28px] rounded-[7px] overflow-hidden flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(30,36,32,0.12)] [&>svg]:w-full [&>svg]:h-full"
               dangerouslySetInnerHTML={{ __html: MYARTIFACT_LOGO_SVG }}
             />
-            <span className="font-semibold text-[15px] tracking-tight text-ink">
+            <span className="font-semibold text-[15px] tracking-tight text-ink whitespace-nowrap">
               MyArtifact
-            </span>
-            <span className="hidden sm:inline-flex items-center font-mono text-[10.5px] uppercase tracking-[0.06em] px-1.5 py-[2px] rounded bg-sunken text-ink-3 border border-line">
-              MIT · v1.0
             </span>
           </a>
 
-          <nav aria-label="Primary sections" className="hidden md:flex items-center gap-6 text-[13px] text-ink-2">
-            <a href="#showcase" className="hover:text-ink transition-colors no-underline">
-              Live Studio
+          <nav aria-label="Primary sections" className="hidden md:flex items-center gap-7 text-[13.5px] text-ink-2">
+            <a href="#studio" className="hover:text-ink transition-colors no-underline py-1">
+              Studio
             </a>
-            <a href="#agents" className="hover:text-ink transition-colors no-underline">
-              Workflow
+            <a href="#features" className="hover:text-ink transition-colors no-underline py-1">
+              Features
             </a>
-            <a href="#features" className="hover:text-ink transition-colors no-underline">
-              Capabilities
-            </a>
-            <a href="#rbac" className="hover:text-ink transition-colors no-underline">
-              Cloud RBAC
-            </a>
-            <a href="#compare" className="hover:text-ink transition-colors no-underline">
-              Compare
-            </a>
-            <a href="#faq" className="hover:text-ink transition-colors no-underline">
+            <a href="#faq" className="hover:text-ink transition-colors no-underline py-1">
               FAQ
             </a>
           </nav>
@@ -367,7 +383,11 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
               title={theme === 'night' ? 'Switch to day theme' : 'Switch to night theme'}
               className="w-[36px] h-[36px] rounded-[7px] border border-line bg-raised hover:bg-sunken text-ink-2 flex items-center justify-center transition-colors"
             >
-              {theme === 'night' ? <Sun className="w-4 h-4" aria-hidden="true" /> : <Moon className="w-4 h-4" aria-hidden="true" />}
+              {theme === 'night' ? (
+                <Sun className="w-4 h-4" aria-hidden="true" />
+              ) : (
+                <Moon className="w-4 h-4" aria-hidden="true" />
+              )}
             </button>
 
             <a
@@ -386,74 +406,46 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
       </header>
 
       <main id="main-content">
-        {/* Hero Section */}
-        <section className="max-w-[1160px] mx-auto px-5 sm:px-8 pt-12 sm:pt-16 pb-10 sm:pb-14">
-          <div className="max-w-[840px]">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sage-soft border border-[var(--c-sage-border)] text-[11.5px] font-mono uppercase tracking-[0.06em] text-sage mb-5">
-              <span className="w-2 h-2 rounded-full bg-[var(--c-live-dot)]" />
-              <span>Local-First &amp; Serverless Cloud · Model Context Protocol</span>
+        {/* Centered Atmospheric Hero */}
+        <section className="relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-65"
+            style={{
+              backgroundImage:
+                'radial-gradient(var(--c-line-strong) 1px, transparent 1px), radial-gradient(ellipse 70% 55% at 50% 0%, var(--c-sage-soft), transparent 72%)',
+              backgroundSize: '24px 24px, 100% 100%',
+            }}
+          />
+
+          <div className="relative max-w-[1120px] mx-auto px-5 sm:px-8 pt-14 sm:pt-20 pb-10 text-center">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-raised border border-line text-[11.5px] font-mono uppercase tracking-[0.07em] text-sage shadow-[0_1px_2px_rgba(30,36,32,0.04)] mb-6">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--c-live-dot)]" aria-hidden="true" />
+              <span>Open-Source MCP Studio · MIT</span>
             </div>
 
-            <h1 className="font-serif text-[36px] sm:text-[52px] leading-[1.08] tracking-[-0.02em] font-semibold text-ink m-0">
-              One visual artifact studio for{' '}
-              <span className="text-sage">every coding agent</span> you run.
+            <h1 className="font-serif text-[36px] sm:text-[54px] leading-[1.08] tracking-[-0.025em] font-semibold text-ink m-0 max-w-[820px] mx-auto">
+              One visual studio for <br className="hidden sm:inline" />
+              <span className="text-sage italic font-medium">every coding agent.</span>
             </h1>
 
-            <p className="mt-5 text-[16px] sm:text-[18px] leading-[1.6] text-ink-2 max-w-[740px]">
-              Stop losing dashboards, 3D scenes, Mermaid architecture maps, and training curves inside
-              chat threads. <strong>MyArtifact</strong> gives <strong>Claude Code</strong>,{' '}
-              <strong>OpenAI Codex</strong>, and <strong>Google Antigravity</strong> one shared,
-              sandboxed visual workbench with immutable <code className="font-mono text-[14px] px-1.5 py-0.5 rounded bg-sunken text-ink">v1→vN</code>{' '}
-              diffs, persistent <code className="font-mono text-[14px] px-1.5 py-0.5 rounded bg-sunken text-ink">window.storage</code>, and cascading Google OIDC RBAC.
+            <p className="mt-5 text-[16px] sm:text-[18.5px] leading-[1.6] text-ink-2 max-w-[600px] mx-auto">
+              Render, diff, and share live React, 3D, Mermaid &amp; TensorBoard artifacts across Claude Code, Codex, and Antigravity.
             </p>
 
-            {/* Primary CTA + Copyable Quickstart Commands */}
-            <div className="mt-7 flex flex-wrap items-center gap-3">
+            {/* Primary CTA + Non-truncating Copyable Terminal Pill */}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               {renderPrimaryCta(true)}
 
-              <a
-                href="#showcase"
-                className="h-[44px] px-4 rounded-[9px] border border-line-strong bg-raised hover:bg-sunken text-ink text-[13.5px] font-medium inline-flex items-center gap-2 transition-colors no-underline"
-              >
-                <span>Explore Interactive Studio</span>
-                <ChevronDown className="w-4 h-4 text-ink-3" />
-              </a>
-
-              {isCloudMode && !authenticated && (
-                <button
-                  onClick={onOpenSignIn}
-                  className="h-[44px] px-4 rounded-[9px] border border-line bg-canvas hover:bg-sunken text-ink-2 hover:text-ink text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors"
-                >
-                  <Terminal className="w-4 h-4 text-ink-3" />
-                  <span>CLI &amp; Device Sign-In</span>
-                </button>
-              )}
-
-              {authenticated && userEmail && (
-                <span className="text-[12.5px] text-ink-2 font-mono px-2.5 py-1.5 rounded-[7px] bg-sunken border border-line">
-                  Signed in as {userEmail}
-                </span>
-              )}
-            </div>
-
-            {/* Dual Command Strip */}
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[780px]">
-              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-[10px] border border-line bg-raised shadow-[0_1px_2px_rgba(30,36,32,0.05)]">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Terminal className="w-4 h-4 text-sage shrink-0" />
-                  <div className="min-w-0">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-3">
-                      1 · Local Setup &amp; MCP Auto-Wire
-                    </div>
-                    <code className="font-mono text-[12.5px] text-ink truncate block">
-                      npx myartifact setup
-                    </code>
-                  </div>
-                </div>
+              <div className="h-[44px] inline-flex items-center gap-2.5 pl-3.5 pr-1.5 rounded-[9px] border border-line-strong bg-raised shadow-[0_1px_2px_rgba(30,36,32,0.05)]">
+                <Terminal className="w-4 h-4 text-sage shrink-0" aria-hidden="true" />
+                <code className="font-mono text-[13px] text-ink whitespace-nowrap">
+                  npx myartifact setup
+                </code>
                 <button
                   onClick={() => handleCopy('setup', 'npx myartifact setup')}
                   aria-label="Copy npx myartifact setup command"
-                  className="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors"
+                  className="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 transition-colors"
                 >
                   {copiedCmd === 'setup' ? (
                     <>
@@ -468,127 +460,91 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                   )}
                 </button>
               </div>
-
-              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-[10px] border border-line bg-raised shadow-[0_1px_2px_rgba(30,36,32,0.05)]">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <ShieldCheck className="w-4 h-4 text-[var(--c-brass-icon)] shrink-0" aria-hidden="true" />
-                  <div className="min-w-0">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-3">
-                      2 · Cloud Identity for Agents
-                    </div>
-                    <code className="font-mono text-[12.5px] text-ink truncate block">
-                      myartifact login --cloud https://myartifact.app
-                    </code>
-                  </div>
-                </div>
-                <button
-                  onClick={() =>
-                    handleCopy('login', 'myartifact login --cloud https://myartifact.app')
-                  }
-                  aria-label="Copy myartifact login command"
-                  className="min-h-[32px] px-2.5 rounded-[6px] border border-line bg-canvas hover:bg-sunken text-[11.5px] font-mono text-ink-2 inline-flex items-center gap-1 shrink-0 transition-colors"
-                >
-                  {copiedCmd === 'login' ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-sage" />
-                      <span>Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
 
-            {/* Supported Agents & Run Badges */}
-            <div className="mt-6 flex flex-wrap items-center gap-2 text-[12px]">
-              <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-ink-3 mr-1">
-                Built for:
-              </span>
+            {/* Subtle Agent Compatibility Strip */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-[12px]">
               {[
                 { label: 'Claude Code', bg: 'var(--ag-claude-bg)', fg: 'var(--ag-claude-fg)', dot: 'var(--ag-claude-dot)' },
                 { label: 'OpenAI Codex', bg: 'var(--ag-codex-bg)', fg: 'var(--ag-codex-fg)', dot: 'var(--ag-codex-dot)' },
                 { label: 'Google Antigravity', bg: 'var(--ag-agy-bg)', fg: 'var(--ag-agy-fg)', dot: 'var(--ag-agy-dot)' },
-                { label: 'Dropzone Watcher', bg: 'var(--ag-watcher-bg)', fg: 'var(--ag-watcher-fg)', dot: 'var(--ag-watcher-dot)' },
               ].map((ag) => (
                 <span
                   key={ag.label}
                   style={{ backgroundColor: ag.bg, color: ag.fg }}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium border border-line/70"
                 >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ag.dot }} />
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ag.dot }} aria-hidden="true" />
                   {ag.label}
                 </span>
               ))}
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sunken text-ink-2 border border-line font-mono text-[11px]">
-                10 MCP Tools · 7 Runtimes · $0/mo Serverless Ready
-              </span>
+
+              {isCloudMode && !authenticated && (
+                <button
+                  onClick={onOpenSignIn}
+                  className="min-h-[30px] px-2.5 rounded-full border border-line bg-raised hover:bg-sunken text-ink-2 hover:text-ink font-mono text-[11.5px] inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <span>CLI Sign-In</span>
+                </button>
+              )}
+
+              {authenticated && userEmail && (
+                <span className="font-mono text-[11.5px] px-2.5 py-1 rounded-full bg-sunken text-ink-2 border border-line">
+                  {userEmail}
+                </span>
+              )}
             </div>
           </div>
         </section>
 
-        {/* Interactive Moss Studio Showcase */}
+        {/* Elevated Studio Window Centerpiece */}
         <section
-          id="showcase"
-          aria-labelledby="showcase-heading"
-          className="max-w-[1160px] mx-auto px-5 sm:px-8 py-6 pb-14"
+          id="studio"
+          aria-labelledby="studio-heading"
+          className="max-w-[1080px] mx-auto px-5 sm:px-8 pb-20"
         >
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
-            <div>
-              <span className="font-mono text-[11px] uppercase tracking-[0.07em] text-sage">
-                Interactive Product Preview
-              </span>
-              <h2 id="showcase-heading" className="font-serif text-[24px] sm:text-[28px] font-semibold text-ink m-0 mt-1">
-                Inspect how agents collaborate inside the Moss Studio
-              </h2>
-            </div>
-            <span className="text-[12.5px] text-ink-3 font-mono">
-              Click any artifact row or inspector tab →
-            </span>
-          </div>
+          <h2 id="studio-heading" className="sr-only">
+            Interactive MyArtifact Studio Preview
+          </h2>
 
-          <div className="rounded-[14px] border border-line-strong bg-raised shadow-[0_20px_48px_rgba(30,36,32,0.12)] overflow-hidden grid grid-cols-1 lg:grid-cols-[276px_1fr]">
-            {/* Demo Studio Sidebar */}
-            <aside className="bg-canvas border-b lg:border-b-0 lg:border-r border-line flex flex-col">
-              <div className="h-[52px] px-4 flex items-center justify-between border-b border-line">
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className="w-[24px] h-[24px] rounded-[6px] overflow-hidden flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
-                    dangerouslySetInnerHTML={{ __html: MYARTIFACT_LOGO_SVG }}
-                  />
-                  <div>
-                    <div className="font-semibold text-[13px] text-ink leading-tight">Studio Wiki</div>
-                    <div className="text-[10.5px] text-[var(--c-live-ink)] flex items-center gap-1 font-mono">
-                      <span className="w-[5px] h-[5px] rounded-full bg-[var(--c-live-dot)]" />
-                      Cloud · Synced
-                    </div>
-                  </div>
-                </div>
-                <span className="font-mono text-[10.5px] px-1.5 py-0.5 rounded bg-sunken border border-line text-ink-3">
-                  index.md
-                </span>
+          <div className="rounded-[16px] border border-line-strong bg-raised shadow-[0_24px_64px_rgba(30,36,32,0.13)] overflow-hidden">
+            {/* macOS / Studio Window Chrome Bar */}
+            <div className="h-[42px] px-4 border-b border-line bg-canvas flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 shrink-0" aria-hidden="true">
+                <span className="w-2.5 h-2.5 rounded-full bg-line-strong" />
+                <span className="w-2.5 h-2.5 rounded-full bg-line-strong" />
+                <span className="w-2.5 h-2.5 rounded-full bg-line-strong" />
               </div>
 
-              <div className="p-2 flex flex-col gap-1">
+              <div className="px-3 py-0.5 rounded-full bg-raised border border-line font-mono text-[11px] text-ink-3 truncate max-w-[380px]">
+                myartifact.app / {selectedArtifact.projectPath} / {selectedArtifact.slug}
+              </div>
+
+              <span className="font-mono text-[10.5px] px-2 py-0.5 rounded bg-brass-soft text-brass-ink border border-brass-line shrink-0 inline-flex items-center gap-1">
+                <History className="w-3 h-3" aria-hidden="true" />
+                v{selectedArtifact.version} LATEST
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[248px_1fr]">
+              {/* Left Sidebar */}
+              <aside className="bg-canvas/70 border-b lg:border-b-0 lg:border-r border-line p-2.5 flex flex-col gap-1">
                 {DEMO_ARTIFACTS.map((item) => {
                   const isSel = item.id === selectedArtifact.id;
                   const TypeIcon =
                     item.type === 'react'
                       ? Atom
+                      : item.type === 'threejs'
+                      ? Box
                       : item.type === 'mermaid'
                       ? Workflow
-                      : item.type === 'tensorboard'
-                      ? Activity
-                      : PenTool;
+                      : Activity;
 
                   return (
                     <button
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
-                      className={`w-full text-left p-2.5 rounded-[8px] grid grid-cols-[28px_1fr_auto] gap-2.5 items-center transition-colors ${
+                      className={`w-full text-left px-2.5 py-2.5 rounded-[9px] grid grid-cols-[28px_1fr_auto] gap-2.5 items-center transition-colors ${
                         isSel
                           ? 'bg-sage-soft shadow-[inset_2px_0_0_var(--color-sage)]'
                           : 'hover:bg-sunken'
@@ -601,18 +557,14 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                             : 'bg-sunken text-ink-2'
                         }`}
                       >
-                        <TypeIcon className="w-[15px] h-[15px]" />
+                        <TypeIcon className="w-[15px] h-[15px]" aria-hidden="true" />
                       </span>
                       <div className="min-w-0">
-                        <div className="text-[12.5px] font-medium text-ink truncate">{item.title}</div>
-                        <div className="text-[11px] text-ink-2 flex items-center gap-1.5 truncate mt-0.5">
-                          <span
-                            className="w-[6px] h-[6px] rounded-full shrink-0"
-                            style={{ backgroundColor: item.agentDot }}
-                          />
-                          <span className="truncate">
-                            {item.agentLabel} · {item.updatedAgo}
-                          </span>
+                        <div className="text-[12.5px] font-medium text-ink truncate">
+                          {item.title}
+                        </div>
+                        <div className="text-[11px] text-ink-3 truncate">
+                          {item.runtimeLabel} · {item.agentLabel}
                         </div>
                       </div>
                       <span className="font-mono text-[10.5px] px-1.5 py-[1px] rounded bg-brass-soft text-brass-ink border border-brass-line">
@@ -621,63 +573,44 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                     </button>
                   );
                 })}
-              </div>
+              </aside>
 
-              <div className="mt-auto p-3 border-t border-line text-[11px] font-mono text-ink-3 flex items-center justify-between">
-                <span>⌘K Command Palette</span>
-                <span>FTS5 + Backlinks</span>
-              </div>
-            </aside>
-
-            {/* Demo Studio Main Pane */}
-            <div className="flex flex-col min-w-0 bg-raised">
-              {/* Top Inspector Header */}
-              <div className="px-5 py-3.5 border-b border-line flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="m-0 text-[16px] font-semibold text-ink">
+              {/* Right Main Canvas */}
+              <div className="flex flex-col min-w-0 bg-raised">
+                <div className="px-5 py-3 border-b border-line flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <h3 className="m-0 text-[15px] font-semibold text-ink truncate">
                       {selectedArtifact.title}
                     </h3>
-                    <span className="font-mono text-[11px] px-2 py-[1px] rounded bg-sage-soft text-sage border border-[var(--c-sage-border)]">
-                      {selectedArtifact.projectPath}
-                    </span>
                     <span
                       style={{
                         backgroundColor: selectedArtifact.agentBg,
                         color: selectedArtifact.agentFg,
                       }}
-                      className="inline-flex items-center gap-1.5 text-[11.5px] font-medium px-2 py-[1px] rounded-full"
+                      className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0"
                     >
                       <span
                         className="w-1.5 h-1.5 rounded-full"
                         style={{ backgroundColor: selectedArtifact.agentDot }}
+                        aria-hidden="true"
                       />
                       {selectedArtifact.agentLabel}
                     </span>
                   </div>
-                  <p className="m-0 mt-1 text-[12px] text-ink-3 truncate">
-                    {selectedArtifact.summary}
-                  </p>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="h-[28px] px-2.5 rounded-[6px] border border-brass-line bg-brass-soft text-brass-ink font-mono text-[11.5px] font-medium inline-flex items-center gap-1.5">
-                    <History className="w-3.5 h-3.5" />
-                    v{selectedArtifact.version} LATEST
-                  </span>
-                  <div className="flex items-center gap-1 rounded-[7px] bg-sunken p-1 border border-line flex-wrap">
+                  <div className="flex items-center gap-1 rounded-[8px] bg-sunken p-1 border border-line flex-wrap">
                     {(
                       [
                         ['preview', 'Preview'],
-                        ['code', 'Code'],
                         ['diff', 'Diff'],
-                        ['storage', 'window.storage'],
+                        ['code', 'Code'],
+                        ['state', 'State'],
                       ] as const
                     ).map(([tabId, label]) => (
                       <button
                         key={tabId}
                         onClick={() => setActiveTab(tabId)}
-                        className={`min-h-[34px] px-3 rounded-[5px] text-[12px] font-medium transition-colors ${
+                        className={`min-h-[34px] px-3 rounded-[6px] text-[12px] font-medium transition-colors ${
                           activeTab === tabId
                             ? 'bg-raised text-ink shadow-[0_1px_2px_rgba(30,36,32,0.08)]'
                             : 'text-ink-3 hover:text-ink'
@@ -688,533 +621,469 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
                     ))}
                   </div>
                 </div>
-              </div>
 
-              {/* Tab Content */}
-              <div className="p-5 min-h-[340px] flex flex-col justify-between bg-canvas/35">
-                {activeTab === 'preview' && selectedArtifact.type === 'react' && (
-                  <div className="rounded-[10px] border border-line bg-raised p-5 flex flex-col gap-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-3">
-                          Interactive React Sandbox · Recharts + window.storage
-                        </div>
-                        <div className="text-[15px] font-semibold text-ink mt-0.5">
-                          GRPO vs PPO Multi-Task Locomotion Suite
+                {/* Inspector Stage */}
+                <div className="p-5 min-h-[330px] bg-canvas/30 flex flex-col justify-center">
+                  {activeTab === 'preview' && selectedArtifact.type === 'react' && (
+                    <div className="rounded-[12px] border border-line bg-raised p-5 flex flex-col gap-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-ink-3">
+                          GRPO vs PPO Multi-Task Return
+                        </span>
+                        <div className="flex items-center gap-1 bg-sunken p-1 rounded-[7px] border border-line text-[11.5px]">
+                          {(
+                            [
+                              ['grpo', 'Reward'],
+                              ['ppo', 'Pass %'],
+                              ['kl', 'KL Div'],
+                            ] as const
+                          ).map(([k, lbl]) => (
+                            <button
+                              key={k}
+                              onClick={() => setMetricView(k)}
+                              className={`min-h-[32px] px-3 rounded-[5px] font-medium transition-colors ${
+                                metricView === k ? 'bg-sage text-canvas' : 'text-ink-2 hover:text-ink'
+                              }`}
+                            >
+                              {lbl}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 bg-sunken p-1 rounded-[7px] border border-line text-[11.5px]">
-                        {(
-                          [
-                            ['reward', 'Reward'],
-                            ['success', 'Success %'],
-                            ['kl', 'KL Stability'],
-                          ] as const
-                        ).map(([k, lbl]) => (
-                          <button
-                            key={k}
-                            onClick={() => setMetricView(k)}
-                            className={`min-h-[32px] px-3 rounded-[5px] font-medium transition-colors ${
-                              metricView === k ? 'bg-sage text-canvas' : 'text-ink-2 hover:text-ink'
-                            }`}
-                          >
-                            {lbl}
-                          </button>
-                        ))}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                        <div className="p-3 rounded-[9px] border border-line bg-canvas flex sm:block items-center justify-between">
+                          <div className="font-mono text-[10.5px] uppercase text-ink-3">GRPO Policy</div>
+                          <div className="font-mono text-[18px] sm:text-[22px] font-semibold text-sage sm:mt-1">
+                            {metricView === 'grpo' ? '0.884' : metricView === 'ppo' ? '92.4%' : '0.024'}
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-[9px] border border-line bg-canvas flex sm:block items-center justify-between">
+                          <div className="font-mono text-[10.5px] uppercase text-ink-3">Baseline</div>
+                          <div className="font-mono text-[18px] sm:text-[22px] font-semibold text-brass-ink sm:mt-1">
+                            {metricView === 'grpo' ? '0.770' : metricView === 'ppo' ? '81.0%' : '0.049'}
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-[9px] border border-line bg-canvas flex sm:block items-center justify-between">
+                          <div className="font-mono text-[10.5px] uppercase text-ink-3">KV State</div>
+                          <div className="font-mono text-[13.5px] sm:text-[14px] font-semibold text-ink sm:mt-2 truncate">
+                            bench:{metricView}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-[9px] border border-line bg-canvas">
+                        <svg viewBox="0 0 640 120" className="w-full h-[118px]" aria-hidden="true">
+                          {[28, 60, 92].map((y) => (
+                            <line key={y} x1="12" y1={y} x2="628" y2={y} stroke="var(--c-line)" strokeDasharray="3 4" />
+                          ))}
+                          {(metricView === 'grpo'
+                            ? [36, 44, 52, 61, 69, 78, 86, 94, 99, 105]
+                            : metricView === 'ppo'
+                            ? [44, 52, 58, 66, 73, 81, 88, 93, 98, 104]
+                            : [96, 88, 79, 71, 63, 55, 48, 41, 35, 29]
+                          ).map((h, i) => {
+                            const x = 24 + i * 60;
+                            return (
+                              <g key={i}>
+                                <rect
+                                  x={x}
+                                  y={112 - h}
+                                  width="36"
+                                  height={h}
+                                  rx="5"
+                                  fill={i >= 7 ? 'var(--c-sage)' : 'var(--c-sage-soft)'}
+                                  stroke="var(--c-sage-border)"
+                                />
+                                <circle cx={x + 18} cy={112 - h - 6} r="3" fill="#C8A96B" />
+                              </g>
+                            );
+                          })}
+                        </svg>
                       </div>
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="p-3 rounded-[8px] border border-line bg-canvas">
-                        <div className="font-mono text-[10.5px] uppercase text-ink-3">GRPO Policy</div>
-                        <div className="font-mono text-[22px] font-semibold text-sage mt-1">
-                          {metricView === 'reward' ? '0.884' : metricView === 'success' ? '92.4%' : '0.024'}
-                        </div>
-                        <div className="text-[11px] text-[var(--c-live-ink)] mt-0.5">
-                          +14.8% vs baseline
-                        </div>
+                  {activeTab === 'preview' && selectedArtifact.type === 'threejs' && (
+                    <div className="rounded-[12px] border border-[#2D352E] bg-[#131A15] p-5 text-[#ECEAE3] relative overflow-hidden">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-[#98AC93]">
+                          Three.js + R3F Sandbox Viewport
+                        </span>
+                        <span className="font-mono text-[10.5px] px-2 py-0.5 rounded bg-[#1F2A20] border border-[#3E4C3B] text-[#C7D3C0]">
+                          60 FPS · WebGL2 · OrbitControls
+                        </span>
                       </div>
-                      <div className="p-3 rounded-[8px] border border-line bg-canvas">
-                        <div className="font-mono text-[10.5px] uppercase text-ink-3">PPO Clip 0.2</div>
-                        <div className="font-mono text-[22px] font-semibold text-brass-ink mt-1">
-                          {metricView === 'reward' ? '0.770' : metricView === 'success' ? '81.0%' : '0.049'}
-                        </div>
-                        <div className="text-[11px] text-ink-3 mt-0.5">v1 authored by Codex</div>
-                      </div>
-                      <div className="p-3 rounded-[8px] border border-line bg-canvas">
-                        <div className="font-mono text-[10.5px] uppercase text-ink-3">Persisted Preset</div>
-                        <div className="font-mono text-[14px] font-semibold text-ink mt-2">
-                          bench:metric = "{metricView}"
-                        </div>
-                        <div className="text-[11px] text-ink-3 mt-1">Synced to artifact_kv_store</div>
-                      </div>
-                    </div>
 
-                    {/* Crisp Bar + Trend Chart */}
-                    <div className="p-3 rounded-[8px] border border-line bg-canvas">
-                      <svg viewBox="0 0 640 120" className="w-full h-[112px]" role="img" aria-label="Sample benchmark chart">
-                        {[25, 55, 85].map((y) => (
-                          <line key={y} x1="12" y1={y} x2="628" y2={y} stroke="var(--c-line)" strokeDasharray="3 4" />
+                      <svg viewBox="0 0 640 220" className="w-full h-[210px]" aria-hidden="true">
+                        {/* Perspective Floor Grid */}
+                        {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                          <line
+                            key={`h-${i}`}
+                            x1={90 + i * 16}
+                            y1={198 - i * 16}
+                            x2={550 - i * 16}
+                            y2={198 - i * 16}
+                            stroke="#263329"
+                            strokeWidth="1.2"
+                          />
                         ))}
-                        {(metricView === 'reward'
-                          ? [38, 44, 52, 60, 68, 76, 84, 92, 98, 102]
-                          : metricView === 'success'
-                          ? [46, 51, 59, 64, 72, 79, 86, 91, 96, 104]
-                          : [92, 86, 78, 70, 62, 54, 48, 42, 36, 30]
-                        ).map((h, i) => {
-                          const x = 24 + i * 60;
-                          return (
-                            <g key={i}>
-                              <rect
-                                x={x}
-                                y={110 - h}
-                                width="36"
-                                height={h}
-                                rx="5"
-                                fill={i >= 7 ? 'var(--c-sage)' : 'var(--c-sage-soft)'}
-                                stroke="var(--c-sage-border)"
-                              />
-                              <circle cx={x + 18} cy={110 - h - 6} r="3" fill="#C8A96B" />
-                            </g>
-                          );
-                        })}
+                        {[-3, -2, -1, 0, 1, 2, 3].map((k) => (
+                          <line
+                            key={`v-${k}`}
+                            x1={320 + k * 42}
+                            y1={198}
+                            x2={320 + k * 24}
+                            y2={102}
+                            stroke="#263329"
+                            strokeWidth="1.2"
+                          />
+                        ))}
+                        {/* Isometric Translucent Crystal Prism */}
+                        <polygon points="320,34 404,78 320,122 236,78" fill="#55684F" fillOpacity="0.45" stroke="#98AC93" strokeWidth="2" />
+                        <polygon points="236,78 320,122 320,186 236,142" fill="#2A352B" fillOpacity="0.72" stroke="#98AC93" strokeWidth="1.8" />
+                        <polygon points="404,78 320,122 320,186 404,142" fill="#1D261F" fillOpacity="0.85" stroke="#C8A96B" strokeWidth="1.8" />
+                        <line x1="320" y1="34" x2="320" y2="186" stroke="#C8A96B" strokeDasharray="4 4" strokeWidth="1.5" />
+                        <circle cx="320" cy="34" r="5" fill="#C8A96B" />
+                        {/* Axis Gizmo */}
+                        <line x1="560" y1="176" x2="594" y2="176" stroke="#8FA28A" strokeWidth="2.5" strokeLinecap="round" />
+                        <line x1="560" y1="176" x2="560" y2="142" stroke="#C8A96B" strokeWidth="2.5" strokeLinecap="round" />
+                        <line x1="560" y1="176" x2="538" y2="192" stroke="#7C93A8" strokeWidth="2.5" strokeLinecap="round" />
                       </svg>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {activeTab === 'preview' && selectedArtifact.type === 'mermaid' && (
-                  <div className="rounded-[10px] border border-line bg-raised p-5 flex flex-col gap-4">
-                    <div className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-3">
-                      Mermaid v11 Architecture Flow · Rendered Live
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
-                      {[
-                        { badge: 'RANK 10..40', title: 'Workspace RBAC', desc: 'Google OIDC + optional hd domain lock', cls: 'border-[var(--c-sage-border)] bg-sage-soft/60' },
-                        { badge: 'INHERIT OR ISOLATE', title: 'Project Scope', desc: 'inheritWorkspaceAcl = false for private projects', cls: 'border-brass-line bg-brass-soft/60' },
-                        { badge: 'PREFIX MATCH', title: 'Category Folder', desc: 'Grants cascade cleanly down sub-paths', cls: 'border-line bg-canvas' },
-                        { badge: 'SAFE CEILING', title: 'Artifact v1..vN', desc: 'Agents blocked from deletes & IAM edits', cls: 'border-[var(--c-sage-border)] bg-sage-soft' },
-                      ].map((n, idx) => (
-                        <div key={idx} className={`p-3.5 rounded-[10px] border ${n.cls}`}>
-                          <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-3">
-                            {n.badge}
+                  {activeTab === 'preview' && selectedArtifact.type === 'mermaid' && (
+                    <div className="rounded-[12px] border border-line bg-raised p-5 flex flex-col gap-5">
+                      <div className="font-mono text-[11px] uppercase tracking-[0.06em] text-ink-3">
+                        Mermaid v11 · Cascading Access Control
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
+                        {[
+                          { tier: 'Workspace', role: 'Owner', bg: 'bg-sage-soft/65 border-[var(--c-sage-border)]' },
+                          { tier: 'Private Project', role: 'Admin', bg: 'bg-brass-soft/65 border-brass-line' },
+                          { tier: 'Category', role: 'Editor', bg: 'bg-canvas border-line' },
+                          { tier: 'Artifact v2', role: 'Safe Agent', bg: 'bg-sage-soft border-[var(--c-sage-border)]' },
+                        ].map((node) => (
+                          <div key={node.tier} className={`p-4 rounded-[10px] border text-center ${node.bg}`}>
+                            <div className="text-[13.5px] font-semibold text-ink">{node.tier}</div>
+                            <div className="font-mono text-[11px] text-ink-3 mt-1">{node.role}</div>
                           </div>
-                          <div className="text-[13.5px] font-semibold text-ink mt-1">{n.title}</div>
-                          <p className="m-0 mt-1 text-[11.5px] text-ink-2 leading-snug">{n.desc}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'preview' && selectedArtifact.type === 'tensorboard' && (
-                  <div className="rounded-[10px] border border-line bg-raised p-5 flex flex-col gap-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-3">
-                          TensorBoard Scalar Stream + R2 SigV4 Checkpoint
-                        </div>
-                        <div className="text-[15px] font-semibold text-ink mt-0.5">
-                          qwen-grpo-run · step 4,000 / 4,000
-                        </div>
-                      </div>
-                      <span className="font-mono text-[11.5px] px-2.5 py-1 rounded-[6px] bg-brass-soft text-brass-ink border border-brass-line">
-                        best: step-4000-best.safetensors (14.2 GB)
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="p-3.5 rounded-[8px] border border-line bg-canvas">
-                        <div className="flex justify-between font-mono text-[11px] text-ink-2 mb-2">
-                          <span>train/reward</span>
-                          <span className="text-sage font-semibold">0.884</span>
-                        </div>
-                        <svg viewBox="0 0 280 80" className="w-full h-[76px]" aria-label="Reward curve">
-                          <polyline
-                            fill="none"
-                            stroke="var(--c-sage)"
-                            strokeWidth="2.5"
-                            points="8,68 48,60 88,54 128,44 168,36 208,24 248,16 272,12"
-                          />
-                        </svg>
-                      </div>
-                      <div className="p-3.5 rounded-[8px] border border-line bg-canvas">
-                        <div className="flex justify-between font-mono text-[11px] text-ink-2 mb-2">
-                          <span>train/kl_div</span>
-                          <span className="text-brass-ink font-semibold">0.024</span>
-                        </div>
-                        <svg viewBox="0 0 280 80" className="w-full h-[76px]" aria-label="KL divergence curve">
-                          <polyline
-                            fill="none"
-                            stroke="#C8A96B"
-                            strokeWidth="2.5"
-                            points="8,22 48,48 88,42 128,38 168,31 208,29 248,26 272,24"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'preview' && selectedArtifact.type === 'svg' && (
-                  <div className="rounded-[10px] border border-line bg-raised p-5 flex flex-col gap-3">
-                    <div className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-3">
-                      SVG Topology Artboard · Vercel Hobby ($0/mo) + Neon Free + R2
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12px]">
-                      <div className="p-3.5 rounded-[8px] border border-line bg-canvas">
-                        <div className="font-semibold text-ink">1 · Edge Static CDN</div>
-                        <p className="m-0 mt-1 text-ink-2">
-                          React SPA + OG image + robots/sitemap served globally at 0 function invocations.
-                        </p>
-                      </div>
-                      <div className="p-3.5 rounded-[8px] border border-[var(--c-sage-border)] bg-sage-soft/50">
-                        <div className="font-semibold text-ink">2 · Stateless Functions</div>
-                        <p className="m-0 mt-1 text-ink-2">
-                          <code className="font-mono">api/index.js</code> derives keys from 1 secret &amp; serves <code className="font-mono">/api/sync</code> 304 ETags.
-                        </p>
-                      </div>
-                      <div className="p-3.5 rounded-[8px] border border-brass-line bg-brass-soft/50">
-                        <div className="font-semibold text-ink">3 · Neon + R2 Blobs</div>
-                        <p className="m-0 mt-1 text-ink-2">
-                          Pooled Postgres scale-to-zero (`max: 3`) + direct R2 SigV4 URLs for checkpoints &gt;4.5 MB.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'code' && (
-                  <div className="rounded-[10px] border border-line bg-raised overflow-hidden">
-                    <div className="px-3.5 py-2 border-b border-line bg-sunken flex items-center justify-between">
-                      <span className="font-mono text-[11px] text-ink-2">
-                        {selectedArtifact.slug} · v{selectedArtifact.version}
-                      </span>
-                      <button
-                        onClick={() => handleCopy('code', selectedArtifact.code.join('\n'))}
-                        aria-label="Copy demo artifact source code"
-                        className="min-h-[32px] px-2.5 rounded bg-raised border border-line text-[11px] font-mono text-ink-2 hover:text-ink inline-flex items-center gap-1"
-                      >
-                        {copiedCmd === 'code' ? <Check className="w-3 h-3 text-sage" aria-hidden="true" /> : <Copy className="w-3 h-3" aria-hidden="true" />}
-                        {copiedCmd === 'code' ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                    <div className="p-3 font-mono text-[12px] leading-[1.6] overflow-x-auto">
-                      {selectedArtifact.code.map((ln, idx) => (
-                        <div key={idx} className="grid grid-cols-[36px_1fr] gap-3">
-                          <span aria-hidden="true" className="text-right text-ink-3 select-none">{idx + 1}</span>
-                          <pre className="m-0 text-ink whitespace-pre">{ln || ' '}</pre>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'diff' && (
-                  <div className="rounded-[10px] border border-line bg-raised overflow-hidden font-mono text-[12px] leading-[1.6]">
-                    <div className="px-3.5 py-2 border-b border-line bg-sunken text-ink-2 flex items-center gap-2">
-                      <GitCompare className="w-3.5 h-3.5 text-sage" aria-hidden="true" />
-                      <span>
-                        Comparing v{Math.max(1, selectedArtifact.version - 1)} → v{selectedArtifact.version}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-line/40 overflow-x-auto">
-                      {selectedArtifact.diff.map((row, idx) => (
-                        <div
-                          key={idx}
-                          className={`grid grid-cols-[34px_34px_20px_1fr] px-2 ${
-                            row.kind === 'add'
-                              ? 'bg-add text-add-ink'
-                              : row.kind === 'del'
-                              ? 'bg-del text-del-ink'
-                              : 'text-ink-2'
-                          }`}
-                        >
-                          <span aria-hidden="true" className="text-right pr-2 text-ink-3 select-none">{row.lineOld}</span>
-                          <span aria-hidden="true" className="text-right pr-2 text-ink-3 select-none">{row.lineNew}</span>
-                          <span aria-hidden="true" className="select-none font-semibold">
-                            {row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ' '}
-                          </span>
-                          <pre className="m-0 whitespace-pre">{row.text}</pre>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'storage' && (
-                  <div className="rounded-[10px] border border-line bg-raised overflow-hidden">
-                    <div className="px-3.5 py-2 border-b border-line bg-sunken text-[11.5px] font-mono text-ink-2 flex items-center justify-between">
-                      <span>window.storage · SQLite / Postgres KV</span>
-                      <span className="text-ink-3">Viewer Copy-on-Write Protected</span>
-                    </div>
-                    <table className="w-full text-left border-collapse text-[12.5px]">
-                      <thead>
-                        <tr className="border-b border-line text-ink-3 font-mono text-[11px] uppercase">
-                          <th className="py-2 px-3.5 font-medium">Key</th>
-                          <th className="py-2 px-3.5 font-medium">Value (JSON / String)</th>
-                          <th className="py-2 px-3.5 font-medium">Isolation Scope</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {selectedArtifact.storage.map((entry) => (
-                          <tr key={entry.key}>
-                            <td className="py-2.5 px-3.5 font-mono text-ink font-medium">{entry.key}</td>
-                            <td className="py-2.5 px-3.5 font-mono text-ink-2">{entry.value}</td>
-                            <td className="py-2.5 px-3.5 font-mono text-[11px] text-sage">{entry.scope}</td>
-                          </tr>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Footnote inside preview frame */}
-                <div className="mt-3 pt-3 border-t border-line/70 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-ink-3 font-mono">
-                  <span>Exportable as standalone single-file HTML (`?version={selectedArtifact.version}&amp;download=1`)</span>
-                  <span>Zero-trust sandboxed iframe · strict postMessage origin check</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 3-Step Multi-Agent Workflow */}
-        <section id="agents" aria-labelledby="agents-heading" className="border-y border-line bg-raised">
-          <div className="max-w-[1160px] mx-auto px-5 sm:px-8 py-14">
-            <span className="font-mono text-[11px] uppercase tracking-[0.07em] text-sage">
-              Cross-Assistant Continuity
-            </span>
-            <h2 id="agents-heading" className="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0 mt-1 max-w-[680px]">
-              Switch agents mid-task without starting over
-            </h2>
-
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5">
-              {[
-                {
-                  step: '01 · SETUP ONCE',
-                  title: 'Wire Claude Code, Codex & Antigravity',
-                  body: 'Run npx myartifact setup to register .mcp.json and native skill guides across your coding assistants — or point agents at your cloud URL via MYARTIFACT_CLOUD_URL.',
-                  code: 'npx myartifact setup && myartifact serve',
-                },
-                {
-                  step: '02 · ITERATE TOGETHER',
-                  title: 'Versioned handoffs in an LLM Wiki',
-                  body: 'Claude Code scaffolds a v1 dashboard, Codex edits layout spacing into v2, and Antigravity attaches RL scalars to v3 — linked together via [[wiki-links]] and index.md.',
-                  code: 'artifact_create -> artifact_update -> artifact_wiki_index',
-                },
-                {
-                  step: '03 · LOGIN ONCE & SHARE',
-                  title: 'Cloud identity with Safe Agent Ceiling',
-                  body: 'Run myartifact login once via Google OIDC. Local MCP tools inherit your RBAC permissions while blocking accidental deletes or IAM changes unless --elevate is set.',
-                  code: 'myartifact login --cloud https://myartifact.app',
-                },
-              ].map((card) => (
-                <article
-                  key={card.step}
-                  className="p-5 rounded-[12px] border border-line bg-canvas flex flex-col justify-between gap-4"
-                >
-                  <div>
-                    <div className="font-mono text-[11px] uppercase tracking-[0.07em] text-brass-ink">
-                      {card.step}
-                    </div>
-                    <h3 className="text-[16px] font-semibold text-ink m-0 mt-2">{card.title}</h3>
-                    <p className="text-[13.5px] leading-relaxed text-ink-2 mt-2 mb-0">{card.body}</p>
-                  </div>
-                  <code className="font-mono text-[11.5px] px-2.5 py-2 rounded-[7px] bg-raised border border-line text-ink truncate block">
-                    {card.code}
-                  </code>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* 8-Pillar Capabilities Grid */}
-        <section id="features" aria-labelledby="features-heading" className="max-w-[1160px] mx-auto px-5 sm:px-8 py-14">
-          <span className="font-mono text-[11px] uppercase tracking-[0.07em] text-sage">
-            Full Studio &amp; Platform Capabilities
-          </span>
-          <h2 id="features-heading" className="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0 mt-1">
-            Everything needed from localhost prototype to team cloud
-          </h2>
-
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              {
-                Icon: Atom,
-                title: '7 Live Sandboxed Runtimes',
-                desc: 'Preloaded React 19, Tailwind, Recharts, Lucide, Three.js / R3F, Mermaid 11, Markdown/KaTeX, SVG, HTML, and TensorBoard.',
-              },
-              {
-                Icon: GitCompare,
-                title: 'Immutable Versions & Diffs',
-                desc: 'Every agent update writes a permanent checkpoint (v1, v2, v3) with collapsible unified code diffs and instant 1-click rollback.',
-              },
-              {
-                Icon: Database,
-                title: 'Safe window.storage State',
-                desc: 'Interactive artifacts persist KV state across reloads. Read-only viewers test interactions in an isolated Copy-on-Write layer.',
-              },
-              {
-                Icon: BookOpen,
-                title: 'Karpathy-Pattern LLM Wiki',
-                desc: 'Auto-synthesizes project / category folders, index.md, log.md, FTS5/Postgres full-text search, and [[wiki-links]] backlinks.',
-              },
-              {
-                Icon: Activity,
-                title: 'TensorBoard & S3 Checkpoints',
-                desc: 'Stream .tfevents scalar series live and upload multi-GB .safetensors/.pt checkpoints directly via SigV4 pre-signed R2/S3 URLs.',
-              },
-              {
-                Icon: FolderTree,
-                title: 'Cascading Cloud RBAC',
-                desc: 'Roles cascade Workspace -> Project -> Category -> Artifact with support for isolated private projects and expiring grants.',
-              },
-              {
-                Icon: Share2,
-                title: 'Batch Sharing & Links',
-                desc: 'Share batches of artifacts or entire folders with Google emails (auto-claimed pending invites), groups, hd domains, or share links.',
-              },
-              {
-                Icon: Sparkles,
-                title: '$0/mo Serverless Architecture',
-                desc: 'Runs statelessly on Vercel Hobby + Neon Free Postgres + Cloudflare R2 using conditional ETag HTTP sync instead of open WebSockets.',
-              },
-            ].map(({ Icon, title, desc }) => (
-              <article
-                key={title}
-                className="p-4.5 rounded-[12px] border border-line bg-raised hover:border-line-strong transition-colors flex flex-col gap-2.5"
-              >
-                <span className="w-[34px] h-[34px] rounded-[8px] bg-sage-soft border border-[var(--c-sage-border)] text-sage flex items-center justify-center">
-                  <Icon className="w-4 h-4" />
-                </span>
-                <h3 className="text-[14.5px] font-semibold text-ink m-0">{title}</h3>
-                <p className="text-[13px] leading-relaxed text-ink-2 m-0">{desc}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* Cloud RBAC & Safe Agent Governance Section */}
-        <section id="rbac" aria-labelledby="rbac-heading" className="border-y border-line bg-raised">
-          <div className="max-w-[1160px] mx-auto px-5 sm:px-8 py-14 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            <div className="lg:col-span-6">
-              <span className="font-mono text-[11px] uppercase tracking-[0.07em] text-sage">
-                Zero-Trust Multi-Tenant Security
-              </span>
-              <h2 id="rbac-heading" className="font-serif text-[26px] sm:text-[32px] font-semibold text-ink m-0 mt-1">
-                Smooth permissions for teams. Strict ceilings for autonomous agents.
-              </h2>
-              <p className="text-[14.5px] leading-relaxed text-ink-2 mt-3">
-                Sign in with Google OIDC on the web (`__Host-ma_session` + CSRF tokens) or run{' '}
-                <code className="font-mono text-[12.5px] px-1.5 py-0.5 rounded bg-canvas border border-line">
-                  myartifact login
-                </code>{' '}
-                once locally. Every CLI call and MCP tool inherits your exact Google identity with dual-attribution audit logging (`actorEmail` + `viaAgent`).
-              </p>
-
-              <ul className="mt-5 space-y-2.5 text-[13.5px] text-ink-2 list-none p-0 m-0">
-                {[
-                  'Domain-spoofing guard validates email_verified: true + Google OIDC hd claims.',
-                  '30s refresh-token rotation grace window + replay detection revokes compromised CLI sessions.',
-                  'Batch Sharing queues pending_email invites claimed automatically on first Google login.',
-                ].map((pt) => (
-                  <li key={pt} className="flex items-start gap-2.5">
-                    <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
-                    <span>{pt}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="p-4 rounded-[12px] border border-[var(--c-sage-border)] bg-sage-soft/50">
-                <div className="flex items-center gap-2 text-[13px] font-semibold text-sage">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Default Agent Ceiling</span>
-                </div>
-                <p className="text-[12px] text-ink-2 mt-1.5 mb-3">
-                  Granted by <code className="font-mono">myartifact login</code> for Claude Code, Codex &amp; Antigravity:
-                </p>
-                <div className="space-y-1.5 font-mono text-[11.5px]">
-                  {[
-                    ['artifacts:read', 'Search & fetch versions'],
-                    ['artifacts:write', 'Create & iterate v1..vN'],
-                    ['storage:write', 'Update widget KV state'],
-                    ['tb:write', 'Stream TensorBoard runs'],
-                  ].map(([scope, desc]) => (
-                    <div key={scope} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded bg-raised border border-line">
-                      <span className="text-ink font-medium">{scope}</span>
-                      <span className="text-ink-3 text-[10.5px] truncate">{desc}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-4 rounded-[12px] border border-brass-line bg-brass-soft/45 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-2 text-[13px] font-semibold text-brass-ink">
-                    <Lock className="w-4 h-4" />
-                    <span>Blocked Without --elevate</span>
-                  </div>
-                  <p className="text-[12px] text-ink-2 mt-1.5 mb-3">
-                    Protected human-only operations return <code className="font-mono">403 agent_scope_restricted</code>:
-                  </p>
-                  <div className="space-y-1.5 font-mono text-[11.5px]">
-                    {[
-                      ['artifacts:delete', 'Destructive deletion'],
-                      ['iam:share', 'Batch grants & share links'],
-                      ['workspace:admin', 'Groups & private projects'],
-                    ].map(([scope, desc]) => (
-                      <div key={scope} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded bg-raised border border-line">
-                        <span className="text-danger-ink font-medium">{scope}</span>
-                        <span className="text-ink-3 text-[10.5px] truncate">{desc}</span>
                       </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'preview' && selectedArtifact.type === 'tensorboard' && (
+                    <div className="rounded-[12px] border border-line bg-raised p-5 flex flex-col gap-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-ink-3">
+                          TensorBoard Scalar Stream · Step 4,000
+                        </span>
+                        <span className="font-mono text-[11px] px-2.5 py-0.5 rounded bg-brass-soft text-brass-ink border border-brass-line">
+                          step-4000.safetensors · R2 SigV4
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-3.5 rounded-[9px] border border-line bg-canvas">
+                          <div className="flex justify-between font-mono text-[11.5px] text-ink-2 mb-2">
+                            <span>train/reward</span>
+                            <span className="text-sage font-semibold">0.884</span>
+                          </div>
+                          <svg viewBox="0 0 280 90" className="w-full h-[90px]" aria-hidden="true">
+                            <line x1="0" y1="30" x2="280" y2="30" stroke="var(--c-line)" strokeDasharray="3 4" />
+                            <line x1="0" y1="60" x2="280" y2="60" stroke="var(--c-line)" strokeDasharray="3 4" />
+                            <path
+                              d="M 8 76 Q 70 68, 120 48 T 272 14"
+                              fill="none"
+                              stroke="var(--c-sage)"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </div>
+                        <div className="p-3.5 rounded-[9px] border border-line bg-canvas">
+                          <div className="flex justify-between font-mono text-[11.5px] text-ink-2 mb-2">
+                            <span>train/kl_div</span>
+                            <span className="text-brass-ink font-semibold">0.024</span>
+                          </div>
+                          <svg viewBox="0 0 280 90" className="w-full h-[90px]" aria-hidden="true">
+                            <line x1="0" y1="30" x2="280" y2="30" stroke="var(--c-line)" strokeDasharray="3 4" />
+                            <line x1="0" y1="60" x2="280" y2="60" stroke="var(--c-line)" strokeDasharray="3 4" />
+                            <path
+                              d="M 8 24 Q 70 58, 130 42 T 272 28"
+                              fill="none"
+                              stroke="#C8A96B"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'diff' && (
+                    <div className="rounded-[12px] border border-line bg-raised overflow-hidden font-mono text-[12px] leading-[1.65]">
+                      <div className="px-4 py-2 border-b border-line bg-sunken text-ink-2 flex items-center gap-2">
+                        <GitCompare className="w-3.5 h-3.5 text-sage" aria-hidden="true" />
+                        <span>v{Math.max(1, selectedArtifact.version - 1)} → v{selectedArtifact.version}</span>
+                      </div>
+                      <div className="divide-y divide-line/40 overflow-x-auto">
+                        {selectedArtifact.diff.map((row, idx) => (
+                          <div
+                            key={idx}
+                            className={`grid grid-cols-[34px_34px_20px_1fr] px-2 ${
+                              row.kind === 'add'
+                                ? 'bg-add text-add-ink'
+                                : row.kind === 'del'
+                                ? 'bg-del text-del-ink'
+                                : 'text-ink-2'
+                            }`}
+                          >
+                            <span aria-hidden="true" className="text-right pr-2 text-ink-3 select-none">{row.lineOld}</span>
+                            <span aria-hidden="true" className="text-right pr-2 text-ink-3 select-none">{row.lineNew}</span>
+                            <span aria-hidden="true" className="select-none font-semibold">
+                              {row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ' '}
+                            </span>
+                            <pre className="m-0 whitespace-pre">{row.text}</pre>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'code' && (
+                    <div className="rounded-[12px] border border-line bg-raised overflow-hidden">
+                      <div className="px-4 py-2 border-b border-line bg-sunken flex items-center justify-between">
+                        <span className="font-mono text-[11.5px] text-ink-2">
+                          {selectedArtifact.slug} · v{selectedArtifact.version}
+                        </span>
+                        <button
+                          onClick={() => handleCopy('code', selectedArtifact.code.join('\n'))}
+                          aria-label="Copy source code snippet"
+                          className="min-h-[32px] px-2.5 rounded bg-raised border border-line text-[11.5px] font-mono text-ink-2 hover:text-ink inline-flex items-center gap-1"
+                        >
+                          {copiedCmd === 'code' ? (
+                            <Check className="w-3 h-3 text-sage" aria-hidden="true" />
+                          ) : (
+                            <Copy className="w-3 h-3" aria-hidden="true" />
+                          )}
+                          {copiedCmd === 'code' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div className="p-3.5 font-mono text-[12px] leading-[1.6] overflow-x-auto">
+                        {selectedArtifact.code.map((ln, idx) => (
+                          <div key={idx} className="grid grid-cols-[32px_1fr] gap-3">
+                            <span aria-hidden="true" className="text-right text-ink-3 select-none">
+                              {idx + 1}
+                            </span>
+                            <pre className="m-0 text-ink whitespace-pre">{ln || ' '}</pre>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'state' && (
+                    <div className="rounded-[12px] border border-line bg-raised overflow-hidden">
+                      <div className="px-4 py-2 border-b border-line bg-sunken text-[11.5px] font-mono text-ink-2">
+                        window.storage · Viewer Copy-on-Write Isolation
+                      </div>
+                      <table className="w-full text-left border-collapse text-[12.5px]">
+                        <thead>
+                          <tr className="border-b border-line text-ink-3 font-mono text-[11px] uppercase">
+                            <th className="py-2.5 px-4 font-medium">Key</th>
+                            <th className="py-2.5 px-4 font-medium">Value</th>
+                            <th className="py-2.5 px-4 font-medium">Scope</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-line">
+                          {selectedArtifact.storage.map((entry) => (
+                            <tr key={entry.key}>
+                              <td className="py-2.5 px-4 font-mono text-ink font-medium">{entry.key}</td>
+                              <td className="py-2.5 px-4 font-mono text-ink-2">{entry.value}</td>
+                              <td className="py-2.5 px-4 font-mono text-[11px] text-sage">{entry.scope}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4-Card Visual Bento Grid */}
+        <section id="features" aria-labelledby="features-heading" className="border-t border-line bg-raised">
+          <div className="max-w-[1120px] mx-auto px-5 sm:px-8 py-20">
+            <div className="max-w-[540px]">
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-sage">
+                How It Works
+              </span>
+              <h2 id="features-heading" className="font-serif text-[28px] sm:text-[38px] leading-[1.12] font-semibold text-ink m-0 mt-2">
+                Built for multi-agent workflows
+              </h2>
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Bento 1: Cross-Agent Version Timeline */}
+              <article className="lg:col-span-7 rounded-[14px] border border-line bg-canvas p-6 flex flex-col justify-between gap-6">
+                <div className="rounded-[10px] border border-line bg-raised p-4 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="px-2.5 py-1.5 rounded-[7px] font-mono text-[11.5px] font-medium border border-line whitespace-nowrap" style={{ backgroundColor: 'var(--ag-claude-bg)', color: 'var(--ag-claude-fg)' }}>
+                      v1 · Claude
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 text-ink-3 shrink-0" aria-hidden="true" />
+                    <span className="px-2.5 py-1.5 rounded-[7px] font-mono text-[11.5px] font-medium border border-line whitespace-nowrap" style={{ backgroundColor: 'var(--ag-codex-bg)', color: 'var(--ag-codex-fg)' }}>
+                      v2 · Codex +18 -4
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 text-ink-3 shrink-0" aria-hidden="true" />
+                    <span className="px-2.5 py-1.5 rounded-[7px] font-mono text-[11.5px] font-medium border border-line whitespace-nowrap" style={{ backgroundColor: 'var(--ag-agy-bg)', color: 'var(--ag-agy-fg)' }}>
+                      v3 · Antigravity
+                    </span>
+                  </div>
+                  <span className="font-mono text-[11px] px-2 py-1 rounded bg-brass-soft text-brass-ink border border-brass-line whitespace-nowrap">
+                    index.md Wiki
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-[17px] font-semibold text-ink m-0">
+                    Cross-Agent Version Timeline
+                  </h3>
+                  <p className="text-[14px] text-ink-2 m-0 mt-1.5 leading-relaxed">
+                    Hand off visual work between assistants with immutable checkpoints, unified diffs, and 1-click rollback.
+                  </p>
+                </div>
+              </article>
+
+              {/* Bento 2: Safe Agent Scope Ceiling */}
+              <article className="lg:col-span-5 rounded-[14px] border border-line bg-canvas p-6 flex flex-col justify-between gap-6">
+                <div className="rounded-[10px] border border-line bg-raised p-4 flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
+                    {['artifacts:read', 'artifacts:write', 'storage:write', 'tb:write'].map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-sage-soft text-sage border border-[var(--c-sage-border)]">
+                        <Check className="w-3 h-3" aria-hidden="true" />
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 font-mono text-[11]">
+                    {['artifacts:delete', 'iam:share'].map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-brass-soft text-brass-ink border border-brass-line">
+                        <Lock className="w-3 h-3" aria-hidden="true" />
+                        {s}
+                      </span>
                     ))}
                   </div>
                 </div>
-                <div className="mt-3 pt-2.5 border-t border-brass-line/60 font-mono text-[11px] text-brass-ink">
-                  Use `myartifact login --elevate` for 24h admin CLI
+
+                <div>
+                  <h3 className="text-[17px] font-semibold text-ink m-0">
+                    Safe Agent Scope Ceiling
+                  </h3>
+                  <p className="text-[14px] text-ink-2 m-0 mt-1.5 leading-relaxed">
+                    Log in once via <code className="font-mono text-[12.5px]">myartifact login</code>; agents share your identity while destructive actions stay blocked.
+                  </p>
                 </div>
-              </div>
+              </article>
+
+              {/* Bento 3: Cascading RBAC & Batch Share */}
+              <article className="lg:col-span-5 rounded-[14px] border border-line bg-canvas p-6 flex flex-col justify-between gap-6">
+                <div className="rounded-[10px] border border-line bg-raised p-4 flex items-center justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-1.5 font-mono text-[11px] px-2.5 py-1 rounded bg-sunken text-ink border border-line">
+                      <FolderTree className="w-3.5 h-3.5 text-sage" aria-hidden="true" />
+                      Workspace → Private Project
+                    </div>
+                    <div className="flex items-center gap-1.5 font-mono text-[11px] text-ink-3">
+                      <ShieldCheck className="w-3.5 h-3.5 text-sage" aria-hidden="true" />
+                      <span>@acme.com + Share Links</span>
+                    </div>
+                  </div>
+                  <span className="font-mono text-[11px] px-2.5 py-1 rounded-full bg-sage text-canvas shrink-0">
+                    Google OIDC
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-[17px] font-semibold text-ink m-0">
+                    Cascading RBAC &amp; Batch Sharing
+                  </h3>
+                  <p className="text-[14px] text-ink-2 m-0 mt-1.5 leading-relaxed">
+                    Grant roles across selected artifacts or folders for emails, groups, Google domains, or expiring links.
+                  </p>
+                </div>
+              </article>
+
+              {/* Bento 4: Local SQLite or $0/mo Cloud */}
+              <article className="lg:col-span-7 rounded-[14px] border border-line bg-canvas p-6 flex flex-col justify-between gap-6">
+                <div className="rounded-[10px] border border-line bg-raised p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-[8px] border border-line bg-canvas flex items-center gap-2.5">
+                    <Database className="w-4 h-4 text-sage shrink-0" aria-hidden="true" />
+                    <div>
+                      <div className="text-[12.5px] font-semibold text-ink">Local Offline Studio</div>
+                      <div className="font-mono text-[11px] text-ink-3">SQLite FTS5 · WebSocket</div>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-[8px] border border-[var(--c-sage-border)] bg-sage-soft/50 flex items-center gap-2.5">
+                    <Sparkles className="w-4 h-4 text-sage shrink-0" aria-hidden="true" />
+                    <div>
+                      <div className="text-[12.5px] font-semibold text-ink">$0/mo Serverless Cloud</div>
+                      <div className="font-mono text-[11px] text-ink-3">Vercel · Neon · R2 · ETag</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-[17px] font-semibold text-ink m-0">
+                    Local SQLite or $0/mo Serverless Cloud
+                  </h3>
+                  <p className="text-[14px] text-ink-2 m-0 mt-1.5 leading-relaxed">
+                    Run 100% locally on disk, or deploy statelessly on Vercel Hobby, Neon Postgres, and Cloudflare R2.
+                  </p>
+                </div>
+              </article>
             </div>
           </div>
         </section>
 
-        {/* Comparison Table */}
-        <section id="compare" aria-labelledby="compare-heading" className="max-w-[1160px] mx-auto px-5 sm:px-8 py-14">
-          <span className="font-mono text-[11px] uppercase tracking-[0.07em] text-sage">
-            Architecture Comparison
-          </span>
-          <h2 id="compare-heading" className="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0 mt-1">
-            Why teams replace ad-hoc local previews and chat sandboxes
-          </h2>
+        {/* Clean Checkmark Comparison Table */}
+        <section aria-labelledby="compare-heading" className="max-w-[920px] mx-auto px-5 sm:px-8 py-20">
+          <div className="text-center mb-8">
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-sage">
+              Comparison
+            </span>
+            <h2 id="compare-heading" className="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0 mt-2">
+              At a glance
+            </h2>
+          </div>
 
-          <div className="mt-7 rounded-[12px] border border-line bg-raised overflow-x-auto">
-            <table className="w-full text-left border-collapse text-[13px] min-w-[680px]">
+          <div className="rounded-[14px] border border-line bg-raised overflow-x-auto shadow-[0_6px_24px_rgba(30,36,32,0.05)]">
+            <table className="w-full text-left border-collapse text-[13.5px] min-w-[560px]">
               <thead>
-                <tr className="border-b border-line bg-sunken/70 font-mono text-[11px] uppercase tracking-[0.05em] text-ink-2">
-                  <th className="py-3 px-4 font-semibold">Capability</th>
-                  <th className="py-3 px-4 font-semibold text-sage">MyArtifact (Local + Cloud)</th>
-                  <th className="py-3 px-4 font-semibold">Chat-Locked Web Artifacts</th>
-                  <th className="py-3 px-4 font-semibold">Raw Local Files</th>
+                <tr className="border-b border-line bg-canvas/70 font-mono text-[11px] uppercase tracking-[0.06em] text-ink-3">
+                  <th className="py-3.5 px-5 font-medium">Capability</th>
+                  <th className="py-3.5 px-4 font-semibold text-sage">MyArtifact</th>
+                  <th className="py-3.5 px-4 font-medium">Chat Artifacts</th>
+                  <th className="py-3.5 px-4 font-medium">Local Files</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {[
-                  ['Shared across Claude Code, Codex & Antigravity', 'Native MCP + CLI + Watcher', 'Locked per chat session', 'Manual copy-paste'],
-                  ['Live React / Three.js / Mermaid / KaTeX Sandbox', 'Built-in multi-runtime iframe', 'React/HTML only', 'Requires Vite per folder'],
-                  ['Immutable v1..vN Checkpoints & Code Diffs', 'Built-in timeline + rollback', 'Overwritten in chat stream', 'Requires manual git commits'],
-                  ['Persistent window.storage & Viewer Isolation', 'SQLite/Postgres + CoW isolation', 'Ephemeral session only', 'No built-in bridge'],
-                  ['LLM Wiki (index.md, log.md & FTS search)', 'Automatic synthesis & backlinks', 'None', 'Manual scripting'],
-                  ['Google OIDC RBAC & Batch Sharing', 'Cascading 4-level RBAC + Links', 'All-or-nothing public link', 'None'],
-                  ['Agent Scope Ceiling & Audit Attribution', 'Delegated scopes + viaAgent log', 'Not applicable', 'Unrestricted shell access'],
-                ].map(([cap, ma, chat, raw]) => (
-                  <tr key={cap} className="hover:bg-canvas/50 transition-colors">
-                    <td className="py-3 px-4 font-medium text-ink">{cap}</td>
-                    <td className="py-3 px-4 text-sage font-medium">{ma}</td>
-                    <td className="py-3 px-4 text-ink-3">{chat}</td>
-                    <td className="py-3 px-4 text-ink-3">{raw}</td>
+                {COMPARISON_ROWS.map((row) => (
+                  <tr key={row.label} className="hover:bg-canvas/40 transition-colors">
+                    <td className="py-3.5 px-5 font-medium text-ink">{row.label}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="inline-flex items-center gap-1.5 font-medium text-sage">
+                        <Check className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <span>{row.myArtifact}</span>
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-ink-3">{row.chatLocked}</td>
+                    <td className="py-3.5 px-4 text-ink-3">{row.rawFiles}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1222,27 +1091,29 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
           </div>
         </section>
 
-        {/* FAQ Accordion Section */}
+        {/* Calm 5-Item FAQ */}
         <section id="faq" aria-labelledby="faq-heading" className="border-t border-line bg-raised">
-          <div className="max-w-[920px] mx-auto px-5 sm:px-8 py-14">
-            <span className="font-mono text-[11px] uppercase tracking-[0.07em] text-sage">
-              Frequently Asked Questions
-            </span>
-            <h2 id="faq-heading" className="font-serif text-[26px] sm:text-[32px] font-semibold text-ink m-0 mt-1">
-              Technical answers for engineers and AI teams
-            </h2>
+          <div className="max-w-[760px] mx-auto px-5 sm:px-8 py-20">
+            <div className="text-center mb-8">
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-sage">
+                FAQ
+              </span>
+              <h2 id="faq-heading" className="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0 mt-2">
+                Common questions
+              </h2>
+            </div>
 
-            <div className="mt-7 space-y-3">
+            <div className="space-y-2.5">
               {FAQ_ITEMS.map((item) => (
                 <details
                   key={item.q}
-                  className="group rounded-[10px] border border-line bg-canvas p-4 open:border-line-strong transition-colors"
+                  className="group rounded-[11px] border border-line bg-canvas px-4 py-3.5 open:border-line-strong transition-colors"
                 >
-                  <summary className="cursor-pointer list-none flex items-center justify-between gap-4 font-semibold text-[14.5px] text-ink">
+                  <summary className="cursor-pointer list-none flex items-center justify-between gap-4 font-medium text-[14.5px] text-ink min-h-[32px]">
                     <span>{item.q}</span>
-                    <ChevronDown className="w-4 h-4 text-ink-3 shrink-0 group-open:rotate-180 transition-transform" />
+                    <ChevronDown className="w-4 h-4 text-ink-3 shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true" />
                   </summary>
-                  <p className="mt-3 mb-0 text-[13.5px] leading-relaxed text-ink-2">
+                  <p className="mt-2.5 mb-0 text-[13.5px] leading-relaxed text-ink-2">
                     {item.a}
                   </p>
                 </details>
@@ -1251,49 +1122,37 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
           </div>
         </section>
 
-        {/* Bottom CTA Card */}
-        <section className="max-w-[1160px] mx-auto px-5 sm:px-8 py-12">
-          <div className="rounded-[16px] border border-[var(--c-sage-border)] bg-sage-soft/55 p-7 sm:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div>
-              <div className="font-mono text-[11px] uppercase tracking-[0.07em] text-sage">
-                Open Source · MIT License
-              </div>
-              <h2 className="font-serif text-[24px] sm:text-[30px] font-semibold text-ink m-0 mt-1">
-                Give your coding agents a persistent visual canvas today.
-              </h2>
-              <p className="text-[14px] text-ink-2 mt-2 mb-0 max-w-[600px]">
-                Start locally with <code className="font-mono text-[12.5px] px-1.5 py-0.5 rounded bg-raised border border-line">npx myartifact setup</code> or sign in to MyArtifact Cloud with Google to collaborate safely across projects.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
+        {/* Quiet Closing CTA */}
+        <section className="max-w-[920px] mx-auto px-5 sm:px-8 py-16">
+          <div className="rounded-[16px] border border-[var(--c-sage-border)] bg-sage-soft/50 px-6 py-10 text-center flex flex-col items-center gap-4">
+            <h2 className="font-serif text-[26px] sm:text-[34px] font-semibold text-ink m-0">
+              Start in 10 seconds.
+            </h2>
+            <p className="text-[14.5px] text-ink-2 m-0 max-w-[480px]">
+              Run <code className="font-mono text-[13px] px-1.5 py-0.5 rounded bg-raised border border-line">npx myartifact setup</code> locally or sign in with Google to share workspaces with your team.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
               {renderPrimaryCta(true)}
-              <a
-                href="/llms.txt"
-                className="h-[44px] px-4 rounded-[9px] border border-line-strong bg-raised hover:bg-sunken text-ink text-[13px] font-mono inline-flex items-center gap-1.5 transition-colors no-underline"
-              >
-                <CodeXml className="w-4 h-4 text-ink-3" />
-                <span>llms.txt</span>
-              </a>
             </div>
           </div>
         </section>
       </main>
 
-      {/* Semantic Footer */}
+      {/* Clean Single-Row Footer */}
       <footer className="border-t border-line bg-canvas">
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[12.5px] text-ink-3">
-          <div className="flex items-center gap-2.5">
+        <div className="max-w-[1120px] mx-auto px-5 sm:px-8 py-7 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[12.5px] text-ink-3">
+          <div className="flex items-center gap-2">
             <span
               aria-hidden="true"
-              className="w-[22px] h-[22px] rounded-[5px] overflow-hidden flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+              className="w-[20px] h-[20px] rounded-[5px] overflow-hidden flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
               dangerouslySetInnerHTML={{ __html: MYARTIFACT_LOGO_SVG }}
             />
             <span>
-              <strong className="text-ink">MyArtifact</strong> · MIT License · Open-Source Visual Studio &amp; MCP Server
+              <strong className="text-ink">MyArtifact</strong> · MIT License
             </span>
           </div>
 
-          <nav aria-label="Footer navigation" className="flex flex-wrap items-center gap-4">
+          <nav aria-label="Footer navigation" className="flex flex-wrap items-center gap-5">
             <a href="/signin" className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center">
               Sign In
             </a>
@@ -1310,10 +1169,9 @@ export const SeoLandingPage: React.FC<SeoLandingPageProps> = ({
               href="https://github.com/TannedCung/MyArtifact"
               target="_blank"
               rel="noopener noreferrer"
-              className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center gap-1"
+              className="py-1.5 px-1 hover:text-ink transition-colors no-underline text-ink-2 inline-flex items-center"
             >
-              <Users className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>GitHub</span>
+              GitHub
             </a>
           </nav>
         </div>

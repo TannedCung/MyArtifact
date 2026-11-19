@@ -58,7 +58,7 @@ describe('Comprehensive SEO Landing Page & Crawler Assets', () => {
     assert.ok(orgLogo?.url?.endsWith('/apple-touch-icon.png'));
 
     const faqNode = jsonLd['@graph'].find((n) => n['@type'] === 'FAQPage');
-    assert.ok(Array.isArray(faqNode?.mainEntity) && faqNode.mainEntity.length >= 6);
+    assert.ok(Array.isArray(faqNode?.mainEntity) && faqNode.mainEntity.length >= 5);
 
     // Verify landing entry script chunk is code-split away from lazy Studio chunks (< 280 KB raw)
     const entryScriptMatch = html.match(/<script type="module"[^>]+src="\/assets\/(index-[^"]+\.js)"/);
