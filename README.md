@@ -13,11 +13,19 @@
 
 <br />
 
-![MyArtifact Studio Preview](./docs/images/studio-preview.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/images/hero-studio-night.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./docs/images/hero-studio-day.png" />
+  <img alt="MyArtifact Visual Studio — Multi-Agent React, Three.js, TensorBoard & LLM Wiki" src="./docs/images/hero-studio-day.png" width="100%" />
+</picture>
 
 </div>
 
 **MyArtifact** gives **Claude Code**, **OpenAI Codex**, and **Google Antigravity** a shared, versioned visual studio for interactive React dashboards, Three.js 3D scenes, HTML mini-apps, Mermaid diagrams, SVG graphics, Markdown (KaTeX), and TensorBoard runs—running **100% locally** or in **stateless cloud mode**.
+
+<p align="center">
+  <img alt="MyArtifact Multi-Agent Visual Pipeline Architecture" src="./docs/images/architecture-flow.svg" width="100%" />
+</p>
 
 ---
 
@@ -57,9 +65,11 @@ docker compose up -d --build
 - **Unified Agent Bridge:** Shared MCP stdio server (`myartifact mcp`), CLI (`myartifact push` / `get` / `list`), Dropzone watcher (`~/.myartifact/dropzone/`), and LLM Wiki (`index.md` / `log.md`).
 - **Cloud Ready:** Optional Google OIDC login, cascading RBAC folders, Batch Sharing, S3/R2 presigned transfers (`> 4.5 MB`), and conditional `ETag` sync.
 
-| Version Diff & 1-Click Rollback (`Changes`) | Command Palette (`⌘K` / `Ctrl+K`) |
+| Interactive Three.js WebGL2 Workbenches | Native TensorBoard Runs & Checkpoints |
 | :---: | :---: |
-| ![Version Diff & Rollback](./docs/images/studio-diff.png) | ![Command Palette](./docs/images/studio-palette.png) |
+| ![Three.js 3D Kinematic Workbench](./docs/images/showcase-threejs.png) | ![Native TensorBoard Scalar & Checkpoint Viewer](./docs/images/showcase-tensorboard.png) |
+| **Cross-Agent Diffs & 1-Click Rollback** | **Cloud Cascading RBAC & Batch Sharing** |
+| ![Cross-Agent Unified Diffs & Rollback](./docs/images/showcase-diff.png) | ![Cloud Batch Share & RBAC Permissions](./docs/images/showcase-cloud-rbac.png) |
 
 ---
 
@@ -73,6 +83,10 @@ docker compose up -d --build
 | `N` | Open **New Artifact** modal |
 | `J` / `K` | Step **backward** (`vN-1`) / **forward** (`vN+1`) through versions |
 | `Esc` | Exit **Zen** fullscreen mode or close open modals/overlays |
+
+<p align="center">
+  <img alt="Command Palette & Instant LLM Wiki Search (⌘K)" src="./docs/images/showcase-command-k.png" width="92%" />
+</p>
 
 ---
 
